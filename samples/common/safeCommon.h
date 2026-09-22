@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -256,6 +257,7 @@ inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t in
 
 namespace samplesSafeCommon
 {
+#if !TRT_WINML
 //! Represents the compute capability of a device.
 //! This pertains to virtual architectures represented by the intermediate PTX format.
 //! This is distinct from the SM version.
@@ -291,6 +293,7 @@ inline bool isSmSafe()
     return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
         || smVersion == 0x0A00 || smVersion == 0x0B00;
 }
+#endif
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
 {
@@ -566,17 +569,59 @@ inline bool parseBool(std::string const& arg, std::string const& name, std::opti
     return arg == "--" + name || (singleChar && arg == std::string{'-', *singleChar});
 }
 
-inline bool hasCpuOnlyInternalOption(std::string const& internalOptions)
+//! \brief Check whether \p internalOptions names \p name, with or without a value.
+//!
+//! Internal options reach TensorRT through the TRT_INTERNAL_OPTIONS environment variable, which samples
+//! cannot query through the public API, so the string is parsed here instead.
+//!
+//! \return true when the option is present.
+inline bool hasInternalOption(std::string const& internalOptions, std::string const& name)
 {
     std::istringstream optionStream{internalOptions};
+    auto const flag = "--" + name;
+    auto const assignment = flag + "=";
     for (std::string option; optionStream >> option;)
     {
-        if (option == "--cpu_only" || option.rfind("--cpu_only=", 0) == 0)
+        if (option == flag || option.rfind(assignment, 0) == 0)
         {
             return true;
         }
     }
     return false;
+}
+
+inline bool hasCpuOnlyInternalOption(std::string const& internalOptions)
+{
+    return hasInternalOption(internalOptions, "cpu_only");
+}
+
+//! \brief Resolve the companion library to load beside a safe engine.
+//!
+//! An explicit path is passed through, so a caller who names a library that is not there gets an error
+//! from the runtime instead of silence. The default beside the engine is offered only when that file
+//! exists, so an engine built without a companion library still loads. Presence is the only question
+//! asked of it: whether the file is loadable is dlopen's to answer, and it names the file when it is
+//! not. An engine that needs a library and does not get one is caught by the runtime, which reads the
+//! requirement out of the engine rather than from the caller.
+//!
+//! \param enginePath Path the engine was loaded from.
+//! \param explicitPath Path given on the command line, or empty when none was.
+//!
+//! \return An absolute path to hand to createTRTGraph(), or std::nullopt when no companion library
+//!         applies.
+//!
+//! \throws std::filesystem::filesystem_error when the path cannot be inspected or made absolute, since
+//!         the safe runtime rejects a relative one and failing here names the path rather than leaving
+//!         graph creation to complain. A missing file is not an error and reports absent.
+[[nodiscard]] inline std::optional<std::string> resolveCompanionSoPath(
+    std::string const& enginePath, std::string const& explicitPath = "")
+{
+    std::filesystem::path const candidate{explicitPath.empty() ? enginePath + ".so" : explicitPath};
+    if (explicitPath.empty() && !std::filesystem::is_regular_file(candidate))
+    {
+        return std::nullopt;
+    }
+    return std::filesystem::absolute(candidate).lexically_normal().string();
 }
 
 inline bool applyCpuOnlyMode()

@@ -1,5 +1,10 @@
 # Using Extract To Isolate A Subgraph
 
+> [!NOTE]
+> You can also perform subgraph extraction interactively using the `--visual` model viewer,
+> without needing to look up tensor names manually.
+> See [05_visual_extraction](../05_visual_extraction/README.md) for a step-by-step walkthrough.
+
 
 ## Introduction
 

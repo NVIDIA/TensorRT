@@ -2,7 +2,322 @@
 
 Dates are in YYYY-MM-DD format.
 
-## v0.49.27
+
+## v0.53.6 (2026-09-22)
+### Added
+- `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as
+  `--save-input-blob [DIR]`, to save each inference input tensor as its own raw binary file via
+  `numpy.ndarray.tofile()` so it is compatible with `trtexec`. Each iteration is written to its own
+  subdirectory of `<input_name>.bin` files under the given directory (defaulting to the current
+  directory), overwriting any existing files/directories there.
+
+### Changed
+- The package metadata now requires Python 3.8 or later, matching what Polygraphy already needed
+  at runtime. Previously, pip would install it on Python 3.6 and 3.7, where parts of it failed with
+  a `SyntaxError`.
+
+### Fixed
+- Fixed a bug where the `POLYGRAPHY_ASK_BEFORE_INSTALL` environment variable was ignored.
+- On Windows on ARM, Polygraphy now loads the x64 CUDA libraries when running under x64 emulation
+  instead of the native ARM64 libraries.
+
+
+## v0.53.5 (2026-08-17)
+### Added
+- `SessionFromOnnx` now accepts a `graph_optimization_level` parameter to control the
+  ORT graph optimization level, exposed on the CLI as `--graph-optimization-level`
+  (accepts the ORT enum name, e.g. `ORT_ENABLE_EXTENDED`). The default remains
+  `ORT_ENABLE_ALL` (ONNX Runtime's own default). Use
+  `--graph-optimization-level ORT_ENABLE_EXTENDED` to avoid the
+  `SimplifiedLayerNormFusion` crash on strongly-typed FP16 models (nvbugs/6447529).
+
+### Changed
+- `use_dla`/`--use-dla` no longer implicitly enables `PREFER_PRECISION_CONSTRAINTS` or
+  `DIRECT_IO` in TensorRT 11.0 and newer, where both are deprecated. They can still be
+  requested explicitly with `precision_constraints`/`--precision-constraints` and
+  `direct_io`/`--direct-io`.
+
+
+## v0.53.4 (2026-07-22)
+### Added
+- `EngineFromNetwork`, `EngineFromBytes`, and `EngineFromPath` now accept a
+  `dla_workspace_allocation_strategy` option, exposed on the CLI as
+  `--dla-workspace-allocation-strategy`, for choosing `default` or `shared_static` DLA workspace
+  allocation with TensorRT 11.3 and later. The shared strategy can reduce memory when multiple DLA
+  engines are loaded on the same core; engines that share workspace must not run concurrently.
+
+### Fixed
+- Marking every ONNX tensor as an output with `ModifyOutputs(..., outputs=constants.MARK_ALL)` or
+  `--onnx-outputs '*'` no longer produces invalid models when nodes have unused optional outputs,
+  allowing affected models such as those containing `LSTM` nodes to load correctly in ONNX Runtime.
+- `inspect data` can now display saved `RunResults` that contain no runners instead of raising an
+  exception.
+- Loading saved data containing an empty legacy NPZ array now reports a clear error instead of
+  raising an uncaught `IndexError`.
+- TensorRT inference with vectorized input formats such as CHW16 now correctly handles channel
+  sizes that are not multiples of the vector width instead of failing while reshaping the input.
+
+
+## v0.53.3 (2026-07-01)
+### Fixed
+- The accuracy comparison summary now shows enough precision to tell a metric value apart from its
+  threshold when they are extremely close, instead of rounding both to the same displayed number.
+
+
+## v0.53.2 (2026-06-30)
+### Changed
+- `polygraphy check accuracy` now re-checks only the comparisons selected by `--compare` (and the
+  per-comparison threshold options), ignoring any other comparisons stored in the saved results
+  file, instead of requiring a threshold for every saved comparison.
+
+
+## v0.53.1 (2026-06-26)
+### Fixed
+- Fixed a `TypeError` on Python 3.13 in tools that build objects from their arguments, such as
+  `polygraphy check accuracy` and the `--*-script` and loader options.
+- `check lint` now works with `onnx>=1.20`.
+- `surgeon weight-reconstruct` now works with NumPy 2 for `bfloat16` weights.
+- Saving an ONNX model with external data now overwrites an existing external data file at the
+  target path instead of erroring with newer `onnx` versions.
+
+
+## v0.53.0 (2026-06-24)
+### Added
+- `polygraphy run` can now save accuracy comparison results (the computed per-output metrics and
+  pass/fail verdicts) with `--save-accuracy-results`. Unlike `--save-outputs` (which saves the full
+  output tensors), this saves just the comparison results.
+- Added a `polygraphy check accuracy` subtool that loads accuracy results saved with
+  `--save-accuracy-results` and re-checks them against different thresholds, reporting pass/fail and
+  setting the exit status accordingly - without re-running inference. This works for the scalar
+  comparisons (`simple` with `--check-error-stat max`/`mean`/`median`/`quantile`, and
+  `l2`/`cosine_similarity`/`psnr`/`snr`/`perceptual_metrics`); for the default `elemwise` check,
+  re-run from saved outputs with `run --save-outputs`/`--load-outputs` instead.
+- `inspect data` can now display saved accuracy results.
+- Comparison result objects (`OutputCompareResult`, `L2Result`, etc.) and `AccuracyResults` are now
+  serializable to JSON, and `AccuracyResults` provides a `reevaluate` method to re-check stored
+  metrics against new thresholds.
+
+### Changed
+- The accuracy summary for average comparisons (`--check-average`) now reports each metric's value,
+  the threshold it was checked against, and whether it passed, grouped per output - mirroring the
+  per-iteration display - instead of listing the metric values on a single line.
+- The error reported when the CUDA runtime library cannot be found now explains how to resolve it,
+  e.g. installing the CUDA Toolkit, setting `CUDA_PATH`/`PATH` (Windows) or `LD_LIBRARY_PATH` (Linux),
+  or installing the CUDA runtime via `pip`.
+
+### Fixed
+- `inspect capability` now works with TensorRT 11.
+- The CUDA runtime library installed via `pip` (e.g. `nvidia-cuda-runtime-cuXX`) is now found more
+  reliably, including on Linux.
+- The ONNX-like network export (`OnnxLikeFromNetwork`, used by `convert --convert-to
+  onnx-like-trt-network`) no longer errors on layers that expose a `None` attribute (e.g. some
+  layers under TensorRT-RTX); such attributes are now rendered as `"None"`.
+
+
+## v0.52.2 (2026-06-11)
+### Fixed
+- On Windows, `_find_cuda_lib_dirs` now also searches the architecture-specific `bin` subdirectory
+  of each CUDA toolkit root (e.g. `bin\x64` on x64, `bin\arm64` on ARM64), where some toolchains
+  install `cudart64_*.dll`.
+
+
+## v0.52.1 (2026-06-10)
+### Changed
+- Per-iteration files saved to a directory by `--save-inputs`/`--save-outputs` now use zero-padded names
+  (e.g. `0000000000.json`) so that lexical order matches iteration order.
+- Directories of per-iteration files (read by `--load-inputs`/`--load-outputs` and `inspect data`) are now ordered by a
+  pure lexical sort instead of a numeric-index sort. Combined with the zero-padded names above this keeps iterations in
+  the correct order even past nine iterations. Note that a directory written by v0.52.0 with ten or more iterations used
+  unpadded names and will now load in lexical (not numeric) order; re-save it to update the names.
+
+
+## v0.52.0 (2026-06-10)
+### Added
+- `run` now streams one iteration at a time by default: inference and accuracy comparison happen per-iteration so
+  memory stays roughly constant regardless of dataset size. Pass `--sequential-runners` to run each runner to
+  completion (required for `--use-subprocess` and `--warm-up`).
+- From Python, `Comparator.run(..., streaming=True)` returns a generator yielding one single-iteration `RunResults` per
+  input; `Comparator.compare_accuracy`/`postprocess`/`validate` each accept a stream, a materialized `RunResults`, or a
+  list of runs.
+- `--save-inputs`/`--save-outputs` with a file extension saves all iterations to one file; an extensionless path writes
+  one JSON file per iteration into a directory (must be empty or new), read back with `--load-inputs`/`--load-outputs`.
+- Added `AccuracyResults`, the new `Comparator.compare_accuracy` return type (see Changed). `Comparator.compare_accuracy`
+  now accepts a single comparison function or a list of them.
+- Added single-metric comparison functions `L2CompareFunc`, `CosineSimilarityCompareFunc`, `PsnrCompareFunc`, and
+  `SnrCompareFunc` (each with a corresponding result class), available on the command line as
+  `--compare l2`/`cosine_similarity`/`psnr`/`snr`. `--compare distance_metrics` and `quality_metrics` are aliases that
+  expand into `l2`+`cosine_similarity` and `psnr`+`snr` respectively. Each threshold is set with `--<metric>-threshold`;
+  the legacy `--l2-tolerance`, `--psnr-tolerance`, `--snr-tolerance`, and `--lpips-tolerance` spellings are accepted as
+  aliases.
+- `--load-inputs`/`--load-outputs` can now read a *directory* of per-iteration JSON files in addition to a single file.
+  `StreamingDataLoader` provides the same from Python, and `RunResults.load_streaming` lazily yields a saved run's
+  iterations.
+- `inspect data` can now read a *directory* of per-iteration JSON files in addition to a single file.
+- Added `TopKPostprocessFunc` (and `BasePostprocessFunc`).
+
+### Fixed
+- Improved CUDA runtime library discovery on Windows: `CUDA_HOME`, versioned `CUDA_PATH_V*` variables, and pip
+  `nvidia-cuda-runtime` wheel locations are now searched, and dependent-DLL directories are registered via
+  `os.add_dll_directory`.
+
+### Changed
+- `Comparator.compare_accuracy` now returns an `AccuracyResults` (a list of `AccuracyResult`) instead of a single
+  `AccuracyResult`. `bool(result)` is unchanged, but code that called accessors like `result.stats(...)` directly should
+  index the desired function's result first (e.g. `result[0].stats(...)`).
+
+
+### Deprecated
+- Deprecated `AccuracyResult.percentage()` in favor of `AccuracyResult.stats()`, which returns
+  `(matched, mismatched, total)` iteration counts.
+- Deprecated `PostprocessFunc.top_k()` in favor of `TopKPostprocessFunc`; the static method still works but emits a
+  deprecation warning.
+
+### Removed
+- Removed `DistanceMetricsCompareFunc` and `QualityMetricsCompareFunc` (and their result classes and the
+  previously-deprecated `CompareFunc.distance_metrics`/`quality_metrics` static methods) in favor of the single-metric
+  comparison functions. The `--compare distance_metrics`/`quality_metrics` options remain as aliases.
+- Removed `AccuracyResult.average_stats` and `AccuracyResult.average_percentage`; use `AccuracyResult.average_results`
+  and `AccuracyResult.stats`.
+
+
+
+## v0.51.0 (2026-05-29)
+### Added
+- Added a `--check-average` flag to `run`, exposing `Comparator.compare_accuracy`'s `check_average` mode on the command line.
+- Added `BaseCompareFunc`, a base class for comparison functors, which can be subclassed to implement custom comparisons that support both per-sample and average accuracy checks.
+- Added the comparison functor classes `SimpleCompareFunc`, `IndicesCompareFunc`, `DistanceMetricsCompareFunc`, `QualityMetricsCompareFunc`, and `PerceptualMetricsCompareFunc`, which now contain the comparison logic.
+- Added a `check_average` parameter to `Comparator.compare_accuracy` to check the *average* of each metric across all iterations against the threshold, instead of checking each iteration individually. The per-iteration results are still recorded; this only changes how pass/fail is determined.
+- Added `AccuracyResult.average_results`, `average_metrics`, `average_stats`, and `average_percentage` for inspecting averaged comparison results.
+
+### Changed
+- `InvokeFromScript` now instantiates the imported symbol when it is a class, so `--compare-func-script` can provide a comparison functor class in addition to a plain function.
+
+### Deprecated
+- The `CompareFunc.simple`/`indices`/`distance_metrics`/`quality_metrics`/`perceptual_metrics` static methods are deprecated in favor of the corresponding functor classes (e.g. `SimpleCompareFunc`). They still work (and return the corresponding functor instance) but will be removed in a future release.
+
+
+## v0.50.3 (2026-04-23)
+### Added
+- Added `--postprocess-func-script` flag to `run` for specifying a custom postprocessing function via a Python script. Overrides `--postprocess` when provided.
+- Added `TrtRunner.set_debug_listener()` to allow supplying a custom `trt.IDebugListener`. The default listener continues to collect all debug tensors into `infer()` outputs.
+
+
+## v0.50.2 (2026-04-17)
+### Added
+- Added support for asynchronous allocation callbacks in `TrtRunner`.
+
+
+## v0.50.1 (2026-04-14)
+### Added
+- `inspect model --visual`: the viewer now shows an overlay when the server disconnects (e.g. after Ctrl+C), and displays a note in the extract panel when viewing a saved HTML file without a server running.
+
+### Changed
+- Added compatibility with TensorRT 11.0, which removes several precision-related APIs.
+
+
+## v0.50.0 (2026-04-07)
+### Added
+- Added `--onnx-outputs-by-type` and `--trt-outputs-by-type` flags to mark outputs of all
+    nodes/layers of a given op/layer type (e.g. `--onnx-outputs-by-type Conv`).
+- Added fnmatch wildcard support to `--onnx-outputs`, `--trt-outputs`,
+    `--onnx-exclude-outputs`, and `--trt-exclude-outputs` (e.g. `--onnx-outputs 'conv_*'`).
+    Using `*` alone marks all tensors as outputs.
+- Added `--visual` flag to `polygraphy inspect model` to launch an interactive graph viewer in the browser. Supports box-select subgraph extraction: draw a selection box over any set of nodes, then click the extract button to save the subgraph as a new ONNX model via `polygraphy surgeon extract`.
+
+### Deprecated
+- `mark all` for `--<framework>-outputs` flags is deprecated in favor of `*`.
+
+### Removed
+- Removed the `data to-input` tool (use `data merge` instead).
+- Removed the `int_range` and `float_range` parameters from `DataLoader` (use `val_range` instead).
+- Removed the `--trt-config-func-name` CLI argument (specify the function name via `--trt-config-script` like `my_script.py:my_func`).
+- Removed the `--trt-network-func-name` CLI argument (specify the function name via the model argument like `my_script.py:my_func`).
+- Removed the `--data-loader-func-name` CLI argument (specify the function name via `--data-loader-script` like `my_script.py:my_func`).
+- Removed the `--int-min`, `--int-max`, `--float-min`, and `--float-max` CLI arguments (use `--val-range` instead).
+- Removed the `G_LOGGER.severity` property (use `G_LOGGER.module_severity` instead).
+- Removed `mod.has_mod()` (use `mod.lazy_import("module_name").is_installed()` instead).
+
+
+## v0.49.35 (2026-04-02)
+### Changed
+- Reverted previous change related to strongly-typed networks.
+
+
+## v0.49.34 (2026-03-25)
+### Added
+- Added one-shot sharding workflow for `polygraphy multi-device shard` and updated `polygraphy template shard-hints` accordingly.
+- Added tensor-parallel sharding support for Edge-LLM exported Qwen3-4B models.
+- Added sharding support for quantized Qwen3-4B models.
+- Added support for the new Edge-LLM Qwen3B attention pattern in `multi-device shard`.
+
+### Changed
+- Migrated the build system to `pyproject.toml` (removed legacy `setup.py` / `setup.cfg`).
+- Corrected the `license` field in `pyproject.toml`.
+- On TensorRT 11.0+, networks are always strongly typed: `CreateNetwork` sets `STRONGLY_TYPED` automatically, and `CreateConfig` reports an error if legacy precision or calibration options (`fp16`, `bf16`, `fp8`, `int8`, `precision_constraints`, `calibrator`) are used.
+- Updated `multi-device` shard documentation and example shard hint JSON files.
+
+### Fixed
+- Fixed explicit-batch defaulting for TensorRT-RTX (TRT-RTX 1.5+) so it aligns with TensorRT semantics.
+- Fixed `PostProcessConfig` when the network is `None`.
+- Fixed tests that used deprecated TensorRT APIs on TensorRT 11.
+- Updated the TRT-RTX CI download script to use the AWS Artifactory URL.
+
+
+## v0.49.33 (2026-03-03)
+### Added
+- Added `SetDecomposableAttentions` loader and `--decomposable-attentions` CLI flag to mark all
+    `IAttention` layers in a TensorRT network as decomposable.
+- Added `data concat` tool to concatenate iterations from multiple input or output files into a single file.
+
+### Changed
+- Renamed the `data to-input` tool to `data merge`. The old tool is preserved as an alias for backwards compatibility.
+
+
+## v0.49.32 (2026-01-27)
+### Added
+- Added CLI options for `distance_metrics`, `quality_metrics`, and `perceptual_metrics`
+    comparison functions.
+- Added support for specifying multiple comparison functions in the CLI via
+    the `--compare-func` option.
+
+
+## v0.49.31 (2026-01-14)
+### Fixed
+- Added support for `config` parameter in `NetworkFromOnnxBytes` and `NetworkFromOnnxPath` to enable
+    ONNX parser flags that require a builder config, such as `trt.OnnxParserFlag.REPORT_CAPABILITY_DLA`.
+
+### Changed
+- Updated `surgeon extract` to allow for extracting subgraphs with no inputs.
+
+
+## v0.49.30 (2026-01-09)
+### Fixed
+- Fixed a bug where Polygraphy would succeed when `--use-dla` was specified on systems without DLA hardware,
+    even when `--allow-gpu-fallback` was not enabled. Polygraphy now validates DLA availability and fails with
+    a clear error message when DLA is requested but not available without GPU fallback enabled.
+
+### Changed
+- Deprecated `--enable-uint8-asymmetric-quantization-dla` and `enable_uint8_asymmetric_quantization_dla`; use `--onnx-flags ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` and the `flags` argument instead.
+
+### Added
+- Added `--all-tensor-formats` and `--all-tensor-dtypes` flags CLI option to allow a shorthand way to set the formats and types for all I/O tensors.
+- Added chw16 native format support for TensorRT runner.
+
+
+## v0.49.29 (2025-11-21)
+### Added
+- Added support for `enable_uint8_asymmetric_quantization_dla` in `NetworkFromOnnxBytes` and `NetworkFromOnnxPath`
+    and a corresponding `--enable-uint8-asymmetric-quantization-dla` CLI flag.
+
+
+## v0.49.28 (2025-11-06)
+### Added
+- Added support for aliased I/O tensors in `TrtRunner`. The runner automatically detects when output tensors share
+    memory with input tensors using TensorRT's `get_aliased_input_tensor()` API, enabling zero-copy in-place operations
+    for layers like KVCacheUpdate.
+
+
+## v0.49.27 (2025-11-04)
 ### Added
 - Added `polygraphy template shard-hints` to generate hints file for `polygraphy multi-device shard`.
 - Added support for inserting transposes to `polygraphy multi-device shard` when the sequence length dimension of sharded tensors is not 0.
@@ -13,7 +328,6 @@ Dates are in YYYY-MM-DD format.
 
 ### Fixed
 - Fixed issue when `polygraphy multi-device shard` would exceed python recursive depth limit on large models.
-- Fixed a bug where setting `POLYGRAPHY_ASK_BEFORE_INSTALL=0` would enable asking before installing dependencies instead of disabling it.
 
 
 ## v0.49.26 (2025-07-16)

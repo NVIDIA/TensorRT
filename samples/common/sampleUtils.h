@@ -83,9 +83,11 @@ std::vector<std::string> splitToStringVec(std::string const& option, char separa
 
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput = true);
 
+#if !TRT_WINML
 int32_t getCudaDriverVersion();
 
 int32_t getCudaRuntimeVersion();
+#endif
 
 void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights);
 void sparsify(nvinfer1::Weights const& weights, int32_t k, int32_t rs, std::vector<int8_t>& sparseWeights);
@@ -132,8 +134,8 @@ typename std::unordered_map<std::string, T>::const_iterator findPlausible(
 //! Validate that a value is not empty, log error if it is
 bool validateNonEmpty(std::string const& value, std::string const& flagName);
 
-//! Validate remote auto tuning config format
-bool validateRemoteAutoTuningConfig(std::string const& config);
+//! Validate remote target config format
+bool validateRemoteConfig(std::string const& config);
 
 //! Ensure directory path ends with '/'
 inline std::string normalizeDirectoryPath(std::string const& dirPath)
@@ -146,13 +148,13 @@ inline std::string normalizeDirectoryPath(std::string const& dirPath)
     return result;
 }
 
-//! Sanitizes the remote auto tuning config string by removing sensitive credentials
+//! Sanitizes the remote target config string by removing sensitive credentials
 //! Removes usernames and passwords from URL-style config strings for security.
 //! Example: "ssh://user:pass@host:22" becomes "ssh://***:***@host:22"
-std::string sanitizeRemoteAutoTuningConfig(std::string const& config);
+std::string sanitizeRemoteConfig(std::string const& config);
 
 //! Sanitizes command line arguments for logging, removing sensitive credentials
-//! Processes argv array and sanitizes sensitive arguments like remoteAutoTuningConfig
+//! Processes argv array and sanitizes sensitive arguments like remoteConfig
 //! @param argc Number of arguments
 //! @param argv Array of argument strings
 //! @return Vector of sanitized argument strings

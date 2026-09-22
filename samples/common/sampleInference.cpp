@@ -21,7 +21,9 @@
 #include <cuda.h>
 #include <iomanip>
 #include <optional>
+#if !HOS_RUNTIME
 #include <cuda_profiler_api.h>
+#endif
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -84,16 +86,29 @@ namespace safe
 {
 namespace
 {
-std::function<nvinfer1::ErrorCode(
-    nvinfer2::safe::ITRTGraph*&, void const*, int64_t, ISafeRecorder&, bool, ISafeMemAllocator*)>
-    pcreateTRTGraphInternal{};
-std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph* graph)> pdestroyTRTGraphInternal{};
-std::function<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder& recorder)> pgetSafePluginRegistryInternal{};
+//! Function pointer to the safe runtime's `createTRTGraph` symbol.
+//! Bound by `initNvinferSafe()` when `gUseRuntime == RuntimeMode::kSAFE`; stays empty until then, or if
+//! the library fails to load.
+std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph*&, void const*, int64_t, nvinfer2::safe::AsciiChar const*,
+    ISafeRecorder&, bool, ISafeMemAllocator*)>
+    sCreateTrtGraphInternal{};
+
+//! Function pointer to the safe runtime's `destroyTRTGraph` symbol. Bound as above.
+std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph* graph)> sDestroyTrtGraphInternal{};
+
+//! Function pointer to the safe runtime's `getSafePluginRegistry` symbol. Bound as above.
+std::function<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder& recorder)> sGetSafePluginRegistryInternal{};
 } // namespace
 
-//! Track runtime used for the execution of trtexec.
-//! Must be tracked as a global variable due to how library init functions APIs are organized.
-RuntimeMode gUseRuntime = RuntimeMode::kSAFE;
+#if !TRT_STATIC
+namespace
+{
+[[nodiscard]] std::string const& getSafeRuntimeLibraryName(SafeRuntimeSettings const& settings)
+{
+    return settings.useDebugRuntime ? kNVINFER_SAFE_DEBUG_LIBNAME : kNVINFER_SAFE_LIBNAME;
+}
+} // namespace
+#endif // !TRT_STATIC
 
 //!
 //! \brief Initialize the NVIDIA Inference Safe Runtime library
@@ -112,25 +127,22 @@ RuntimeMode gUseRuntime = RuntimeMode::kSAFE;
 //! \return true if the safe runtime library was successfully loaded and initialized,
 //!         false otherwise (e.g., in static builds or if library loading fails)
 //!
-bool initNvinferSafe()
+bool initNvinferSafe(SafeRuntimeSettings const& settings)
 {
 #if !TRT_STATIC
     static LibraryPtr libnvinfersafePtr{};
-    auto fetchPtrs = [](samplesCommon::DynamicLibrary* l) {
-        if (gUseRuntime == RuntimeMode::kSAFE)
-        {
-            pcreateTRTGraphInternal = l->symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&,
-                void const*, int64_t, ISafeRecorder&, bool, ISafeMemAllocator*)>("createTRTGraph");
+    auto fetchPtrs = [](samplesCommon::DynamicLibrary& l) {
+        sCreateTrtGraphInternal = l.symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&,
+            void const*, int64_t, nvinfer2::safe::AsciiChar const*, ISafeRecorder&, bool, ISafeMemAllocator*)>(
+            "createTRTGraph");
 
-            pdestroyTRTGraphInternal
-                = l->symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph * graph)>("destroyTRTGraph");
+        sDestroyTrtGraphInternal
+            = l.symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph * graph)>("destroyTRTGraph");
 
-            pgetSafePluginRegistryInternal
-                = l->symbolAddress<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder & recorder)>(
-                    "getSafePluginRegistry");
-        }
+        sGetSafePluginRegistryInternal
+            = l.symbolAddress<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder & recorder)>("getSafePluginRegistry");
     };
-    return initLibrary(libnvinfersafePtr, sample::getRuntimeLibraryName(gUseRuntime), fetchPtrs);
+    return initLibrary(libnvinfersafePtr, getSafeRuntimeLibraryName(settings), fetchPtrs);
 #else
     return false;
 #endif // !TRT_STATIC
@@ -143,14 +155,16 @@ bool initNvinferSafe()
 //! a safe TRT graph for inference with safety-certified TensorRT engines.
 //!
 nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator)
+    nvinfer2::safe::AsciiChar const* companionSoPath, ISafeRecorder& recorder, bool useManaged,
+    ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings)
 {
-    if (!initNvinferSafe())
+    if (!initNvinferSafe(settings))
     {
         return nvinfer1::ErrorCode::kINTERNAL_ERROR;
     }
-    ASSERT(pcreateTRTGraphInternal != nullptr);
-    return pcreateTRTGraphInternal(graph, blob, size, recorder, useManaged, allocator);
+    ASSERT(sCreateTrtGraphInternal != nullptr);
+    // A null path is valid: it means this engine needs no companion library.
+    return sCreateTrtGraphInternal(graph, blob, size, companionSoPath, recorder, useManaged, allocator);
 }
 
 //!
@@ -159,14 +173,14 @@ nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void c
 //! This function destroys a safe TRT graph and releases the associated resources. It is used to clean up
 //! the safe TRT graph after inference with safety-certified TensorRT engines.
 //!
-nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph)
+nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, SafeRuntimeSettings const& settings)
 {
-    if (!initNvinferSafe())
+    if (!initNvinferSafe(settings))
     {
         return nvinfer1::ErrorCode::kINTERNAL_ERROR;
     }
-    ASSERT(pdestroyTRTGraphInternal != nullptr);
-    return pdestroyTRTGraphInternal(graph);
+    ASSERT(sDestroyTrtGraphInternal != nullptr);
+    return sDestroyTrtGraphInternal(graph);
 }
 
 //!
@@ -175,14 +189,14 @@ nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph)
 //! This function retrieves the safe plugin registry for loading plugins. It is used to get the safe plugin registry
 //! for loading plugins with safety-certified TensorRT engines.
 //!
-nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(ISafeRecorder& recorder)
+nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(ISafeRecorder& recorder, SafeRuntimeSettings const& settings)
 {
-    if (!initNvinferSafe())
+    if (!initNvinferSafe(settings))
     {
         return nullptr;
     }
-    ASSERT(pgetSafePluginRegistryInternal != nullptr);
-    return pgetSafePluginRegistryInternal(recorder);
+    ASSERT(sGetSafePluginRegistryInternal != nullptr);
+    return sGetSafePluginRegistryInternal(recorder);
 }
 
 namespace
@@ -433,6 +447,7 @@ void contractInt64ToInt32(std::vector<int64_t>& shapeData)
 void setPersistentCacheLimit(
     nvinfer1::IExecutionContext* ec, InferenceOptions const& inference, std::optional<cudaDeviceProp> const& properties)
 {
+#if !TRT_WINML && !HOS_RUNTIME
     int32_t const persistentCacheLimit = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
     sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
 
@@ -452,10 +467,124 @@ void setPersistentCacheLimit(
         }
     }
     ec->setPersistentCacheLimit(persistentCacheLimit);
+#endif
 }
 
 } // namespace
 
+#if TRT_WINML
+IRuntimeConfig* setJITRuntimeConfig(nvinfer1::ICudaEngine* engine, InferenceOptions const& inference)
+{
+    //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
+    auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
+        return s == MemoryAllocationStrategy::kSTATIC
+            // Let TRT pre-allocate and manage the memory.
+            ? ExecutionContextAllocationStrategy::kSTATIC
+            // Allocate based on the current profile or runtime shapes.
+            : ExecutionContextAllocationStrategy::kUSER_MANAGED;
+    };
+
+    IRuntimeConfig* runtimeConfig = engine->createRuntimeConfig();
+    runtimeConfig->setExecutionContextAllocationStrategy(
+        getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
+    runtimeConfig->setDynamicShapesKernelSpecializationStrategy(inference.dynamicShapesKernelSpecializationStrategy);
+
+    // set runtime cache if specified
+    if (!inference.runtimeCacheFile.empty())
+    {
+        nvinfer1::IRuntimeCache* runtimeCache = runtimeConfig->createRuntimeCache();
+        // deserialize runtime cache from file
+        std::vector<char> loadedCacheBytes = samplesCommon::loadCacheFile(sample::gLogger, inference.runtimeCacheFile);
+        std::vector<uint8_t> runtimeCacheBytes(loadedCacheBytes.begin(), loadedCacheBytes.end());
+
+        if (!loadedCacheBytes.empty())
+        {
+            std::vector<uint8_t> runtimeCacheBytes(loadedCacheBytes.begin(), loadedCacheBytes.end());
+            auto const rtcDeserializeBegin = std::chrono::steady_clock::now();
+            runtimeCache->deserialize(runtimeCacheBytes.data(), runtimeCacheBytes.size());
+            auto const rtcDeserializeEnd = std::chrono::steady_clock::now();
+            sample::gLogInfo
+                << "Runtime Cache deserialized in "
+                << std::chrono::duration<float, std::milli>(rtcDeserializeEnd - rtcDeserializeBegin).count() << " ms."
+                << std::endl;
+        }
+        // The runtime cache is portable only within a matching environment: a loaded cache is
+        // rejected (and ignored for execution) if the GPU device/SKU, the TensorRT-RTX version, or
+        // the CUDA-context CiG state differs from where it was built, as well as on an incompatible
+        // CUDA driver version or a wire-format mismatch; compatibility rejection reasons are logged.
+        runtimeConfig->setRuntimeCache(*runtimeCache);
+    }
+
+    // RTX CUDA graph and in-trtexec CUDA graph are mutually exclusive.
+    // On RTX, in-trtexec CUDA graph is disabled by default and RTX CUDA graph (wholeGraph) is enabled.
+    // On enterprise, in-trtexec CUDA graph is enabled by default.
+    if (inference.graph)
+    {
+        ASSERT(runtimeConfig->setCudaGraphStrategy(CudaGraphStrategy::kDISABLED));
+    }
+    else
+    {
+        ASSERT(runtimeConfig->setCudaGraphStrategy(inference.rtxCudaGraphStrategy));
+    }
+    return runtimeConfig;
+}
+
+bool serializeRuntimeCache(nvinfer1::IExecutionContext* context, InferenceOptions const& inference)
+{
+    if (!inference.runtimeCacheFile.empty())
+    {
+        IRuntimeConfig* runtimeConfig = context->getRuntimeConfig();
+        if (runtimeConfig == nullptr)
+        {
+            sample::gLogError << "Failed to get runtime config." << std::endl;
+            return false;
+        }
+        nvinfer1::IRuntimeCache* runtimeCache = runtimeConfig->getRuntimeCache();
+        if (runtimeCache == nullptr)
+        {
+            sample::gLogError << "Failed to get runtime cache." << std::endl;
+            return false;
+        }
+        IHostMemory* hostMemory = runtimeCache->serialize();
+        if (hostMemory == nullptr)
+        {
+            sample::gLogError << "Failed to serialize runtime cache." << std::endl;
+            return false;
+        }
+        samplesCommon::saveCacheFile(sample::gLogger, inference.runtimeCacheFile, hostMemory);
+    }
+    return true;
+}
+
+//! \brief Drive JIT compilation for a deferred-deserialized engine without running inference.
+//!
+//! Creates a one-shot IExecutionContext (which forces JIT), populates the runtime cache if
+//! --runtimeCacheFile was supplied, and discards the context. Used by trtexec when
+//! --deferWeightsLoading and --skipInference are combined.
+bool populateRuntimeCacheForDeferredJit(nvinfer1::ICudaEngine& engine, InferenceOptions const& inference)
+{
+    // ICudaEngine::createExecutionContext takes a non-owning pointer; the caller owns the
+    // IRuntimeConfig and is responsible for its destruction (see NvInferRuntime.h).
+    std::unique_ptr<nvinfer1::IRuntimeConfig> runtimeConfig(setJITRuntimeConfig(&engine, inference));
+    if (runtimeConfig == nullptr)
+    {
+        sample::gLogError << "Failed to create runtime config for deferred JIT." << std::endl;
+        return false;
+    }
+    auto const tBegin = std::chrono::high_resolution_clock::now();
+    std::unique_ptr<nvinfer1::IExecutionContext> context(engine.createExecutionContext(runtimeConfig.get()));
+    if (context == nullptr)
+    {
+        sample::gLogError << "Failed to JIT-compile engine (createExecutionContext returned null)." << std::endl;
+        return false;
+    }
+    auto const tEnd = std::chrono::high_resolution_clock::now();
+    sample::gLogInfo << "Deferred JIT compilation in " << std::chrono::duration<float>(tEnd - tBegin).count()
+                     << " sec." << std::endl;
+
+    return serializeRuntimeCache(context.get(), inference);
+}
+#endif // TRT_WINML
 
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
@@ -496,7 +625,7 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
     int64_t constexpr kPAIR_INDEX = 0;
 
     ASSERT(sample::hasSafeRuntime());
-    ASSERT(sample::safe::initNvinferSafe());
+    ASSERT(sample::safe::initNvinferSafe(iEnv.safeRuntimeSettings));
 
     auto safeEngineBlob = iEnv.engine.getBlob();
     SMP_RETVAL_IF_FALSE(safeEngineBlob.data != nullptr, "Engine blob is empty.", false, sample::gLogError);
@@ -509,8 +638,9 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
     bool const useManagedMemory{inference.useManaged};
 
     nvinfer2::safe::ITRTGraph* tempGraph = nullptr;
-    if (sample::safe::createSafeTRTGraph(
-            tempGraph, safeEngineBlob.data, safeEngineBlob.size, *gSafeRecorder, useManagedMemory, nullptr)
+    auto const* const companionSoPath = iEnv.companionSoPath ? iEnv.companionSoPath->c_str() : nullptr;
+    if (sample::safe::createSafeTRTGraph(tempGraph, safeEngineBlob.data, safeEngineBlob.size, companionSoPath,
+            *gSafeRecorder, useManagedMemory, nullptr, iEnv.safeRuntimeSettings)
         != nvinfer2::safe::ErrorCode::kSUCCESS)
     {
         sample::gLogError << "Create Safe TRT Graph Failed." << std::endl;
@@ -582,6 +712,18 @@ IExecutionContext* setupExecutionContext(InferenceEnvironmentStd& iEnv, nvinfer1
 {
     IExecutionContext* ec{nullptr};
 
+#if TRT_WINML
+    // ICudaEngine::createExecutionContext takes a non-owning pointer; ownership of the
+    // IRuntimeConfig stays with the caller. The context (and serializeRuntimeCache later)
+    // dereferences the config, so transfer the config into iEnv.runtimeConfigs so it
+    // outlives the context rather than dying when this function returns.
+    std::unique_ptr<IRuntimeConfig> runtimeConfig(setJITRuntimeConfig(engine, inference));
+    ec = engine->createExecutionContext(runtimeConfig.get());
+    if (ec != nullptr)
+    {
+        iEnv.runtimeConfigs.push_back(std::move(runtimeConfig));
+    }
+#else
     //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
     auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
         return s == MemoryAllocationStrategy::kSTATIC
@@ -592,6 +734,7 @@ IExecutionContext* setupExecutionContext(InferenceEnvironmentStd& iEnv, nvinfer1
     };
 
     ec = engine->createExecutionContext(getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
+#endif
     if (ec == nullptr)
     {
         sample::gLogError << "Unable to create execution context. " << std::endl;
@@ -625,11 +768,13 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     auto const& inferenceInputs = inference.refPairs[kPAIR_INDEX].first;
 
     std::optional<cudaDeviceProp> properties{};
+#if !TRT_WINML
     int32_t device{};
     CHECK(cudaGetDevice(&device));
 
     properties = std::make_optional<cudaDeviceProp>();
     CHECK(cudaGetDeviceProperties(&properties.value(), device));
+#endif
     // Use managed memory only when it is explicitly requested on the command line.
     bool const useManagedMemory{inference.useManaged};
 
@@ -641,6 +786,10 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
+#if TRT_WINML
+    // Start JIT Compilation time after engine deserialization
+    auto jitCompileBegin = std::chrono::high_resolution_clock::now();
+#endif
 
     // Setup weight streaming if enabled
     if (engine->getStreamableWeightsSize() > 0)
@@ -865,6 +1014,12 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     bool fillBindingsSuccess = FillStdBindings(
         engine, context, inferenceInputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
 
+#if TRT_WINML
+    // Stop JIT Compile Time when setup for inference is complete
+    auto jitCompileEnd = std::chrono::high_resolution_clock::now();
+    sample::gLogInfo << "JIT Compilation in " << std::chrono::duration<float>(jitCompileEnd - jitCompileBegin).count()
+                     << " sec." << std::endl;
+#endif
 
     return fillBindingsSuccess;
 }
@@ -1437,7 +1592,7 @@ std::unordered_map<std::string, double> validateAccuracy(InferenceEnvironmentBas
 {
     std::unordered_map<std::string, double> accuracyResults;
     // Accuracy validation with reference outputs is not supported on Windows or RTX (tuner is Linux enterprise-only).
-#if defined(_WIN32)
+#if defined(_WIN32) || TRT_WINML
     // Early return if no reference outputs are available for validation.
     return accuracyResults;
 #else
@@ -1845,7 +2000,9 @@ inline std::thread makeThread(InferenceOptions const& inference, InferenceEnviro
 bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& iEnv, int32_t device,
     std::vector<InferenceTrace>& trace, ReportingOptions const& reporting)
 {
+#if !HOS_RUNTIME
     CHECK(cudaProfilerStart());
+#endif
 
     trace.resize(0);
 
@@ -1870,17 +2027,35 @@ bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& i
     {
         th.join();
     }
+#if !HOS_RUNTIME
     CHECK(cudaProfilerStop());
+#endif
 
     std::ranges::sort(trace, {}, &InferenceTrace::h2dStart);
 
+#if TRT_WINML
+    // Save runtime cache
+    if (!iEnv.safe)
+    {
+        nvinfer1::IExecutionContext* context = static_cast<InferenceEnvironmentStd&>(iEnv).getContext(0);
+        if (context != nullptr)
+        {
+            if (!serializeRuntimeCache(context, inference))
+            {
+                sample::gLogError << "Failed to serialize runtime cache." << std::endl;
+            }
+        }
+    }
+#endif // TRT_WINML
 
     return !iEnv.error;
 }
 
 bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment>>& tEnvList)
 {
+#if !HOS_RUNTIME
     CHECK(cudaProfilerStart());
+#endif
     cudaSetDeviceFlags(cudaDeviceScheduleSpin);
 
     SyncStruct sync;
@@ -1902,7 +2077,9 @@ bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment
         th.join();
     }
 
+#if !HOS_RUNTIME
     CHECK(cudaProfilerStop());
+#endif
 
     for (auto& tEnv : tEnvList)
     {
@@ -1943,6 +2120,18 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys)
 
     SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
 
+#if !TRT_WINML
+    if (sys.dlaWorkspaceAllocationStrategy != nvinfer1::DLAWorkspaceAllocationStrategy::kDEFAULT)
+    {
+        if (sys.DLACore != -1)
+        {
+            rt->setDLACore(sys.DLACore);
+        }
+        SMP_RETVAL_IF_FALSE(rt->setDLAWorkspaceAllocationStrategy(sys.dlaWorkspaceAllocationStrategy),
+            "Failed to set the DLA workspace allocation strategy.", true, sample::gLogError);
+    }
+#endif // !TRT_WINML
+
     auto timeDeserializeFn = [&]() -> float {
         bool deserializeOK{false};
         engine.reset(nullptr);
@@ -1950,10 +2139,12 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys)
 
         SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
 
+#if !TRT_WINML
         for (auto const& pluginPath : sys.dynamicPlugins)
         {
             rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
+#endif
         auto& asyncReader = iEnv.engine.getAsyncFileReader();
         ASSERT(asyncReader.isOpen());
         if (asyncReader.isOpen())
@@ -2094,7 +2285,7 @@ void Binding::fill()
         // int4 is implemented as packing two elements into a single byte,
         // so all possible bit patterns of the two int4 elements coincides with all possible bit patterns of
         // an uint8.
-        fillBuffer<uint8_t>(buffer->getHostBuffer(), volume, 0, 255);
+        fillBuffer<uint8_t>(buffer->getHostBuffer(), samplesCommon::getNbBytes(dataType, volume), 0, 255);
         break;
     }
     case DataType::kFP4: ASSERT(false && "FP4 is not supported");
@@ -2519,7 +2710,7 @@ bool BindingsSafe::setTensorAddresses(ITRTGraph& graph) const
 }
 #endif
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !TRT_WINML
 namespace
 {
 // Helper template function to load reference outputs - abstracts tensor info retrieval

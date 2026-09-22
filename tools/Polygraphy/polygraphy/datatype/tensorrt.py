@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from polygraphy import mod, util
+from polygraphy import util
 from polygraphy.datatype.datatype import (
     DataType,
-    register_dtype_importer,
     register_dtype_exporter,
+    register_dtype_importer,
 )
 from polygraphy.mod.trt_importer import lazy_import_trt
 
@@ -39,6 +39,7 @@ def _get_mapping():
         util.try_getattr(trt, "fp8"): DataType.FLOAT8E4M3FN,
         util.try_getattr(trt, "int4"): DataType.INT4,
         util.try_getattr(trt, "fp4"): DataType.FLOAT4,
+        util.try_getattr(trt, "e8m0"): DataType.FLOAT8E8M0,
     }
     if None in DATATYPE_FROM_TENSORRT:
         del DATATYPE_FROM_TENSORRT[None]

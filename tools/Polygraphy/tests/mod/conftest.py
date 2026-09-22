@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import pytest
 from tests.helper import ROOT_DIR
 
@@ -21,7 +22,16 @@ from tests.helper import ROOT_DIR
 @pytest.fixture()
 def poly_venv(virtualenv):
     virtualenv.env["PYTHONPATH"] = ROOT_DIR
-    virtualenv.env["LD_LIBRARY_PATH"] = ""
+
+    # Preserve CUDA-related library paths while clearing other paths
+    # This is needed for TensorRT to initialize CUDA properly
+    original_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+    cuda_paths = [
+        path
+        for path in original_ld_path.split(os.pathsep)
+        if path and ("cuda" in path.lower() or "tensorrt" in path.lower())
+    ]
+    virtualenv.env["LD_LIBRARY_PATH"] = os.pathsep.join(cuda_paths)
 
     # Newer versions of setuptools break pytest-virtualenv
     virtualenv.run([virtualenv.python, "-m", "pip", "install", "setuptools==59.6.0"])

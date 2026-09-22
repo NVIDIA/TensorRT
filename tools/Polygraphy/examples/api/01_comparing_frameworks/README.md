@@ -12,7 +12,7 @@ with synthetic input data using ONNX-Runtime and TensorRT, and then compare the 
 using two different comparison methods:
 
 1. A simple comparison using absolute tolerance
-2. A more comprehensive comparison using distance metrics (L2 distance, cosine similarity, and PSNR)
+2. A more comprehensive comparison using single-metric comparison functions (L2 distance, cosine similarity, PSNR, and SNR)
 
 
 ## Running The Example
@@ -37,9 +37,10 @@ using two different comparison methods:
 The example demonstrates two approaches for comparing outputs:
 
 - **Simple Comparison**: Uses absolute tolerance to determine if outputs match within a specified threshold.
-- **Distance Metrics**: Performs a more comprehensive comparison using multiple metrics including:
+- **Single-Metric Comparisons**: Each comparison function checks one metric, so they can be combined for a more comprehensive comparison:
   - L2 distance (Euclidean distance)
   - Cosine similarity (measures the angle between vectors)
   - PSNR (Peak Signal-to-Noise Ratio, useful for comparing image-like data)
+  - SNR (Signal-to-Noise Ratio)
 
 These comparison methods help validate that frameworks produce equivalent results within acceptable margins.

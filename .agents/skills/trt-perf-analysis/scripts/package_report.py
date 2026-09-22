@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from trt_perf.data import infer_model_name_metadata
+from trt_perf.license_text import APACHE_2_0
 
 
 def script_dir() -> Path:
@@ -42,27 +43,27 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "path",
         nargs="?",
-        help="Folder directly containing layers_*.json and/or profile_*.json inputs. Pass one component/report folder per invocation. Omit when using --analyze-data.",
+        help="Folder directly containing matching layers_*.json and profile_*.json inputs. Pass one component/report folder per invocation. Omit when using --analyze-data.",
     )
     parser.add_argument(
         "--analyze-data",
-        help="Existing analyze-data.json to validate and package in place. The file must be named analyze-data.json.",
+        help="Existing analyzer JSON to validate and package. Requires --report-dir.",
     )
     parser.add_argument(
         "--output-parent",
-        help="Directory where an auto-named report folder should be created. Defaults to the current working directory unless that is inside the skill.",
+        help="Directory where an auto-named report folder should be created for folder input. Cannot be combined with --report-dir.",
     )
     parser.add_argument(
         "--report-dir",
-        help="Exact report directory to create. For new analysis this directory must be empty or absent; useful for component-specific reports.",
+        help="Exact report directory to create. It must be empty or absent; required with --analyze-data.",
     )
     parser.add_argument(
         "--model-name",
-        help="Model name from the user prompt or caller context. It is cleaned and stored in analyze-data.json.",
+        help="Model name for folder analysis. It is cleaned and stored in analyze-data.json.",
     )
     parser.add_argument(
         "--timestamp",
-        help="Timestamp for auto-generated report folder names, formatted as YYYYMMDD_HHMMSS. Defaults to local time.",
+        help="Timestamp for auto-generated folder-analysis reports, formatted as YYYYMMDD_HHMMSS. Defaults to local time.",
     )
     parser.add_argument(
         "--template-dir",
@@ -78,7 +79,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def input_source_paths(input_path: Path) -> list[str]:
     paths: list[Path] = []
-    for pattern in ("layer*.json", "profile*.json"):
+    for pattern in ("layers_*.json", "profile_*.json"):
         paths.extend(input_path.glob(pattern))
     return [str(path) for path in sorted(paths)]
 
@@ -118,7 +119,7 @@ def parse_timestamp(value: Optional[str]) -> str:
 
 
 def has_files(path: Path) -> bool:
-    return path.exists() and any(path.iterdir())
+    return path.exists() and (not path.is_dir() or any(path.iterdir()))
 
 
 def has_input_files(path: Path) -> bool:
@@ -156,11 +157,12 @@ def validate_template_dir(template_dir: Path) -> None:
     required = [
         "index.html",
         "app.js",
+        "netron-assets.js",
         "styles.css",
-        "netron/grapher.css",
-        "netron/index.html",
-        "netron/netron.js",
-        "netron/worker.js",
+        # Every report redistributes the bundled third-party code, so it must
+        # carry those terms. The Apache-2.0 text is written from
+        # trt_perf.license_text rather than copied from the template.
+        "ThirdPartyNotices.txt",
     ]
     missing = [name for name in required if not (template_dir / name).is_file()]
     if missing:
@@ -186,12 +188,15 @@ def run_analyzer(input_path: Path, output_path: Path, model_name: Optional[str])
     return run_command(command)
 
 
-def run_validator(analyze_data_path: Path) -> int:
+def run_validator(analyze_data_path: Path, require_passed: bool = False) -> int:
     validator = script_dir() / "validate_analyze_data.py"
-    return run_command([sys.executable, str(validator), str(analyze_data_path)])
+    command = [sys.executable, str(validator), str(analyze_data_path)]
+    if require_passed:
+        command.append("--require-passed")
+    return run_command(command)
 
 
-def copy_template(template_dir: Path, report_dir: Path) -> None:
+def stage_report_assets(template_dir: Path, report_dir: Path) -> None:
     validate_template_dir(template_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
 
@@ -204,6 +209,11 @@ def copy_template(template_dir: Path, report_dir: Path) -> None:
             shutil.copytree(item, destination, dirs_exist_ok=True)
         else:
             shutil.copy2(item, destination)
+
+    # Written here rather than copied from the template so the published skill
+    # tree has no bare LICENSE file for a scanner to misread as a directory-wide
+    # declaration. Every staged report still ships one.
+    (report_dir / "LICENSE").write_text(APACHE_2_0, encoding="utf-8")
 
 
 def copy_analyze_markdown(analyze_md: Optional[str], report_dir: Path) -> Optional[Path]:
@@ -222,30 +232,50 @@ def copy_analyze_markdown(analyze_md: Optional[str], report_dir: Path) -> Option
     return destination
 
 
+def publish_staging_dir(staging_dir: Path, report_dir: Path) -> None:
+    if report_dir.exists():
+        if has_files(report_dir):
+            raise ValueError(f"report directory became non-empty: {report_dir}")
+        report_dir.rmdir()
+    staging_dir.replace(report_dir)
+
+
 def package_existing_json(args: argparse.Namespace) -> int:
     analyze_data_path = Path(args.analyze_data).expanduser()
     if not analyze_data_path.is_file():
         sys.stderr.write(f"error: analyze-data file not found: {analyze_data_path}\n")
         return 2
-    if analyze_data_path.name != "analyze-data.json":
-        sys.stderr.write("error: --analyze-data must point to a file named analyze-data.json\n")
+
+    if not args.report_dir:
+        sys.stderr.write("error: --report-dir is required with --analyze-data\n")
+        return 2
+    report_dir = Path(args.report_dir).expanduser()
+    if has_files(report_dir):
+        sys.stderr.write(f"error: report directory is not empty: {report_dir}\n")
         return 2
 
-    validate_result = run_validator(analyze_data_path)
+    validate_result = run_validator(analyze_data_path, require_passed=True)
     if validate_result != 0:
         return validate_result
 
     try:
-        copy_template(Path(args.template_dir).expanduser(), analyze_data_path.parent)
-        analyze_markdown_path = copy_analyze_markdown(args.analyze_md, analyze_data_path.parent)
+        report_dir.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".trt-perf-analysis-", dir=report_dir.parent) as temp_dir:
+            staging_dir = Path(temp_dir) / "report"
+            staging_dir.mkdir()
+            shutil.copy2(analyze_data_path, staging_dir / "analyze-data.json")
+            stage_report_assets(Path(args.template_dir).expanduser(), staging_dir)
+            staged_markdown_path = copy_analyze_markdown(args.analyze_md, staging_dir)
+            publish_staging_dir(staging_dir, report_dir)
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"error: unable to package report template: {exc}\n")
         return 2
 
-    print(f"report_dir: {analyze_data_path.parent}")
-    print(f"analyze_data: {analyze_data_path}")
-    if analyze_markdown_path:
-        print(f"analyze_md: {analyze_markdown_path}")
+    packaged_data_path = report_dir / "analyze-data.json"
+    print(f"report_dir: {report_dir}")
+    print(f"analyze_data: {packaged_data_path}")
+    if staged_markdown_path:
+        print(f"analyze_md: {report_dir / 'analyze.md'}")
     return 0
 
 
@@ -256,24 +286,36 @@ def package_input_folder(args: argparse.Namespace, input_path: Path) -> int:
         sys.stderr.write(f"error: {exc}\n")
         return 2
 
-    report_dir.mkdir(parents=True, exist_ok=True)
-    analyze_data_path = report_dir / "analyze-data.json"
-
-    model_name = inferred_analyzer_model_name(input_path, args.model_name)
-    analyze_result = run_analyzer(input_path, analyze_data_path, model_name)
-    if analyze_result != 0:
-        return analyze_result
-
-    validate_result = run_validator(analyze_data_path)
-    if validate_result != 0:
-        return validate_result
-
     try:
-        copy_template(Path(args.template_dir).expanduser(), report_dir)
-        analyze_markdown_path = copy_analyze_markdown(args.analyze_md, report_dir)
-    except (OSError, ValueError) as exc:
-        sys.stderr.write(f"error: unable to package report template: {exc}\n")
+        report_dir.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        sys.stderr.write(f"error: unable to create report parent directory: {exc}\n")
         return 2
+
+    with tempfile.TemporaryDirectory(prefix=".trt-perf-analysis-", dir=report_dir.parent) as temp_dir:
+        staging_dir = Path(temp_dir) / "report"
+        staging_dir.mkdir()
+        staging_data_path = staging_dir / "analyze-data.json"
+
+        model_name = inferred_analyzer_model_name(input_path, args.model_name)
+        analyze_result = run_analyzer(input_path, staging_data_path, model_name)
+        if analyze_result != 0:
+            return analyze_result
+
+        validate_result = run_validator(staging_data_path, require_passed=True)
+        if validate_result != 0:
+            return validate_result
+
+        try:
+            stage_report_assets(Path(args.template_dir).expanduser(), staging_dir)
+            staged_markdown_path = copy_analyze_markdown(args.analyze_md, staging_dir)
+            publish_staging_dir(staging_dir, report_dir)
+        except (OSError, ValueError) as exc:
+            sys.stderr.write(f"error: unable to package report template: {exc}\n")
+            return 2
+
+    analyze_data_path = report_dir / "analyze-data.json"
+    analyze_markdown_path = report_dir / "analyze.md" if staged_markdown_path else None
 
     print(f"report_dir: {report_dir}")
     print(f"analyze_data: {analyze_data_path}")
@@ -308,6 +350,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.path and args.analyze_data:
         sys.stderr.write("error: use either an input folder or --analyze-data, not both\n")
+        return 2
+    if args.report_dir and args.output_parent:
+        sys.stderr.write("error: use either --report-dir or --output-parent, not both\n")
+        return 2
+    if args.analyze_data and (args.output_parent or args.model_name or args.timestamp):
+        sys.stderr.write(
+            "error: --output-parent, --model-name, and --timestamp apply only to folder analysis\n"
+        )
         return 2
 
     if args.analyze_data:

@@ -175,9 +175,9 @@ int32_t PriorBox::getNbOutputs() const noexcept
 // Computes and returns the output dimensions
 Dims PriorBox::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
-    PLUGIN_VALIDATE(nbInputDims == 2);
+    PLUGIN_ASSERT(nbInputDims == 2);
     // Only one output from the plugin layer
-    PLUGIN_VALIDATE(index == 0);
+    PLUGIN_ASSERT(index == 0);
     // Particularity of the PriorBox layer: no batchSize dimension needed
     mH = inputs[0].d[1];
     mW = inputs[0].d[2];
@@ -288,7 +288,7 @@ IPluginV2Ext* PriorBox::clone() const noexcept
 // Set plugin namespace
 void PriorBox::setPluginNamespace(char const* pluginNamespace) noexcept
 {
-    PLUGIN_VALIDATE(pluginNamespace != nullptr);
+    PLUGIN_ASSERT(pluginNamespace != nullptr);
     mPluginNamespace = pluginNamespace;
 }
 

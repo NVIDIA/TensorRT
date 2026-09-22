@@ -1,21 +1,27 @@
 {
     "parallelism": "CP",
-    "group_size": 0,
-    "root": 0,
-    "groups": [],
     "attention_layers": [
         {
             "q": "q",
             "gather_kv": true,
             "gather_q": false,
+            "replace": null,
             "polygraphy_class": "AttentionLayerHint"
         }
     ],
+    "dist_collectives": {
+        "group_size": 0,
+        "root": -1,
+        "nb_rank": 2,
+        "reduce_op": "max",
+        "groups": [],
+        "polygraphy_class": "DistCollective"
+    },
     "inputs": [
         {
             "name": "input",
             "seq_len_idx": 0,
-            "rank": 3,
+            "rank": 2,
             "polygraphy_class": "ShardTensor"
         }
     ],
@@ -23,13 +29,12 @@
         {
             "name": "output",
             "seq_len_idx": 0,
-            "rank": 3,
+            "rank": 2,
             "polygraphy_class": "ShardTensor"
         }
     ],
     "k_seq_len_idx": 0,
     "v_seq_len_idx": 0,
     "kv_rank": null,
-    "reduce_scatter_reduce_op": "max",
     "polygraphy_class": "ShardHints"
 }

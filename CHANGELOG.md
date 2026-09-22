@@ -1,4 +1,21 @@
 # TensorRT OSS Release Changelog
+
+## 11.3 GA - 2026-09-22
+- General
+  - Updated default CUDA version to 13.4
+
+- Demos
+  - Removed demoDiffusion.
+
+- Parsers
+  - Refactored how external weights are handled in IParserRefitter
+
+- Samples
+  - Removed the detectron2 python sample
+
+- Tools
+  - Bumped Polygraphy version to v0.53.6
+
 ## 11.2 GA - 2026-8-4
 - Samples
  - Added a new python sample sample_plugin_v2_to_v3_migration to showcase how to migrate from IPluginV2 to IPluginV3.
@@ -15,7 +32,6 @@
   - Default CUDA version updated to 13.3.
   - Added Ubuntu 26.04 container.
   - Added support for Python 3.14.
-  - Added agent skills for various TensorRT workflows.
 
 - Samples
   - Added new sample `cute_dsl_plugin`.
@@ -713,7 +729,7 @@ Key Features and Updates:
 
 - Samples enhancements
 
-  - Added [Detectron2 Mask R-CNN R50-FPN](samples/python/detectron2/README.md) python sample
+  - Added Detectron2 Mask R-CNN R50-FPN python sample
   - Added a [quickstart guide](quickstart/deploy_to_triton) for NVidia Triton deployment workflow.
   - Added onnx export script for [sampleOnnxMnistCoordConvAC](samples/sampleOnnxMnistCoordConvAC)
   - Removed `sampleNMT`.
@@ -816,7 +832,7 @@ Key Features and Updates:
 ### Added
 
 - TensorRT Engine Explorer v0.1.0 [README](tools/experimental/trt-engine-explorer/README.md)
-- Detectron 2 Mask R-CNN R50-FPN python [sample](samples/python/detectron2/README.md)
+- Detectron 2 Mask R-CNN R50-FPN python sample
 - Model export script for sampleOnnxMnistCoordConvAC
 
 ### Changed

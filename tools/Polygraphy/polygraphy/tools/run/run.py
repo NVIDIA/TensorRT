@@ -25,8 +25,13 @@ from polygraphy.tools.args import (
     ComparatorCompareArgs,
     ComparatorPostprocessArgs,
     ComparatorRunArgs,
+    CompareFuncCosineSimilarityArgs,
     CompareFuncIndicesArgs,
+    CompareFuncL2Args,
+    CompareFuncPerceptualMetricsArgs,
+    CompareFuncPsnrArgs,
     CompareFuncSimpleArgs,
+    CompareFuncSnrArgs,
     DataLoaderArgs,
     LoggerArgs,
     ModelArgs,
@@ -142,6 +147,11 @@ class Run(Tool):
             ComparatorCompareArgs(),
             CompareFuncSimpleArgs(),
             CompareFuncIndicesArgs(),
+            CompareFuncL2Args(),
+            CompareFuncCosineSimilarityArgs(),
+            CompareFuncPsnrArgs(),
+            CompareFuncSnrArgs(),
+            CompareFuncPerceptualMetricsArgs(),
         ]
 
         # Initialize plugins
@@ -204,6 +214,7 @@ class Run(Tool):
             summary=generate_summary(
                 self.arg_groups[ModelArgs].path,
                 list(self.arg_groups[RunnerSelectArgs].runners.values()),
+                # Reference outputs to compare against, loaded via --load-outputs.
                 self.arg_groups[ComparatorCompareArgs].load_outputs_paths,
             )
         )

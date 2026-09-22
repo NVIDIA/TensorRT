@@ -23,7 +23,7 @@
 #if CUDA_VERSION >= 11060
 #include <cuda_fp8.h>
 #endif
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
 #include <cuda_fp4.h>
 #endif
 #include <cuda_runtime_api.h>
@@ -74,7 +74,7 @@ private:
     StorageType mRep{};
 };
 
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
 using Fp4 = __nv_fp4_e2m1;
 
 class Fp4x2
@@ -107,7 +107,7 @@ template <typename T>
 class DataIterator
 {
 public:
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
     using value_type
         = std::conditional_t<std::is_same_v<T, Int4x2>, Int4, std::conditional_t<std::is_same_v<T, Fp4x2>, Fp4, T>>;
 #else
@@ -129,7 +129,7 @@ public:
             Int4x2 packed(mData[mIndex / 2]);
             return packed.element(mIndex % 2);
         }
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
         else if constexpr (std::is_same_v<T, Fp4x2>)
         {
             // For Fp4x2, each byte contains two 4-bit floating point numbers
@@ -207,7 +207,7 @@ static constexpr bool isFloatingPoint
 #if CUDA_VERSION >= 11060
     || std::is_same_v<T, __nv_fp8_e4m3>
 #endif
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
     || std::is_same_v<T, Fp4> || std::is_same_v<T, Fp4x2>
 #endif
     ;
@@ -494,7 +494,7 @@ std::string writeStringFile(void const* addr_host, nvinfer1::DataType type, nvin
         writeTensorString(static_cast<uint8_t const*>(addr_host), shape, tensorName, fileName);
         break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
         writeTensorString(static_cast<Fp4x2 const*>(addr_host), shape, tensorName, fileName);
         break;
 #else
@@ -653,7 +653,7 @@ void DebugTensorWriter::writeSummary(std::string_view name, nvinfer1::Dims const
     case nvinfer1::DataType::kINT64: processTensorSummary<int64_t>(addr_host, volume, mSummaryFile); break;
     case nvinfer1::DataType::kUINT8: processTensorSummary<uint8_t>(addr_host, volume, mSummaryFile); break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
         processTensorSummary<Fp4x2>(addr_host, volume, mSummaryFile);
 #else
         sample::gLogWarning << "Unsupported data type kFP4 for tensor '" << name
@@ -803,7 +803,7 @@ std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t v
     case nvinfer1::DataType::kINT64: dtype = "<i8"; break;
     case nvinfer1::DataType::kUINT8: dtype = "|u1"; break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070
+#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
         floatBuffer = convertBufferTo<float>(static_cast<Fp4x2 const*>(addr_host), volume);
         convertToFloat(floatBuffer);
 #else

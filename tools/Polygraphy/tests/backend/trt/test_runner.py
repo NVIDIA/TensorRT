@@ -29,6 +29,7 @@ from polygraphy.backend.trt import (
     engine_from_network,
     network_from_onnx_bytes,
 )
+from polygraphy.backend.trt.util import get_all_tensors
 from polygraphy.backend.trt.runner import _get_array_on_cpu
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
@@ -85,8 +86,13 @@ class TestTrtRunner:
         assert not runner.is_active
 
     @pytest.mark.serial
-    @pytest.mark.skipif(config.USE_TENSORRT_RTX, reason="TensorRT-RTX has different warning output behavior")
-    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods, identity_engine):
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX has different warning output behavior",
+    )
+    def test_warn_if_impl_methods_called(
+        self, check_warnings_on_runner_impl_methods, identity_engine
+    ):
         runner = TrtRunner(identity_engine)
         check_warnings_on_runner_impl_methods(runner)
 
@@ -98,30 +104,43 @@ class TestTrtRunner:
             ([0, 0, 0, 1], [[3]]),
         ],
     )
-    @pytest.mark.skipif(config.USE_TENSORRT_RTX, reason="TensorRT-RTX does not support data dependent shapes")
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support data dependent shapes",
+    )
     def test_data_dependent_shapes(self, nonzero_engine, inp, expected):
         with TrtRunner(nonzero_engine) as runner:
             outputs = runner.infer(
                 {
                     "input": np.array(
                         inp,
-                        dtype=(np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64),
+                        dtype=(
+                            np.int32
+                            if mod.version(trt.__version__) < mod.version("9.0")
+                            else np.int64
+                        ),
                     )
                 }
             )
-            assert np.array_equal(outputs["nonzero_out_0"], np.array(expected, dtype=np.int32))
+            assert np.array_equal(
+                outputs["nonzero_out_0"], np.array(expected, dtype=np.int32)
+            )
 
     @pytest.mark.parametrize("copy_outputs_to_host", [True, False])
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_torch_tensors(self, copy_outputs_to_host, identity_engine, device):
         with TrtRunner(identity_engine) as runner:
             arr = torch.ones([1, 1, 2, 2], dtype=torch.float32, device=device)
-            outputs = runner.infer({"x": arr}, copy_outputs_to_host=copy_outputs_to_host)
+            outputs = runner.infer(
+                {"x": arr}, copy_outputs_to_host=copy_outputs_to_host
+            )
             assert all(isinstance(t, torch.Tensor) for t in outputs.values())
 
             assert torch.equal(outputs["y"].to("cpu"), arr.to("cpu"))
 
-            assert outputs["y"].device.type == ("cpu" if copy_outputs_to_host else "cuda")
+            assert outputs["y"].device.type == (
+                "cpu" if copy_outputs_to_host else "cuda"
+            )
 
     def test_context(self, identity_engine):
         with TrtRunner(identity_engine.create_execution_context) as runner:
@@ -140,9 +159,15 @@ class TestTrtRunner:
             model.check_runner(runner)
 
     def test_multithreaded_runners_from_engine(self, identity_engine):
-        with TrtRunner(identity_engine) as runner0, TrtRunner(identity_engine) as runner1:
-            t1 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner0,))
-            t2 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner1,))
+        with TrtRunner(identity_engine) as runner0, TrtRunner(
+            identity_engine
+        ) as runner1:
+            t1 = threading.Thread(
+                target=ONNX_MODELS["identity"].check_runner, args=(runner0,)
+            )
+            t2 = threading.Thread(
+                target=ONNX_MODELS["identity"].check_runner, args=(runner1,)
+            )
             t1.start()
             t2.start()
             t1.join()
@@ -174,7 +199,9 @@ class TestTrtRunner:
         engine = engine_from_network(network_loader, config_loader)
         context = engine.create_execution_context()
 
-        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+        for index, shapes in enumerate(
+            [profile0_shapes, profile1_shapes, profile2_shapes]
+        ):
             with TrtRunner(
                 context,
                 optimization_profile=index if use_optimization_profile else None,
@@ -187,10 +214,13 @@ class TestTrtRunner:
                     model.check_runner(runner, {"X": shape})
 
     @pytest.mark.skipif(
-        not config.USE_TENSORRT_RTX and mod.version(trt.__version__) < mod.version("10.0"),
+        not config.USE_TENSORRT_RTX
+        and mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
-    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    @pytest.mark.parametrize(
+        "allocation_strategy", [None, "static", "profile", "runtime"]
+    )
     def test_allocation_strategies(self, allocation_strategy):
         if config.USE_TENSORRT_RTX and allocation_strategy == "runtime":
             pytest.skip("TensorRT-RTX issues with runtime allocation strategy")
@@ -208,7 +238,9 @@ class TestTrtRunner:
         config_loader = CreateConfig(profiles=profiles)
         engine = engine_from_network(network_loader, config_loader)
 
-        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+        for index, shapes in enumerate(
+            [profile0_shapes, profile1_shapes, profile2_shapes]
+        ):
             with TrtRunner(
                 engine,
                 optimization_profile=index,
@@ -240,7 +272,12 @@ class TestTrtRunner:
     def test_error_on_wrong_name_feed_dict(self, names, err, identity_engine, module):
         with TrtRunner(identity_engine) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: module.ones((1, 1, 2, 2), dtype=module.float32) for name in names})
+                runner.infer(
+                    {
+                        name: module.ones((1, 1, 2, 2), dtype=module.float32)
+                        for name in names
+                    }
+                )
 
     @pytest.mark.parametrize("module", [torch, np])
     def test_error_on_wrong_dtype_feed_dict(self, identity_engine, module):
@@ -254,9 +291,13 @@ class TestTrtRunner:
             with pytest.raises(PolygraphyException, match="incompatible shape."):
                 runner.infer({"x": module.ones((1, 1, 3, 2), dtype=module.float32)})
 
-    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    @pytest.mark.parametrize(
+        "use_view", [True, False]
+    )  # We should be able to use DeviceArray in place of DeviceView
     def test_device_views(self, use_view, reducable_engine):
-        with TrtRunner(reducable_engine) as runner, cuda.DeviceArray((1,), dtype=np.float32) as x:
+        with TrtRunner(reducable_engine) as runner, cuda.DeviceArray(
+            (1,), dtype=np.float32
+        ) as x:
             x.copy_from(np.ones((1,), dtype=np.float32))
             outputs = runner.infer(
                 {
@@ -282,42 +323,76 @@ class TestTrtRunner:
                 assert np.all(outputs["y"] == inp)
 
             check(runner.infer({"x": inp}))
-            check(runner.infer({"x": cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)}))
+            check(
+                runner.infer(
+                    {
+                        "x": cuda.DeviceArray(
+                            shape=inp.shape, dtype=inp.dtype
+                        ).copy_from(inp)
+                    }
+                )
+            )
 
             torch_outputs = runner.infer({"x": torch.from_numpy(inp)})
             check({name: out.numpy() for name, out in torch_outputs.items()})
             check(runner.infer({"x": inp}))
 
-    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    @pytest.mark.parametrize(
+        "use_view", [True, False]
+    )  # We should be able to use DeviceArray in place of DeviceView
     def test_device_view_dynamic_shapes(self, use_view):
         model = ONNX_MODELS["dynamic_identity"]
         profiles = [
             Profile().add("X", (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)),
         ]
-        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader), CreateConfig(profiles=profiles)))
+        runner = TrtRunner(
+            EngineFromNetwork(
+                NetworkFromOnnxBytes(model.loader), CreateConfig(profiles=profiles)
+            )
+        )
         with runner, cuda.DeviceArray(shape=(1, 2, 3, 3), dtype=np.float32) as arr:
             inp = np.random.random_sample(size=(1, 2, 3, 3)).astype(np.float32)
             arr.copy_from(inp)
-            outputs = runner.infer({"X": (cuda.DeviceView(arr.ptr, arr.shape, arr.dtype) if use_view else arr)})
+            outputs = runner.infer(
+                {
+                    "X": (
+                        cuda.DeviceView(arr.ptr, arr.shape, arr.dtype)
+                        if use_view
+                        else arr
+                    )
+                }
+            )
             assert np.all(outputs["Y"] == inp)
             assert outputs["Y"].shape == (1, 2, 3, 3)
 
     def test_cannot_use_device_view_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
-        with TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader))) as runner, cuda.DeviceArray(
+        with TrtRunner(
+            EngineFromNetwork(NetworkFromOnnxBytes(model.loader))
+        ) as runner, cuda.DeviceArray(
             shape=(5,),
             dtype=(
                 np.int32
-                if mod.version(trt.__version__) < mod.version("9.0") and not config.USE_TENSORRT_RTX
+                if mod.version(trt.__version__) < mod.version("9.0")
+                and not config.USE_TENSORRT_RTX
                 else np.int64
             ),
         ) as arr:
-            with pytest.raises(PolygraphyException, match="it must reside in host memory"):
-                runner.infer({"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr})
+            with pytest.raises(
+                PolygraphyException, match="it must reside in host memory"
+            ):
+                runner.infer(
+                    {"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr}
+                )
 
     @pytest.mark.parametrize("hwc_input", [True, False], ids=["hwc_input", "chw_input"])
-    @pytest.mark.parametrize("hwc_output", [True, False], ids=["hwc_output", "chw_output"])
-    @pytest.mark.skipif(config.USE_TENSORRT_RTX, reason="TensorRT-RTX does not support custom I/O format networks")
+    @pytest.mark.parametrize(
+        "hwc_output", [True, False], ids=["hwc_output", "chw_output"]
+    )
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support custom I/O format networks",
+    )
     def test_infer_chw_format(self, hwc_input, hwc_output):
         model = ONNX_MODELS["identity_multi_ch"]
         inp_shape = model.input_metadata["x"].shape
@@ -339,10 +414,34 @@ class TestTrtRunner:
             outputs = runner.infer({"x": inp})
             if hwc_input == hwc_output:  # output in CHW/HWC format and similarly shaped
                 assert np.allclose(outputs["y"], inp)
-            elif not hwc_input and hwc_output:  # output in HWC format and shaped (N, H, W, C)
+            elif (
+                not hwc_input and hwc_output
+            ):  # output in HWC format and shaped (N, H, W, C)
                 assert np.allclose(outputs["y"].transpose(0, 3, 1, 2), inp)
             else:  # hwc_input and not hwc_output: output in CHW format and shaped (N, C, H, W)
                 assert np.allclose(outputs["y"].transpose(0, 2, 3, 1), inp)
+
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support custom I/O format networks",
+    )
+    def test_infer_chw_format_single_channel(self):
+        model = ONNX_MODELS["identity"]
+        inp_shape = model.input_metadata["x"].shape
+        builder, network, parser = network_from_onnx_bytes(model.loader)
+
+        formats = 1 << int(trt.TensorFormat.HWC)
+        network.get_input(0).allowed_formats = formats
+        network.get_output(0).allowed_formats = formats
+
+        engine = engine_from_network((builder, network))
+
+        with TrtRunner(engine) as runner:
+            inp = np.random.normal(size=(inp_shape)).astype(np.float32)
+            inp = inp.transpose(0, 2, 3, 1)
+
+            outputs = runner.infer({"x": inp})
+            assert np.allclose(outputs["y"], inp)
 
     @pytest.mark.parametrize("use_torch", [True, False])
     def test_get_array_on_cpu(self, use_torch):
@@ -350,7 +449,9 @@ class TestTrtRunner:
         with cuda.DeviceArray.raw(shape) as arr:
             host_buffers = {}
             stream = cuda.Stream()
-            host_arr = _get_array_on_cpu(arr, "test", host_buffers, stream, arr.nbytes, use_torch)
+            host_arr = _get_array_on_cpu(
+                arr, "test", host_buffers, stream, arr.nbytes, use_torch
+            )
 
             if use_torch:
                 assert isinstance(host_arr, torch.Tensor)
@@ -358,7 +459,11 @@ class TestTrtRunner:
                 assert isinstance(host_arr, np.ndarray)
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("10.0") and not config.USE_TENSORRT_RTX,
+        config.USE_TENSORRT_RTX,
+        reason="Invalid Context error due to Myelin/cuDNN bug in TRT-RTX",
+    )
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
     @pytest.mark.parametrize("budget", [None, -2, -1, 0, 0.5, 0.99, 1.0, 1000, np.inf])
@@ -404,5 +509,125 @@ class TestTrtRunner:
     def test_compute_capabilities_mutual_exclusion(self):
         """Test that use_gpu and compute_capabilities are mutually exclusive"""
         # Test mutual exclusion - should raise an exception
-        with pytest.raises(PolygraphyException, match="use_gpu and compute_capabilities are mutually exclusive"):
+        with pytest.raises(
+            PolygraphyException,
+            match="use_gpu and compute_capabilities are mutually exclusive",
+        ):
             CreateConfig(use_gpu=True, compute_capabilities=[(7, 5)])
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.15")
+        and not config.USE_TENSORRT_RTX,
+        reason="Feature not present before 10.15",
+    )
+    def test_aliased_io_tensors(self):
+        """Test aliased I/O detection"""
+        model = ONNX_MODELS["tensorscatter_with_aliased_io"]
+        profiles = [
+            Profile().add(
+                "past_cache",
+                min=(4, 32, 512, 128),
+                opt=(8, 32, 512, 128),
+                max=(8, 32, 512, 128),
+            )
+        ]
+        engine = engine_from_network(
+            NetworkFromOnnxBytes(model.loader, strongly_typed=True),
+            CreateConfig(profiles=profiles),
+        )
+
+        with TrtRunner(engine) as runner:
+            past_cache = np.random.random_sample(size=(8, 32, 512, 128)).astype(
+                np.float32
+            )
+            update = np.random.random_sample(size=(4, 32, 128, 128)).astype(np.float32)
+            write_indices = np.zeros(shape=(4,), dtype=np.int64)
+
+            outputs = runner.infer(
+                {
+                    "past_cache": past_cache,
+                    "update": update,
+                    "write_indices": write_indices,
+                }
+            )
+
+            assert "present_cache" in outputs
+            assert outputs["present_cache"].shape == past_cache.shape
+            assert runner.context.get_tensor_address(
+                "present_cache"
+            ) == runner.context.get_tensor_address("past_cache")
+
+
+@pytest.fixture()
+def debug_identity_engine():
+    """Engine with the identity model's 'x' tensor marked as a debug tensor."""
+    model = ONNX_MODELS["identity"]
+    builder, network, parser = network_from_onnx_bytes(model.loader)
+    tensor_map = get_all_tensors(network)
+    network.mark_debug(tensor_map["x"])
+    return EngineFromNetwork((builder, network, parser))
+
+
+# Shorthand for the version gate shared by all debug-listener tests.
+_skip_unless_debug_listener_supported = pytest.mark.skipif(
+    config.USE_TENSORRT_RTX or mod.version(trt.__version__) < mod.version("10.0"),
+    reason="IDebugListener / network.mark_debug not supported on TRT-RTX or before TRT 10.0",
+)
+
+
+class TestDebugListener:
+    class _CustomListener(trt.IDebugListener):
+        def __init__(self):
+            trt.IDebugListener.__init__(self)
+            self.captured = {}
+
+        def process_debug_tensor(self, _addr, _location, _type, _shape, name, _stream):
+            self.captured[name] = True
+
+    _INP = np.ones((1, 1, 2, 2), dtype=np.float32)
+
+    @_skip_unless_debug_listener_supported
+    def test_default_listener_captures_debug_tensors(self, debug_identity_engine):
+        with TrtRunner(debug_identity_engine) as runner:
+            outputs = runner.infer({"x": self._INP})
+        assert "x" in outputs and "y" in outputs
+        assert np.array_equal(outputs["x"], self._INP)
+
+    @_skip_unless_debug_listener_supported
+    def test_debug_outputs_cleared_between_inferences(self, debug_identity_engine):
+        """Debug tensors from one inference must not bleed into the next."""
+        zeros = np.zeros((1, 1, 2, 2), dtype=np.float32)
+        with TrtRunner(debug_identity_engine) as runner:
+            outputs1 = runner.infer({"x": self._INP})
+            outputs2 = runner.infer({"x": zeros})
+        assert np.array_equal(outputs1["x"], self._INP)
+        assert np.array_equal(outputs2["x"], zeros)
+
+    @_skip_unless_debug_listener_supported
+    def test_set_custom_listener_via_constructor(self, debug_identity_engine):
+        listener = self._CustomListener()
+        with TrtRunner(debug_identity_engine, debug_listener=listener) as runner:
+            runner.infer({"x": self._INP})
+        assert "x" in listener.captured
+
+    @_skip_unless_debug_listener_supported
+    def test_set_custom_listener_after_activation(self, debug_identity_engine):
+        listener = self._CustomListener()
+        with TrtRunner(debug_identity_engine) as runner:
+            runner.set_debug_listener(listener)
+            runner.infer({"x": self._INP})
+        assert "x" in listener.captured
+
+    @_skip_unless_debug_listener_supported
+    def test_custom_listener_persists_across_reactivation(self, debug_identity_engine):
+        """A listener set via the constructor persists across deactivate/reactivate cycles."""
+        listener = self._CustomListener()
+        runner = TrtRunner(debug_identity_engine, debug_listener=listener)
+
+        with runner:
+            runner.infer({"x": self._INP})
+
+        listener.captured.clear()
+        with runner:
+            runner.infer({"x": self._INP})
+        assert "x" in listener.captured

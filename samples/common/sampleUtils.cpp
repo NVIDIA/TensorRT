@@ -19,14 +19,16 @@
 #include "bfloat16.h"
 #include "common.h"
 #include "half.h"
-#include <nlohmann/json.hpp>
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cstdlib>
 #include <cuda.h>
 #include <fstream>
 #include <iomanip>
+#include <nlohmann/json.hpp>
 #include <sstream>
+#include <string_view>
 #include <type_traits>
 
 #if CUDA_VERSION >= 11060
@@ -752,7 +754,7 @@ bool matchStringWithOneWildcard(std::string const& pattern, std::string const& t
         && target.rfind(splitPattern[1]) == (target.size() - splitPattern[1].size());
 }
 
-//! @brief Sanitizes the remote auto tuning config string by removing sensitive credentials
+//! @brief Sanitizes the remote target config string by removing sensitive credentials
 //!
 //! This function removes usernames and passwords from URL-style configuration strings
 //! to prevent sensitive authentication information from appearing in logs or debug output.
@@ -767,7 +769,7 @@ bool matchStringWithOneWildcard(std::string const& pattern, std::string const& t
 //!
 //! @param config The configuration string to sanitize
 //! @return Sanitized configuration string with passwords and usernames replaced by ***
-std::string sanitizeRemoteAutoTuningConfig(std::string const& config)
+std::string sanitizeRemoteConfig(std::string const& config)
 {
     if (config.empty())
     {
@@ -805,12 +807,12 @@ std::string sanitizeRemoteAutoTuningConfig(std::string const& config)
     }
     catch (std::exception const& e)
     {
-        sample::gLogError << "Exception in sanitizeRemoteAutoTuningConfig: " << e.what() << std::endl;
+        sample::gLogError << "Exception in sanitizeRemoteConfig: " << e.what() << std::endl;
         return config; // Return original on error
     }
     catch (...)
     {
-        sample::gLogError << "Unknown exception in sanitizeRemoteAutoTuningConfig" << std::endl;
+        sample::gLogError << "Unknown exception in sanitizeRemoteConfig" << std::endl;
         return config; // Return original on error
     }
 }
@@ -825,11 +827,11 @@ bool validateNonEmpty(std::string const& value, std::string const& flagName)
     return true;
 }
 
-bool validateRemoteAutoTuningConfig(std::string const& config)
+bool validateRemoteConfig(std::string const& config)
 {
     if (config.find("://") == std::string::npos)
     {
-        sample::gLogError << "Invalid remote auto tuning config format. Expected format: "
+        sample::gLogError << "Invalid remote target config format. Expected format: "
                              "protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"
                           << std::endl;
         return false;
@@ -839,6 +841,10 @@ bool validateRemoteAutoTuningConfig(std::string const& config)
 
 std::vector<std::string> sanitizeArgv(int32_t argc, char** argv)
 {
+    // --remoteAutoTuningConfig is an alias of --remoteConfig; both carry credentials.
+    static constexpr std::array<std::string_view, 2> kREMOTE_CONFIG_FLAGS{
+        "--remoteConfig=", "--remoteAutoTuningConfig="};
+
     std::vector<std::string> sanitizedArgs;
     sanitizedArgs.reserve(argc);
 
@@ -846,11 +852,13 @@ std::vector<std::string> sanitizeArgv(int32_t argc, char** argv)
     {
         std::string arg = argv[i];
 
-        // Sanitize remoteAutoTuningConfig argument
-        if (auto const flag = std::string("--remoteAutoTuningConfig=");
-            arg.size() > flag.size() && arg.substr(0, flag.size()) == flag)
+        for (auto const flag : kREMOTE_CONFIG_FLAGS)
         {
-            arg = std::string(flag) + sanitizeRemoteAutoTuningConfig(arg.substr(flag.size()));
+            if (arg.size() > flag.size() && arg.compare(0, flag.size(), flag) == 0)
+            {
+                arg = std::string(flag) + sanitizeRemoteConfig(arg.substr(flag.size()));
+                break;
+            }
         }
 
         sanitizedArgs.push_back(arg);
@@ -1042,7 +1050,7 @@ namespace
 std::vector<std::string> resolveArgvPaths(int32_t argc, char** argv)
 {
     static std::vector<std::string> const kSIMPLE_PATH_FLAGS
-        = {"--onnx=", "--saveEngine=", "--tuneBuildRouteFile=", "--loadEngine="};
+        = {"--onnx=", "--saveEngine=", "--tuneBuildRouteFile=", "--loadEngine=", "--loadCheckerBlob="};
     static std::vector<std::string> const kMAPPED_PATH_FLAGS = {"--loadInputs=", "--loadRefOutputs="};
 
     std::vector<std::string> result;

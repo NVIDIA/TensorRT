@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,7 +61,18 @@ def _join_with(lst, middle = False, delim = ", "):
     return ret
 
 def _is_npt_ndarray(annotation):
-    return (typing.get_origin(annotation) == np.ndarray) or (hasattr(annotation, "__origin__") and annotation.__origin__ == np.ndarray)
+    origin = typing.get_origin(annotation)
+    if origin == np.ndarray:
+        return True
+    if origin is np.typing.NDArray:
+        return True
+    if hasattr(annotation, "__origin__"):
+        o = annotation.__origin__
+        if o == np.ndarray:
+            return True
+        if o is np.typing.NDArray:
+            return True
+    return False
 
 def _is_numpy_array(annotation):
     return (annotation == np.ndarray) or _is_npt_ndarray(annotation)
@@ -69,6 +80,8 @@ def _is_numpy_array(annotation):
 def _infer_numpy_type(annotation):
     assert _is_npt_ndarray(annotation)
     annot_args = typing.get_args(annotation) or annotation.__args__
+    if len(annot_args) == 1:
+        return annot_args[0]
     if len(annot_args) >= 2:
         np_type = typing.get_args(annot_args[1]) or annot_args[1].__args__
         if len(np_type) >= 1:

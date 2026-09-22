@@ -10,7 +10,9 @@ import math
 import os
 import re
 import unicodedata
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Deque, Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
+
+from .layer_payload import extract_io_tensors, extract_layers
 
 
 Number = (int, float)
@@ -115,6 +117,7 @@ MODEL_NAME_STOPWORDS = {
     "torch",
     "trt",
 }
+EXPLICIT_MODEL_NAME_TOKENS = {"decode", "decoder", "encode", "encoder"}
 CONFIG_MODEL_NAME_KEYS = (
     "_name_or_path",
     "name_or_path",
@@ -246,19 +249,50 @@ def discover_backends(folder: str) -> List[Tuple[str, Optional[str], Optional[st
 def explicit_backends(data_specs: Sequence[Sequence[str]]) -> List[Tuple[str, Optional[str], Optional[str]]]:
     backends: List[Tuple[str, Optional[str], Optional[str]]] = []
     for spec in data_specs:
-        if len(spec) not in (1, 2):
-            raise DataError("--data expects one layer-info path and optional one profile JSON path")
-        layer_spec = spec[0]
-        profile_spec = spec[1] if len(spec) == 2 else None
-        if not layer_spec:
+        if not spec or not spec[0]:
             raise DataError("--data must start with a layer-info JSON path")
+        if len(spec) != 2:
+            raise DataError("--data expects one layer-info path and one profile JSON path")
+        layer_spec = spec[0]
+        profile_spec = spec[1]
         if profile_spec == "":
             raise DataError("--data profile JSON path must be non-empty")
 
         layer_path = os.path.abspath(layer_spec)
-        profile_path = os.path.abspath(profile_spec) if profile_spec is not None else None
+        profile_path = os.path.abspath(profile_spec)
         backends.append((suffix_for(layer_path, "layer"), layer_path, profile_path))
-    return backends
+    return disambiguate_backend_labels(backends)
+
+
+def disambiguate_backend_labels(
+    backends: Sequence[Tuple[str, Optional[str], Optional[str]]],
+) -> List[Tuple[str, Optional[str], Optional[str]]]:
+    counts = collections.Counter(label for label, _, _ in backends)
+    layer_folders = [os.path.dirname(layer_path) for _, layer_path, _ in backends if layer_path]
+    try:
+        common_folder = os.path.commonpath(layer_folders) if layer_folders else ""
+    except ValueError:
+        common_folder = ""
+
+    candidates: List[Tuple[str, Optional[str], Optional[str]]] = []
+    for label, layer_path, profile_path in backends:
+        candidate = label
+        if counts[label] > 1 and layer_path:
+            relative_folder = os.path.relpath(os.path.dirname(layer_path), common_folder) if common_folder else ""
+            first_component = relative_folder.split(os.sep, 1)[0]
+            if first_component not in ("", ".", ".."):
+                candidate = first_component
+            else:
+                candidate = os.path.basename(os.path.dirname(layer_path)) or label
+        candidates.append((candidate, layer_path, profile_path))
+
+    used: collections.Counter[str] = collections.Counter()
+    resolved: List[Tuple[str, Optional[str], Optional[str]]] = []
+    for label, layer_path, profile_path in candidates:
+        used[label] += 1
+        unique_label = label if used[label] == 1 else f"{label}-{used[label]}"
+        resolved.append((unique_label, layer_path, profile_path))
+    return resolved
 
 
 def common_source_folder(source_paths: Sequence[str]) -> Optional[str]:
@@ -287,23 +321,25 @@ def validate_tensor(
     dims = tensor.get("Dimensions")
     if not isinstance(dims, list) or not all(is_number(dim) for dim in dims):
         add_limited(errors, f"Layer `{layer_name}` tensor `{name}` has invalid `Dimensions`.")
-    dtype = tensor.get("Format/Datatype")
-    if dtype is not None and not isinstance(dtype, str):
-        add_limited(errors, f"Layer `{layer_name}` tensor `{name}` has non-string `Format/Datatype`.")
+    for metadata_field in ("Datatype", "Format", "Format/Datatype"):
+        value = tensor.get(metadata_field)
+        if value is not None and not isinstance(value, str):
+            add_limited(errors, f"Layer `{layer_name}` tensor `{name}` has non-string `{metadata_field}`.")
 
 
 def validate_layers(data: Any, errors: List[str]) -> List[Dict[str, Any]]:
-    if not isinstance(data, list):
-        add_limited(errors, "Layer-info JSON root must be a list.")
+    try:
+        layer_records = extract_layers(data)
+    except ValueError as exc:
+        add_limited(errors, str(exc))
         return []
-    if not data:
+    if not layer_records:
         add_limited(errors, "Layer-info JSON must contain at least one layer.")
         return []
 
-    names: collections.Counter[str] = collections.Counter()
     valid_layers: List[Dict[str, Any]] = []
 
-    for idx, layer in enumerate(data):
+    for idx, layer in enumerate(layer_records):
         if not isinstance(layer, dict):
             add_limited(errors, f"Layer record {idx} is not an object.")
             continue
@@ -311,21 +347,28 @@ def validate_layers(data: Any, errors: List[str]) -> List[Dict[str, Any]]:
         if not isinstance(name, str) or not name:
             add_limited(errors, f"Layer record {idx} is missing non-empty string `Name`.")
             name = f"<invalid-layer-{idx}>"
-        names[name] += 1
         if not isinstance(layer.get("LayerType"), str):
             add_limited(errors, f"Layer `{name}` is missing string `LayerType`.")
         for field_name in ("Inputs", "Outputs"):
             tensors = layer.get(field_name)
             if not isinstance(tensors, list):
-                add_limited(errors, f"Layer `{name}` is missing list `{field_name}`.")
+                add_limited(errors, f"Layer `{name}` is missing array `{field_name}`.")
                 continue
             for tensor_idx, tensor in enumerate(tensors):
                 validate_tensor(tensor, name, field_name, tensor_idx, errors)
         valid_layers.append(layer)
 
-    duplicates = [name for name, count in names.items() if count > 1]
-    if duplicates:
-        add_limited(errors, "Duplicate layer names: " + ", ".join(short_name(name, 64) for name in duplicates[:8]))
+    subgraphs = {
+        json.dumps(layer["_subgraph"], sort_keys=True)
+        for layer in valid_layers
+        if layer.get("_subgraph") is not None
+    }
+    if len(subgraphs) > 1:
+        add_limited(
+            errors,
+            "Concatenated multi-engine layer-info is not supported; provide one "
+            "trtexec/IEngineInspector engine dump per layer-info file.",
+        )
 
     return valid_layers
 
@@ -429,7 +472,6 @@ def validate_profile(data: Any, errors: List[str]) -> Tuple[List[Dict[str, Any]]
         add_limited(errors, "Profile JSON contains no layer timing records.")
         return [], count, count_source
 
-    names: collections.Counter[str] = collections.Counter()
     valid_entries: List[Dict[str, Any]] = []
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -439,30 +481,33 @@ def validate_profile(data: Any, errors: List[str]) -> Tuple[List[Dict[str, Any]]
         if not isinstance(name, str) or not name:
             add_limited(errors, f"Profile record {idx} is missing non-empty string `name`.")
             name = f"<invalid-profile-{idx}>"
-        names[name] += 1
         for field_name in ("timeMs", "averageMs", "medianMs", "percentage"):
             if not is_number(entry.get(field_name)):
                 add_limited(errors, f"Profile record `{short_name(name, 72)}` has invalid `{field_name}`.")
         valid_entries.append(entry)
 
-    duplicates = [name for name, duplicate_count in names.items() if duplicate_count > 1]
-    if duplicates:
-        add_limited(errors, "Duplicate profile names: " + ", ".join(short_name(name, 64) for name in duplicates[:8]))
-
     return valid_entries, count, count_source
 
 
 def validate_names(layers: Sequence[Dict[str, Any]], profile: Sequence[Dict[str, Any]], errors: List[str]) -> None:
-    layer_names = {layer.get("Name") for layer in layers if isinstance(layer.get("Name"), str)}
-    profile_names = {entry.get("name") for entry in profile if isinstance(entry.get("name"), str)}
-    missing_profile = sorted(layer_names - profile_names)
-    extra_profile = sorted(profile_names - layer_names)
+    layer_names = collections.Counter(
+        layer.get("Name") for layer in layers if isinstance(layer.get("Name"), str)
+    )
+    profile_names = collections.Counter(
+        entry.get("name") for entry in profile if isinstance(entry.get("name"), str)
+    )
+    missing_profile = layer_names - profile_names
+    extra_profile = profile_names - layer_names
     if missing_profile:
-        sample = ", ".join(short_name(name, 72) for name in missing_profile[:6])
-        add_limited(errors, f"{len(missing_profile)} layer names are missing from profile JSON: {sample}")
+        sample = ", ".join(
+            f"{short_name(name, 64)} ({count})" for name, count in sorted(missing_profile.items())[:6]
+        )
+        add_limited(errors, f"{sum(missing_profile.values())} layer occurrences are missing from profile JSON: {sample}")
     if extra_profile:
-        sample = ", ".join(short_name(name, 72) for name in extra_profile[:6])
-        add_limited(errors, f"{len(extra_profile)} profile names are missing from layer-info JSON: {sample}")
+        sample = ", ".join(
+            f"{short_name(name, 64)} ({count})" for name, count in sorted(extra_profile.items())[:6]
+        )
+        add_limited(errors, f"{sum(extra_profile.values())} profile occurrences are missing from layer-info JSON: {sample}")
 
 
 def tensor_name(tensor: Any) -> Optional[str]:
@@ -471,44 +516,108 @@ def tensor_name(tensor: Any) -> Optional[str]:
     return None
 
 
-def validate_dag(layers: Sequence[Dict[str, Any]], errors: List[str]) -> Dict[str, Any]:
-    producer: Dict[str, int] = {}
-    duplicate_outputs: List[str] = []
-    for idx, layer in enumerate(layers):
-        for tensor in layer.get("Outputs", []) if isinstance(layer.get("Outputs"), list) else []:
-            name = tensor_name(tensor)
-            if not name:
-                continue
-            if name in producer:
-                duplicate_outputs.append(name)
-            else:
-                producer[name] = idx
+TensorOccurrence = Tuple[int, int]
 
-    if duplicate_outputs:
-        sample = ", ".join(short_name(name, 72) for name in duplicate_outputs[:6])
-        add_limited(errors, f"Duplicate tensor producers make the graph ambiguous: {sample}")
+
+def tensor_descriptors(layer: Dict[str, Any], field_name: str) -> List[Dict[str, Any]]:
+    value = layer.get(field_name)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def tensor_occurrences(
+    layers: Sequence[Dict[str, Any]],
+) -> Tuple[Dict[str, List[TensorOccurrence]], Dict[str, List[TensorOccurrence]]]:
+    producers: Dict[str, List[TensorOccurrence]] = collections.defaultdict(list)
+    consumers: Dict[str, List[TensorOccurrence]] = collections.defaultdict(list)
+    for layer_index, layer in enumerate(layers):
+        for position, tensor in enumerate(tensor_descriptors(layer, "Inputs")):
+            name = tensor_name(tensor)
+            if name:
+                consumers[name].append((layer_index, position))
+        for position, tensor in enumerate(tensor_descriptors(layer, "Outputs")):
+            name = tensor_name(tensor)
+            if name:
+                producers[name].append((layer_index, position))
+    return dict(producers), dict(consumers)
+
+
+def io_names(io_tensors: Sequence[Any], errors: List[str]) -> Tuple[Set[str], Set[str]]:
+    graph_inputs: Set[str] = set()
+    graph_outputs: Set[str] = set()
+    for index, tensor in enumerate(io_tensors):
+        if not isinstance(tensor, dict):
+            add_limited(errors, f"I/O tensor record {index} is not an object.")
+            continue
+        name = tensor.get("Name")
+        mode = tensor.get("IOMode")
+        if not isinstance(name, str) or not name:
+            add_limited(errors, f"I/O tensor record {index} is missing non-empty string `Name`.")
+            continue
+        if not isinstance(mode, str) or mode.strip().lower() not in {"input", "output"}:
+            add_limited(errors, f"I/O tensor `{short_name(name, 72)}` has invalid `IOMode`.")
+            continue
+        if mode.strip().lower() == "input":
+            graph_inputs.add(name)
+        else:
+            graph_outputs.add(name)
+    return graph_inputs, graph_outputs
+
+
+def validate_dag(
+    layers: Sequence[Dict[str, Any]],
+    errors: List[str],
+    io_tensors: Sequence[Any] = (),
+) -> Dict[str, Any]:
+    producers, consumers = tensor_occurrences(layers)
+    explicit_inputs, explicit_outputs = io_names(io_tensors, errors)
+    produced_names = set(producers)
+    consumed_names = set(consumers)
+    conflicting_inputs = sorted(explicit_inputs & produced_names)
+    if conflicting_inputs:
+        sample = ", ".join(short_name(name, 72) for name in conflicting_inputs[:8])
+        add_limited(errors, "Graph inputs are also produced by layers: " + sample)
 
     adjacency = [set() for _ in layers]
     indegree = [0 for _ in layers]
-    external_inputs = set()
-    consumed_tensors = set()
 
-    for consumer_idx, layer in enumerate(layers):
-        for tensor in layer.get("Inputs", []) if isinstance(layer.get("Inputs"), list) else []:
-            name = tensor_name(tensor)
-            if not name:
-                continue
-            producer_idx = producer.get(name)
-            if producer_idx is None:
-                external_inputs.add(name)
-                continue
-            consumed_tensors.add(name)
-            if producer_idx == consumer_idx:
-                add_limited(errors, f"Layer `{short_name(layer.get('Name', '<unknown>'), 72)}` consumes its own output `{name}`.")
-                continue
-            if consumer_idx not in adjacency[producer_idx]:
-                adjacency[producer_idx].add(consumer_idx)
-                indegree[consumer_idx] += 1
+    def add_edge(producer_idx: int, consumer_idx: int) -> None:
+        if consumer_idx not in adjacency[producer_idx]:
+            adjacency[producer_idx].add(consumer_idx)
+            indegree[consumer_idx] += 1
+
+    for name, input_occurrences in consumers.items():
+        output_occurrences = producers.get(name, [])
+        if not output_occurrences:
+            continue
+        if len(output_occurrences) == 1:
+            producer_index = output_occurrences[0][0]
+            for consumer_index, _ in input_occurrences:
+                add_edge(producer_index, consumer_index)
+            continue
+
+        writer_layers = {layer_index for layer_index, _ in output_occurrences}
+        reader_layers = {layer_index for layer_index, _ in input_occurrences}
+        superseded: Set[TensorOccurrence] = set()
+        chained_writers: Set[int] = set()
+        for writer_index in sorted(writer_layers & reader_layers):
+            previous = [item for item in output_occurrences if item[0] < writer_index]
+            if previous:
+                predecessor = max(previous)
+                superseded.add(predecessor)
+                chained_writers.add(writer_index)
+                add_edge(predecessor[0], writer_index)
+
+        source_layers = {
+            layer_index
+            for layer_index, position in output_occurrences
+            if (layer_index, position) not in superseded
+        }
+        dependent_layers = reader_layers - chained_writers
+        for producer_index in sorted(source_layers):
+            for consumer_index in sorted(dependent_layers):
+                add_edge(producer_index, consumer_index)
 
     queue = collections.deque(idx for idx, degree in enumerate(indegree) if degree == 0)
     visited = 0
@@ -521,15 +630,17 @@ def validate_dag(layers: Sequence[Dict[str, Any]], errors: List[str]) -> Dict[st
                 queue.append(next_idx)
 
     if visited != len(layers):
-        unresolved = [
-            short_name(str(layers[idx].get("Name", idx)), 72)
-            for idx, degree in enumerate(indegree)
-            if degree > 0
-        ][:8]
+        unresolved = []
+        for idx, degree in enumerate(indegree):
+            if degree <= 0:
+                continue
+            unresolved.append(short_name(str(layers[idx].get("Name", idx)), 72))
+            if len(unresolved) == 8:
+                break
         add_limited(errors, "Layer graph is not a DAG; unresolved nodes: " + ", ".join(unresolved))
 
-    output_tensors = set(producer)
-    graph_outputs = output_tensors - consumed_tensors
+    external_inputs = explicit_inputs | (consumed_names - produced_names)
+    graph_outputs = explicit_outputs or (produced_names - consumed_names)
     edges = sum(len(next_nodes) for next_nodes in adjacency)
     return {
         "edge_count": edges,
@@ -637,6 +748,11 @@ def model_name_tokens(value: str) -> List[str]:
     return [token for token in normalized_name_tokens(value) if token not in MODEL_NAME_STOPWORDS]
 
 
+def explicit_model_name_tokens(value: str) -> List[str]:
+    stopwords = MODEL_NAME_STOPWORDS - EXPLICIT_MODEL_NAME_TOKENS
+    return [token for token in normalized_name_tokens(value) if token not in stopwords]
+
+
 def has_model_name_signal(tokens: Sequence[str]) -> bool:
     if not tokens:
         return False
@@ -675,6 +791,19 @@ def clean_model_name(value: Any) -> Optional[str]:
         cleaned = clean_model_name_segment(segment)
         if cleaned:
             return cleaned
+    return None
+
+
+def clean_explicit_model_name(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    segments = [segment.strip() for segment in re.split(r"[\\/]+", ascii_value) if segment.strip()]
+    for segment in reversed(segments or [ascii_value]):
+        tokens = explicit_model_name_tokens(segment)
+        if has_model_name_signal(tokens):
+            return "-".join(tokens[:16])
     return None
 
 
@@ -764,7 +893,7 @@ def infer_model_name_metadata(
     source_paths: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     guesses: List[ModelNameGuess] = []
-    explicit_cleaned = clean_model_name(explicit_name)
+    explicit_cleaned = clean_explicit_model_name(explicit_name)
     if explicit_cleaned:
         guesses.append(ModelNameGuess(explicit_cleaned, "high", "explicit model name"))
 
@@ -1078,16 +1207,20 @@ def is_obvious_attention_fusion(layer: Dict[str, Any]) -> bool:
 
 
 def combine_records(layers: Sequence[Dict[str, Any]], profile: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    profile_by_name = {entry["name"]: entry for entry in profile}
+    profile_by_name: Dict[str, Deque[Dict[str, Any]]] = collections.defaultdict(collections.deque)
+    for entry in profile:
+        profile_by_name[entry["name"]].append(entry)
     records: List[Dict[str, Any]] = []
-    for layer in layers:
-        entry = profile_by_name.get(layer.get("Name"))
-        if not entry:
+    for layer_index, layer in enumerate(layers):
+        matching_entries = profile_by_name.get(layer.get("Name"))
+        if not matching_entries:
             continue
+        entry = matching_entries.popleft()
         raw_type = raw_layer_type(layer)
         records.append(
             {
                 "name": layer.get("Name"),
+                "layer_index": layer_index,
                 "layer_type": infer_layer_type(layer),
                 "raw_layer_type": raw_type,
                 "tactic": layer.get("TacticName", ""),
@@ -1310,28 +1443,22 @@ def analyze_backend(
     except DataError as exc:
         return failure_result(label, [str(exc)], warnings, layer_path, profile_path)
 
+    try:
+        io_tensors = extract_io_tensors(layer_data)
+    except ValueError as exc:
+        add_limited(errors, str(exc))
+        io_tensors = []
     layers = validate_layers(layer_data, errors)
-    if not has_detailed_layer_info(layer_data):
+    if not has_detailed_layer_info(layers):
         add_limited(
             errors,
             "Full TensorRT layer info is missing. Generate layer JSON with TensorRT detailed profiling verbosity.",
         )
-    graph = validate_dag(layers, errors) if layers else {"edge_count": 0, "external_inputs": [], "graph_outputs": []}
+    graph = validate_dag(layers, errors, io_tensors) if layers else {"edge_count": 0, "external_inputs": [], "graph_outputs": []}
 
     if not profile_path:
-        if errors:
-            return failure_result(label, errors, warnings, layer_path, profile_path, len(layers))
-        model = infer_model_info(layers, graph, folder, model_name_metadata, model_components)
-        engines = engine_hints(layers, folder)
-        return {
-            "label": label,
-            "validation": backend_validation("passed", "layer_only", errors, warnings, layer_path, profile_path, True),
-            "layers": layers,
-            "layer_count": len(layers),
-            "graph": graph,
-            "model": model,
-            "engines": engines,
-        }
+        add_limited(errors, "Profile/latency JSON is missing. Provide the matching profile_*.json file.")
+        return failure_result(label, errors, warnings, layer_path, profile_path, len(layers))
 
     try:
         profile_data = load_json(profile_path)
@@ -1418,7 +1545,7 @@ def extract_perf_data(
         for label, layer_path, profile_path in backends
     ]
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.2",
         "folder": folder,
         "model_name": model_name_metadata["name"],
         "model_name_confidence": model_name_metadata["name_confidence"],

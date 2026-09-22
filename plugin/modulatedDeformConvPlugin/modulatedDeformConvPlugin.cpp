@@ -112,9 +112,9 @@ int32_t ModulatedDeformableConvPluginDynamic::getOutputShapes(nvinfer1::DimsExpr
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr && outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 4 || nbInputs == 5); // nbInputs depends on bias
+        PLUGIN_ASSERT(inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 4 || nbInputs == 5); // nbInputs depends on bias
 
         // Output shape is (N, C_out, H_out, W_out)
         // N = N_in (inputs[0].d[0])
@@ -208,7 +208,7 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
 {
     try
     {
-        PLUGIN_VALIDATE(inputDescs != nullptr && outputDescs != nullptr && inputs != nullptr && outputs != nullptr
+        PLUGIN_ASSERT(inputDescs != nullptr && outputDescs != nullptr && inputs != nullptr && outputs != nullptr
             && workspace != nullptr);
 
         // Extract dimensions
@@ -299,9 +299,9 @@ int32_t ModulatedDeformableConvPluginDynamic::getOutputDataTypes(nvinfer1::DataT
 {
     try
     {
-        PLUGIN_VALIDATE(outputTypes != nullptr && inputTypes != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 4 || nbInputs == 5); // Depends on bias
+        PLUGIN_ASSERT(outputTypes != nullptr && inputTypes != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 4 || nbInputs == 5); // Depends on bias
 
         // Output type must match the input type
         outputTypes[0] = inputTypes[0];

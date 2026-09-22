@@ -133,9 +133,9 @@ nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(int32_t outputIndex,
 {
     try
     {
-        PLUGIN_VALIDATE(getNbOutputs() == 2);
-        PLUGIN_VALIDATE(outputIndex >= 0 && outputIndex < getNbOutputs());
-        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_ASSERT(getNbOutputs() == 2);
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < getNbOutputs());
+        PLUGIN_ASSERT(inputs != nullptr);
         auto const& featureH = inputs[0].d[1];
         auto const& featureW = inputs[0].d[2];
         auto const& batchSize = inputs[0].d[0];
@@ -167,10 +167,10 @@ bool DecodeBbox3DPlugin::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 3);
-        PLUGIN_VALIDATE(nbOutputs == 2);
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE((pos >= 0) && (pos < nbInputs + nbOutputs));
+        PLUGIN_ASSERT(nbInputs == 3);
+        PLUGIN_ASSERT(nbOutputs == 2);
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT((pos >= 0) && (pos < nbInputs + nbOutputs));
     }
     catch (std::exception const& e)
     {
@@ -207,7 +207,7 @@ void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const
 {
     try
     {
-        PLUGIN_VALIDATE(in != nullptr);
+        PLUGIN_ASSERT(in != nullptr);
         mFeatureH = in[0].desc.dims.d[1];
         mFeatureW = in[0].desc.dims.d[2];
     }
@@ -357,7 +357,7 @@ void DecodeBbox3DPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -496,7 +496,7 @@ void DecodeBbox3DPluginCreator::setPluginNamespace(char const* libNamespace) noe
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

@@ -78,7 +78,6 @@ class TrtRunnerArgs(BaseRunnerArgs):
         self.allocation_strategy = args_util.get(args, "allocation_strategy")
         self.weight_streaming_budget = None
         self.weight_streaming_percent = None
-
         ws_arg = args_util.get(args, "weight_streaming_budget")
         if ws_arg and ws_arg.endswith("%"):
             percent = float(ws_arg[:-1])

@@ -1374,8 +1374,8 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, only support 2D padding, both height and width of padding must be in the range
-    //! [0,7].
+    //! If executing this layer on DLA, only 2D padding is supported; both height and width must be in [0,7] and must
+    //! be strictly less than the corresponding window size dimension.
     //!
     //! \see getPrePadding()
     //!
@@ -1402,8 +1402,8 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, only support 2D padding, both height and width of padding must be in the range
-    //! [0,7].
+    //! If executing this layer on DLA, only 2D padding is supported; both height and width must be in [0,7] and must
+    //! be strictly less than the corresponding window size dimension.
     //!
     //! \see getPostPadding()
     //!
@@ -1449,8 +1449,8 @@ public:
     //!
     //! \brief Set the multi-dimension window size for pooling.
     //!
-    //! If executing this layer on DLA, only support 2D window size, both height and width of window size must be in the
-    //! range [1,8].
+    //! If executing this layer on DLA, only 2D window size is supported. For average pooling, both height and width
+    //! must be in [1,8]. For max pooling, both height and width must be in [1,16].
     //!
     //! \see getWindowSizeNd() setWindowSize() getWindowSize()
     //!
@@ -1474,8 +1474,7 @@ public:
     //!
     //! Default: (1, 1, ..., 1)
     //!
-    //! If executing this layer on DLA, only support 2D stride, both height and width of stride must be in the range
-    //! [1,16].
+    //! If executing this layer on DLA, only 2D stride is supported; both height and width must be in [1,16].
     //!
     //! \see getStrideNd()
     //!
@@ -1503,8 +1502,8 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, only support 2D padding, both height and width of padding must be in the range
-    //! [0,7].
+    //! If executing this layer on DLA, only 2D padding is supported; both height and width must be in [0,7] and must
+    //! be strictly less than the corresponding window size dimension.
     //!
     //! \see getPaddingNd() setPadding() getPadding()
     //!
@@ -9638,17 +9637,18 @@ public:
     //!
     //! \brief Add an attention to the network with explicit causal mask kind.
     //!
-    //! \param query A 4d input query tensor to the layer.
-    //! \param key A 4d input key tensor to the layer.
-    //! \param value A 4d input value tensor to the layer.
+    //! \param query A 3D or 4D input query tensor to the layer.
+    //! \param key A 3D or 4D input key tensor to the layer.
+    //! \param value A 3D or 4D input value tensor to the layer.
     //! \param normOp The normalization operation to perform.
     //! \param causalKind The causal mask alignment orientation. Use kNONE for no causal masking,
     //!        kUPPER_LEFT for diagonal anchored at upper-left corner (legacy default),
     //!        or kLOWER_RIGHT for diagonal anchored at lower-right corner (for LLM generation with s_q != s_kv).
     //!
-    //! query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
-    //! key and value must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
-    //! pastKey and pastValue must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! For padded (BHND) form, query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
+    //! For packed (NHD) form, query must have shape [totalTokens, numHeadsQuery, dimHead].
+    //! key and value follow the same convention based on their form.
+    //! Use IAttention::setQueryForm() and IAttention::setKeyValueForm() to configure the tensor layout.
     //! normOp defaults to kSOFTMAX, causalKind defaults to kNONE.
     //!
     //! By default, IAttention is not decomposable and TensorRT will try to use a single fused kernel, which may be more
@@ -9794,6 +9794,8 @@ public:
     //!
     //! \param name The name of the weights.
     //!
+    //! \warning Engine build will fail if IConstantLayer weights used to compute a shape tensor are marked refittable.
+    //!
     //! \return True if the weights were successfully marked as refittable, false if the weights do not exist or cannot
     //! be refitted.
     //!
@@ -9807,7 +9809,8 @@ public:
     //!
     //! \param name The name of the weights.
     //!
-    //! \return True if the weights were successfully marked as unrefittable, false if the weights do not exist.
+    //! \return True if the weights were successfully marked as unrefittable, false if the weights do not exist or
+    //! are null build-time weight placeholders.
     //!
     bool unmarkWeightsRefittable(char const* name) noexcept
     {
@@ -10025,9 +10028,10 @@ enum class BuilderFlag : int32_t
     kDISABLE_COMPILATION_CACHE = 17,
 
     //! Strip refittable weights from the engine plan file. If no refit mode is specified, kREFIT_IDENTICAL is enabled
-    //! by default. When used with kREFIT_INDIVIDUAL, only weights explicitly marked with
-    //! INetworkDefinition::markWeightsRefittable are stripped. When used with kREFIT or kREFIT_IDENTICAL, TensorRT
-    //! determines which refittable weights are stripped according to the selected refit mode.
+    //! by default. When used with kREFIT_INDIVIDUAL, weights explicitly marked with
+    //! INetworkDefinition::markWeightsRefittable and null build-time weight placeholders are stripped. When used with
+    //! kREFIT or kREFIT_IDENTICAL, TensorRT determines which refittable weights are stripped according to the selected
+    //! refit mode.
     kSTRIP_PLAN = 18,
 
     //! Create a refittable engine under the assumption that the refit weights will be identical to those provided at
@@ -10069,7 +10073,8 @@ enum class BuilderFlag : int32_t
     //! Enable building a refittable engine and provide fine-grained control. This allows
     //! control over which weights are refittable or not using INetworkDefinition::markWeightsRefittable and
     //! INetworkDefinition::unmarkWeightsRefittable. By default, all weights are non-refittable when this flag is
-    //! enabled. This flag cannot be used together with kREFIT or kREFIT_IDENTICAL.
+    //! enabled, except null build-time weight placeholders, which are implicitly refittable. This flag cannot be used
+    //! together with kREFIT or kREFIT_IDENTICAL.
     kREFIT_INDIVIDUAL = 22,
 
     //!  Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are
@@ -11497,6 +11502,7 @@ struct impl::EnumMaxImpl<NetworkDefinitionCreationFlag>
     static constexpr int32_t kVALUE = 3;
 };
 
+
 //!
 //! \class IBuilder
 //!
@@ -11709,6 +11715,7 @@ public:
     {
         return mImpl->buildSerializedNetworkWithKernelText(network, config, kernelText);
     }
+
 
     //!
     //! \brief Builds a network for the given INetworkDefinition and IBuilderConfig.

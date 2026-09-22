@@ -76,22 +76,28 @@ def run_script(script_func, *args):
     """
     script = Script()
 
+    # Use a single explicit namespace dict for both the injected args and the exec'd script's
+    # definitions. Routing args/results through ``locals()`` would break on Python 3.13+, where
+    # ``locals()`` in a function returns a fresh snapshot each call (PEP 667): the values written by
+    # ``exec`` would not be visible to a subsequent ``locals()`` read.
+    namespace = {}
+
     arg_names = []
     for index, arg in enumerate(args):
         if arg is not None:
             arg_name = safe("__arg{:}", index)
-            locals()[arg_name.unwrap()] = arg
+            namespace[arg_name.unwrap()] = arg
             arg_names.append(inline(arg_name))
         else:
             arg_names.append(None)
 
     safe_ret_name = script_func(script, *arg_names)
-    exec(str(script), globals(), locals())
+    exec(str(script), namespace)
 
     if safe_ret_name is not None:
         ret_name = ensure_safe(safe_ret_name).unwrap()
-        if ret_name in locals():
-            return locals()[ret_name]
+        if ret_name in namespace:
+            return namespace[ret_name]
     return None
 
 
@@ -110,10 +116,15 @@ def get(args, attr, default=None):
 
 @mod.export()
 def get_outputs(args, name):
-    outputs = get(args, name)
-    if outputs is not None and len(outputs) == 2 and outputs == ["mark", "all"]:
-        outputs = constants.MARK_ALL
-    return outputs
+    raw = get(args, name)
+    if raw is not None and len(raw) == 1 and raw[0] == "*":
+        return constants.MARK_ALL
+    elif raw is not None and len(raw) >= 2 and raw[0] == "mark" and raw[1:] == ["all"]:
+        mod.warn_deprecated(
+            "'mark all'", "'*'", remove_in="0.55.0", always_show_warning=True
+        )
+        return constants.MARK_ALL
+    return raw
 
 
 @mod.export()

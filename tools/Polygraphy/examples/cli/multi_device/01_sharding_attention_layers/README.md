@@ -7,7 +7,7 @@ The `shard` tool can be used to convert single-device (SD) models containing att
 
 In this example, we'll show how to shard a simple model containing an attention layer
 
-![./model.png](./model.png)
+![./model.png](../model.png)
 
 ## Hint Configuration
 

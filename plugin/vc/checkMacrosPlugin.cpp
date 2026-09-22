@@ -92,13 +92,17 @@ void reportValidationFailure(char const* msg, char const* file, int32_t line)
 }
 
 // break-pointable
-void reportAssertion(char const* msg, char const* file, int32_t line)
+[[noreturn]] void reportAssertion(char const* msg, char const* file, int32_t line) noexcept
 {
     std::ostringstream stream;
-    stream << "Assertion failed: " << msg << "\n"
-           << file << ':' << line << "\n"
-           << "Aborting..."
-           << "\n";
+    stream << "Assertion failed: " << msg << "\n" << file << ':' << line << "\n";
+    // We are about to exit; just report any cudaDeviceReset failure rather than throwing it.
+    cudaError_t const resetStatus = cudaDeviceReset();
+    if (resetStatus != cudaSuccess)
+    {
+        stream << "cudaDeviceReset() failed during assertion handling: " << cudaGetErrorString(resetStatus) << "\n";
+    }
+    stream << "Aborting...\n";
 #ifdef COMPILE_VFC_PLUGIN
     ILogger* logger = getPluginLogger();
     if (logger != nullptr)
@@ -108,7 +112,6 @@ void reportAssertion(char const* msg, char const* file, int32_t line)
 #else
     getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
 #endif
-    PLUGIN_CUASSERT(cudaDeviceReset());
     exit(EXIT_FAILURE);
 }
 

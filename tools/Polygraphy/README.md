@@ -35,7 +35,7 @@ Among other things, Polygraphy lets you:
 
 ## Installation
 
-**IMPORTANT**: **Polygraphy supports only Python 3.6 and later.**
+**IMPORTANT**: **Polygraphy supports only Python 3.8 and later.**
     **Before following the instructions below, please ensure you are using a supported version of Python.**
 
 
@@ -69,13 +69,13 @@ Make sure you are allowed to execute scripts on your system then run:
 1. Install prerequisites:
 
 ```
-python -m pip install wheel
+python -m pip install build
 ```
 
 2. Build a wheel:
 
 ```
-python setup.py bdist_wheel
+python -m build --wheel
 ```
 
 3. Install the wheel manually from **outside** the repository:
@@ -83,7 +83,7 @@ python setup.py bdist_wheel
     On Linux, run:
 
     ```
-    python -m pip install Polygraphy/dist/polygraphy-*-py2.py3-none-any.whl
+    python -m pip install Polygraphy/dist/polygraphy-*-py3-none-any.whl
     ```
 
     On Windows, using Powershell, run:

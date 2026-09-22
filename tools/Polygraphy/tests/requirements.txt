@@ -1,21 +1,32 @@
 colored
 pytest-rerunfailures
-numpy<2
+numpy<2; python_version<'3.13'
+# Python 3.13 needs ml_dtypes >= 0.5 (for float4_e2m1fn) and onnx cp313 wheels, which pull numpy 2.
+numpy>=2; python_version>='3.13'
 onnx_graphsurgeon
-onnx==1.17.0
-onnxconverter_common==1.12.2
-onnxmltools==1.11.1
+onnx>=1.17.0; python_version<'3.13'
+# onnx only ships cp313 wheels from 1.18 onward.
+onnx>=1.18; python_version>='3.13'
+onnxconverter_common>=1.12.2
 onnxruntime
-protobuf==3.20.3
-pytest
+protobuf>=4.25.1; python_version<'3.13'
+# onnx >= 1.18 requires protobuf >= 4.
+protobuf>=4.21; python_version>='3.13'
+pytest<9
 pytest-console-scripts
 pytest-virtualenv
 virtualenv
 pytest-xdist
 requests==2.25.1
-sympy==1.9
+sympy==1.9; python_version<'3.13'
+# Python 3.13 only has wheels for torch >= 2.5, which requires a newer sympy.
+sympy>=1.13.3; python_version>='3.13'
 tensorflow<2.0; python_version<'3.8'
-tf2onnx
 torch
+mpi4py
 wheel
+build
 pyyaml
+# cuda-python 13.3 requires cuda-core 1.0.x, while nccl4py allows newer 1.x releases.
+cuda-core~=1.0.0
+nccl4py[cu13]

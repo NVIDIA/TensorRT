@@ -26,9 +26,11 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <unistd.h>
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -59,6 +61,7 @@ class SafeExecArgs
 {
 public:
     std::string engineFile{"sample.engine"};
+    std::string companionSoFile;
     int32_t iterations{10};
     int32_t avgRuns{10};
     int32_t warmUp{1};
@@ -100,6 +103,9 @@ namespace
 
 //! Default alignment for memory allocations
 constexpr uint64_t kDEFAULT_ALIGNMENT{256U};
+
+//! Maximum number of bytes requested by one engine file read.
+constexpr size_t kFILE_READ_CHUNK_BYTES{64U * 1024U * 1024U};
 
 //!
 //! \brief RAII wrapper for SafeMemAllocator to ensure automatic cleanup.
@@ -529,6 +535,11 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
     for (int32_t i = 1; i < argc; ++i)
     {
         std::string const arg = argv[i];
+        if (auto value = loggedParseString(arg, "loadEngineSo"))
+        {
+            args.companionSoFile = std::move(*value);
+            continue;
+        }
         if (auto value = loggedParseString(arg, "loadEngine"))
         {
             args.engineFile = std::move(*value);
@@ -653,6 +664,9 @@ void printHelpInfo()
     std::cout << R"(Usage: trtexec_safe --loadEngine=<file> [options]
 Required params:
   --loadEngine=FILE  Load the serialized engine from FILE.
+  --loadEngineSo=FILE
+                     Load the engine's companion library from FILE. Without it, <loadEngine>.so is
+                     used when that file exists.
 
 General optional params:
   --help or -h       Display help information
@@ -764,24 +778,52 @@ void registerSafetyPlugins(nvinfer2::safe::ISafeRecorder& recorder, SafetyPlugin
 }
 
 //!
-//! \brief Load a prebuilt TensorRT safe engine.
-//!
+//! \brief Load a prebuilt TensorRT safe engine using bounded read requests.
+//! \param engineFile Path to the serialized engine.
+//! \return Buffer containing the complete serialized engine.
+//! \throws std::runtime_error if the file size is invalid or any read is incomplete.
 std::vector<char> loadEngine(std::string const& engineFile)
 {
-    std::string const& filename = engineFile;
-    std::vector<char> modelBuffer;
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.good())
+    std::ifstream file(engineFile, std::ios::binary | std::ios::ate);
+    if (!file)
     {
-        safeLogError(*gSafeRecorder, "Could not open input engine file or file is empty. File name: " + filename);
-        return modelBuffer;
+        throw std::runtime_error("Failed to open engine file: " + engineFile);
     }
-    file.seekg(0, std::ifstream::end);
-    auto size = file.tellg();
-    file.seekg(0, std::ifstream::beg);
-    modelBuffer.resize(size);
-    file.read(modelBuffer.data(), size);
-    file.close();
+
+    std::streamoff const fileSize{file.tellg()};
+    if (fileSize <= 0)
+    {
+        throw std::runtime_error("Engine file is empty or has an invalid size: " + engineFile);
+    }
+    if (static_cast<uint64_t>(fileSize) > std::numeric_limits<size_t>::max())
+    {
+        throw std::runtime_error("Engine file is too large to load into memory: " + engineFile);
+    }
+
+    file.seekg(0, std::ios::beg);
+    if (!file)
+    {
+        throw std::runtime_error("Failed to seek to the beginning of engine file: " + engineFile);
+    }
+
+    size_t const size{static_cast<size_t>(fileSize)};
+    std::vector<char> modelBuffer(size);
+    size_t offset{0U};
+    while (offset < size)
+    {
+        size_t const bytesToRead{std::min(kFILE_READ_CHUNK_BYTES, size - offset)};
+        file.read(modelBuffer.data() + offset, static_cast<std::streamsize>(bytesToRead));
+        std::streamsize const bytesRead{file.gcount()};
+        if (bytesRead != static_cast<std::streamsize>(bytesToRead) || file.fail() || file.bad())
+        {
+            std::ostringstream message;
+            message << "Failed to read complete engine file: " << engineFile << " at offset " << offset << ". Expected "
+                    << bytesToRead << " bytes, read " << bytesRead << " (eof=" << file.eof() << ", fail=" << file.fail()
+                    << ", bad=" << file.bad() << ")";
+            throw std::runtime_error(message.str());
+        }
+        offset += bytesToRead;
+    }
     return modelBuffer;
 }
 
@@ -1250,8 +1292,10 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(numThreads);
     std::vector<void*> scratchs(numThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], blob.data(), blob.size(), *recorders[0],
-                      !args.useScratchMemory, &nvinfer2::safe::getSafeMemAllocator()),
+    auto const companionSoPath = samplesSafeCommon::resolveCompanionSoPath(args.engineFile, args.companionSoFile);
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], blob.data(), blob.size(),
+                      companionSoPath ? companionSoPath->c_str() : nullptr, *recorders[0], !args.useScratchMemory,
+                      &nvinfer2::safe::getSafeMemAllocator()),
         *recorders[0]);
     SAFE_API_CALL(graphs[0]->setIOProfile(args.ioProfile), *recorders[0]);
 

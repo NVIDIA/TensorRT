@@ -35,12 +35,15 @@ from tests.models.meta import ONNX_MODELS
 class TestBuild:
     def test_good_bad(self, poly_debug):
         with tempfile.TemporaryDirectory() as outdir:
+            # --save-tactics (algorithm selector) was removed in TRT 11, so we use
+            # --save-timing-cache as the per-iteration artifact instead; the point of
+            # this test is the debug-build good/bad iteration + artifact collection.
             # Also includes --show-output sanity test
             status = poly_debug(
                 [
                     "build",
                     ONNX_MODELS["identity"].path,
-                    "--save-tactics=replay.json",
+                    "--save-timing-cache=replay.json",
                     "--show-output",
                     "--artifacts-dir",
                     outdir,
@@ -58,7 +61,7 @@ class TestBuild:
                 [
                     "build",
                     ONNX_MODELS["identity"].path,
-                    "--save-tactics=replay.json",
+                    "--save-timing-cache=replay.json",
                     "--artifacts-dir",
                     outdir,
                     "--until=bad",
@@ -91,6 +94,10 @@ class TestBuild:
 
 
 class TestPrecision:
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="Layer precision API not available in this TRT version",
+    )
     @pytest.mark.parametrize("check_status", ["true", "false"])
     @pytest.mark.parametrize("mode", ["bisect", "linear"])
     @pytest.mark.parametrize("direction", ["forward", "reverse"])

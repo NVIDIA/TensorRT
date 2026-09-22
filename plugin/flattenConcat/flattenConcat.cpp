@@ -59,19 +59,31 @@ FlattenConcat::FlattenConcat(int32_t concatAxis, bool ignoreBatch, int32_t numIn
 
 FlattenConcat::FlattenConcat(void const* data, size_t length)
 {
+    PLUGIN_VALIDATE(data != nullptr);
     char const* d = static_cast<char const*>(data);
     char const* const a = d;
+
+    auto const ensureAvailable = [&](uint64_t bytes) {
+        PLUGIN_VALIDATE(d <= a + length);
+        PLUGIN_VALIDATE(static_cast<uint64_t>((a + length) - d) >= bytes);
+    };
+
+    ensureAvailable(sizeof(bool) + 3 * sizeof(int32_t));
     mIgnoreBatch = read<bool>(d);
     mConcatAxisID = read<int32_t>(d);
     PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
     mOutputConcatAxis = read<int32_t>(d);
     mNumInputs = read<int32_t>(d);
+    PLUGIN_VALIDATE(mNumInputs >= 0);
 
+    ensureAvailable(static_cast<uint64_t>(mNumInputs) * sizeof(int32_t));
     mInputConcatAxis.resize(mNumInputs);
     std::for_each(mInputConcatAxis.begin(), mInputConcatAxis.end(), [&](int32_t& inp) { inp = read<int32_t>(d); });
 
+    ensureAvailable(sizeof(nvinfer1::Dims3));
     mCHW = read<nvinfer1::Dims3>(d);
 
+    ensureAvailable(static_cast<uint64_t>(mNumInputs) * sizeof(size_t));
     mCopySize.resize(mNumInputs);
     std::for_each(mCopySize.begin(), mCopySize.end(), [&](size_t& inp) { inp = read<size_t>(d); });
 
@@ -215,9 +227,9 @@ void FlattenConcat::attachToContext(
     {
         mCublasWrapper = createPluginCublasWrapper(gpuAllocator);
         mCublas = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(mCublas != nullptr);
+        PLUGIN_ASSERT(mCublas != nullptr);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

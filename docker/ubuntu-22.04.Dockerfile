@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.3.0
+ARG CUDA_VERSION=13.4.1
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 11.2.1.2
+ENV TRT_VERSION=11.3.0.99
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -39,7 +39,7 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/
 
 # Install requried libraries
 RUN apt-get update && apt-get install -y software-properties-common
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends --allow-change-held-packages \
     libcurl4-openssl-dev \
     wget \
     git \
@@ -73,23 +73,6 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/python3 python &&\
     ln -s /usr/bin/pip3 pip;
 
-# Install TensorRT
-RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.2.1/tars/TensorRT-Enterprise-11.2.1.2-Linux-x86_64-cuda-13.3-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.2.1.2-Linux-x86_64-cuda-13.3-Release-external.tar.zst \
-    && cp -a TensorRT-11.2.1.2/lib/*.so* /usr/lib/x86_64-linux-gnu \
-    && pip install TensorRT-11.2.1.2/python/tensorrt-11.2.1.2-cp310-none-linux_x86_64.whl ;\
-    elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.2.1/tars/TensorRT-Enterprise-11.2.1.2-Linux-x86_64-cuda-12.9-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.2.1.2-Linux-x86_64-cuda-12.9-Release-external.tar.zst \
-    && cp -a TensorRT-11.2.1.2/lib/*.so* /usr/lib/x86_64-linux-gnu \
-    && pip install TensorRT-11.2.1.2/python/tensorrt-11.2.1.2-cp310-none-linux_x86_64.whl ;\
-    else \
-    echo "Invalid CUDA_VERSION"; \
-    exit 1; \
-    fi
-
-
 # Install PyPI packages
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
@@ -117,9 +100,20 @@ RUN cd /tmp && \
 # Download NGC client
 RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc-cli/ngc && rm ngccli_cat_linux.zip ngc-cli.md5 && echo "no-apikey\nascii\n" | ngc-cli/ngc config set
 
+# Install TensorRT
+ARG CUDA_VERSION
+COPY docker/downloadTRT.sh /tmp/downloadTRT.sh
+RUN case "${CUDA_VERSION}" in \
+        13.*) TRT_CUDA_VERSION=13.4 ;; \
+        12.*) TRT_CUDA_VERSION=12.9 ;; \
+        *) echo "Unsupported CUDA_VERSION: ${CUDA_VERSION}" && exit 1 ;; \
+    esac && \
+    /tmp/downloadTRT.sh --x86 --cuda "${TRT_CUDA_VERSION}"
+
 # Set environment and working directory
-ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
-ENV TRT_OSSPATH /workspace/TensorRT
+ENV TRT_ROOT=/opt/TensorRT-$TRT_VERSION
+ENV TRT_LIBPATH=/opt/TensorRT-$TRT_VERSION/lib
+ENV TRT_OSSPATH=/workspace/TensorRT
 ENV PATH="/workspace/TensorRT/build/out:${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 WORKDIR /workspace

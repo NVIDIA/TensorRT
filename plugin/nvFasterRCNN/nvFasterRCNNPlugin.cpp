@@ -17,6 +17,7 @@
 #include "nvFasterRCNNPlugin.h"
 #include <cstdio>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string_view>
 
@@ -26,21 +27,29 @@ namespace
 {
 char const* const kRPROI_PLUGIN_VERSION{"1"};
 char const* const kRPROI_PLUGIN_NAME{"RPROI_TRT"};
+constexpr int32_t kCOORDINATES_PER_ANCHOR{4};
+constexpr size_t kSERIALIZED_FIXED_SIZE{
+    sizeof(RPROIParams) + 4 * sizeof(int32_t) + 2 * sizeof(DataType) + sizeof(DLayout_t)};
+
+//! Validates the anchor counts and returns the allocation size used by the anchor generator.
+[[nodiscard]] size_t getAnchorDataSize(RPROIParams const& params)
+{
+    PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
+    auto const anchorCount
+        = static_cast<int64_t>(params.anchorsRatioCount) * static_cast<int64_t>(params.anchorsScaleCount);
+    PLUGIN_VALIDATE(anchorCount <= std::numeric_limits<int32_t>::max() / kCOORDINATES_PER_ANCHOR);
+    return static_cast<size_t>(anchorCount) * kCOORDINATES_PER_ANCHOR * sizeof(float);
+}
 } // namespace
 
 RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales)
     : params(params)
 {
-    /*
-     * It only supports the scenario where params.featureStride == params.minBoxSize
-     * assert(params.featureStride == params.minBoxSize);
-     */
-    PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
+    size_t const anchorDataSize{getAnchorDataSize(params)};
     anchorsRatiosHost = copyToHost(anchorsRatios, params.anchorsRatioCount);
     anchorsScalesHost = copyToHost(anchorsScales, params.anchorsScaleCount);
 
-    PLUGIN_CHECK(
-        cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));
+    PLUGIN_CHECK(cudaMalloc(reinterpret_cast<void**>(&anchorsDev), anchorDataSize));
     pluginStatus_t status = generateAnchors(0, params.anchorsRatioCount, anchorsRatiosHost, params.anchorsScaleCount,
         anchorsScalesHost, params.featureStride, anchorsDev);
     PLUGIN_VALIDATE(status == STATUS_SUCCESS);
@@ -62,17 +71,15 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float c
     , outFeatureType(outFeatureType)
     , inFeatureLayout(inFeatureLayout)
 {
-    PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
+    size_t const anchorDataSize{getAnchorDataSize(params)};
     anchorsRatiosHost = copyToHost(anchorsRatios, params.anchorsRatioCount);
     anchorsScalesHost = copyToHost(anchorsScales, params.anchorsScaleCount);
 
-    PLUGIN_CHECK(
-        cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));
+    PLUGIN_CHECK(cudaMalloc(reinterpret_cast<void**>(&anchorsDev), anchorDataSize));
     // Perform deep copy
     if (_anchorsDev != nullptr)
     {
-        PLUGIN_CHECK(cudaMemcpy(anchorsDev, _anchorsDev,
-            4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float), cudaMemcpyDeviceToDevice));
+        PLUGIN_CHECK(cudaMemcpy(anchorsDev, _anchorsDev, anchorDataSize, cudaMemcpyDeviceToDevice));
     }
 }
 
@@ -83,9 +90,11 @@ RPROIPlugin::RPROIPlugin(void const* data, size_t length)
 
 void RPROIPlugin::deserialize(int8_t const* data, size_t length)
 {
+    PLUGIN_VALIDATE(data != nullptr);
+    PLUGIN_VALIDATE(length >= kSERIALIZED_FIXED_SIZE);
+
     auto const* d{data};
-    params = *reinterpret_cast<RPROIParams const*>(d);
-    d += sizeof(RPROIParams);
+    params = read<RPROIParams>(d);
     A = read<int32_t>(d);
     C = read<int32_t>(d);
     H = read<int32_t>(d);
@@ -93,14 +102,21 @@ void RPROIPlugin::deserialize(int8_t const* data, size_t length)
     inFeatureType = read<DataType>(d);
     outFeatureType = read<DataType>(d);
     inFeatureLayout = read<DLayout_t>(d);
+
+    size_t const anchorDataSize{getAnchorDataSize(params)};
+    size_t const ratiosSize{static_cast<size_t>(params.anchorsRatioCount) * sizeof(float)};
+    size_t const scalesSize{static_cast<size_t>(params.anchorsScaleCount) * sizeof(float)};
+    size_t const serializedAnchorSize{length - kSERIALIZED_FIXED_SIZE};
+    PLUGIN_VALIDATE(ratiosSize <= serializedAnchorSize);
+    PLUGIN_VALIDATE(scalesSize == serializedAnchorSize - ratiosSize);
+
     anchorsRatiosHost = copyToHost(d, params.anchorsRatioCount);
-    d += params.anchorsRatioCount * sizeof(float);
+    d += ratiosSize;
     anchorsScalesHost = copyToHost(d, params.anchorsScaleCount);
-    d += params.anchorsScaleCount * sizeof(float);
+    d += scalesSize;
     PLUGIN_VALIDATE(d == data + length);
 
-    PLUGIN_CHECK(
-        cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));
+    PLUGIN_CHECK(cudaMalloc(reinterpret_cast<void**>(&anchorsDev), anchorDataSize));
     pluginStatus_t status = generateAnchors(0, params.anchorsRatioCount, anchorsRatiosHost, params.anchorsScaleCount,
         anchorsScalesHost, params.featureStride, anchorsDev);
     PLUGIN_VALIDATE(status == STATUS_SUCCESS);
@@ -192,13 +208,9 @@ int32_t RPROIPlugin::enqueue(
 
 size_t RPROIPlugin::getSerializationSize() const noexcept
 {
-    size_t paramSize = sizeof(RPROIParams);
-    size_t intSize = sizeof(int32_t) * 4;
-    size_t ratiosSize = sizeof(float) * params.anchorsRatioCount;
-    size_t scalesSize = sizeof(float) * params.anchorsScaleCount;
-    size_t typeSize = sizeof(DataType) * 2;
-    size_t layoutSize = sizeof(DLayout_t);
-    return paramSize + intSize + ratiosSize + scalesSize + typeSize + layoutSize;
+    size_t const ratiosSize{sizeof(float) * static_cast<size_t>(params.anchorsRatioCount)};
+    size_t const scalesSize{sizeof(float) * static_cast<size_t>(params.anchorsScaleCount)};
+    return kSERIALIZED_FIXED_SIZE + ratiosSize + scalesSize;
 }
 
 void RPROIPlugin::serialize(void* buffer) const noexcept

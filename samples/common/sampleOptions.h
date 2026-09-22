@@ -62,6 +62,14 @@ constexpr float defaultPersistentCacheRatio{0};
 constexpr int32_t defaultAvgRuns{10};
 constexpr std::array<float, 3> defaultPercentiles{90, 95, 99};
 
+#if ENABLE_FEATURE_WEAK_TYPING
+enum class PrecisionConstraints
+{
+    kNONE,
+    kOBEY,
+    kPREFER
+};
+#endif // ENABLE_FEATURE_WEAK_TYPING
 
 enum class ModelFormat
 {
@@ -141,6 +149,13 @@ enum class RuntimeMode
     kSAFE,
 };
 
+//! \brief Selects the runtime library used by safe inference helpers.
+struct SafeRuntimeSettings
+{
+    //! Use the debug safe runtime instead of the standard safe runtime.
+    bool useDebugRuntime{false};
+};
+
 inline std::ostream& operator<<(std::ostream& os, RuntimeMode const mode)
 {
     switch (mode)
@@ -175,11 +190,18 @@ using Arguments = std::unordered_multimap<std::string, std::pair<std::string, in
 //! An IO format specification.
 struct IOFormat
 {
+#if ENABLE_FEATURE_WEAK_TYPING
+    std::optional<nvinfer1::DataType> type{};
+#endif // ENABLE_FEATURE_WEAK_TYPING
     nvinfer1::TensorFormats formats{};
 };
 
 using ShapeRange = std::array<std::vector<int64_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
 
+#if ENABLE_FEATURE_WEAK_TYPING
+using LayerPrecisions = std::unordered_map<std::string, nvinfer1::DataType>;
+using LayerOutputTypes = std::unordered_map<std::string, std::vector<nvinfer1::DataType>>;
+#endif // ENABLE_FEATURE_WEAK_TYPING
 using LayerDeviceTypes = std::unordered_map<std::string, nvinfer1::DeviceType>;
 using DecomposableAttentions = std::unordered_map<std::string, bool>;
 
@@ -251,8 +273,22 @@ public:
     double tacticSharedMem{-1.0};
     int32_t avgTiming{defaultAvgTiming};
     bool tf32{true};
+#if ENABLE_FEATURE_WEAK_TYPING
+    bool fp16{false};
+    bool bf16{false};
+    bool int8{false};
+    bool fp8{false};
+    bool int4{false};
+    bool stronglyTyped{false};
+#else
     bool stronglyTyped{true};
+#endif // ENABLE_FEATURE_WEAK_TYPING
     bool directIO{false};
+#if ENABLE_FEATURE_WEAK_TYPING
+    PrecisionConstraints precisionConstraints{PrecisionConstraints::kNONE};
+    LayerPrecisions layerPrecisions;
+    LayerOutputTypes layerOutputTypes;
+#endif // ENABLE_FEATURE_WEAK_TYPING
     LayerDeviceTypes layerDeviceTypes;
     DecomposableAttentions decomposableAttentions;
     StringSet debugTensors;
@@ -260,14 +296,26 @@ public:
     StringSet debugTensorStates;
     bool safe{false};
     bool consistency{false};
-    bool dumpKernelText{false};
+    bool reference{false};
+    bool dumpCheckerBlob{false};
+    std::string checkerBlob;
+#if ENABLE_UNIFIED_BUILDER
+    //! Where to write, or read, the safe engine's companion library. Empty means the default beside the
+    //! engine, which only applies where companion libraries are enabled.
+    std::string saveEngineSo;
+    std::string loadEngineSo;
+#endif // ENABLE_UNIFIED_BUILDER
     bool buildDLAStandalone{false};
     bool allowGPUFallback{false};
     bool skipInference{false};
     bool save{false};
     bool saveAllEngines{false}; //!< Save per-iteration engines as <engine>.iter<N> during tuning
     bool load{false};
+#if !TRT_WINML
     bool asyncFileReader{false};
+#else
+    bool asyncFileReader{true};
+#endif // !TRT_WINML
     bool refittable{false};
     bool stripWeights{false};
     bool versionCompatible{false};
@@ -279,7 +327,11 @@ public:
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
     bool enableMonitorMemory{false};
+#if TRT_WINML
+    bool cpuOnly{true};
+#else
     bool cpuOnly{false};
+#endif // TRT_WINML
     int32_t builderOptimizationLevel{defaultBuilderOptimizationLevel};
     int32_t maxTactics{defaultMaxTactics};
     SparsityFlag sparsity{SparsityFlag::kDISABLE};
@@ -298,6 +350,9 @@ public:
     // Use int32_t to support C++11 compilers.
     std::unordered_map<int32_t, bool> previewFeatures;
     nvinfer1::HardwareCompatibilityLevel hardwareCompatibilityLevel{nvinfer1::HardwareCompatibilityLevel::kNONE};
+#if TRT_WINML
+    std::vector<nvinfer1::ComputeCapability> computeCapabilities;
+#endif // TRT_WINML
     nvinfer1::RuntimePlatform runtimePlatform{nvinfer1::RuntimePlatform::kSAME_AS_BUILD};
     std::string tempdir{};
     nvinfer1::TempfileControlFlags tempfileControls{getTempfileControlDefaults()};
@@ -309,11 +364,26 @@ public:
 
     bool allowWeightStreaming{false};
 
+#if TRT_WINML
+    //! \brief Defer GPU weight allocation when loading an engine. JIT compilation runs
+    //! without weights on the GPU; weights are loaded later (or never, if --skipInference
+    //! is also set).
+    bool deferWeightsLoading{false};
+#endif // TRT_WINML
 
     int32_t tilingOptimizationLevel{defaultTilingOptimizationLevel};
     int64_t l2LimitForTiling{-1};
     bool distributiveIndependence{false};
-    std::string remoteAutoTuningConfig{};
+#if !TRT_WINML
+    std::string remoteConfig{};
+#endif // !TRT_WINML
+
+    //! \brief Return safe runtime settings for the requested build and inference operation.
+    [[nodiscard]] SafeRuntimeSettings getSafeRuntimeSettings() const
+    {
+        // Safe runtime helpers initialize the safe plugin registry for every unified-builder run.
+        return SafeRuntimeSettings{safe && !skipInference};
+    }
 
     void parse(Arguments& arguments) override;
 
@@ -325,6 +395,10 @@ class SystemOptions : public Options
 public:
     int32_t device{defaultDevice};
     int32_t DLACore{-1};
+#if !TRT_WINML
+    nvinfer1::DLAWorkspaceAllocationStrategy dlaWorkspaceAllocationStrategy{
+        nvinfer1::DLAWorkspaceAllocationStrategy::kDEFAULT};
+#endif // !TRT_WINML
     bool enableStaticPlugins{true};
     bool ignoreParsedPluginLibs{false};
     std::vector<std::string> plugins;
@@ -360,7 +434,11 @@ public:
     bool useManaged{false};
     bool spin{true};
     bool threads{false};
+#if TRT_WINML
+    bool graph{false}; // RTX uses rtxCudaGraphStrategy instead of in-trtexec CUDA graph.
+#else
     bool graph{true};
+#endif // TRT_WINML
     bool timeDeserialize{false};
     bool timeRefit{false};
     bool setOptProfile{false};
@@ -378,6 +456,12 @@ public:
     std::unordered_map<std::string, std::string> debugTensorFileNames;
     std::vector<std::string> dumpAlldebugTensorFormats;
     WeightStreamingBudget weightStreamingBudget;
+#if TRT_WINML
+    std::string runtimeCacheFile{};
+    nvinfer1::DynamicShapesKernelSpecializationStrategy dynamicShapesKernelSpecializationStrategy{
+        nvinfer1::DynamicShapesKernelSpecializationStrategy::kLAZY};
+    nvinfer1::CudaGraphStrategy rtxCudaGraphStrategy{nvinfer1::CudaGraphStrategy::kWHOLE_GRAPH_CAPTURE};
+#endif // TRT_WINML
     std::string refitOnnxModel;
 
     void parse(Arguments& arguments) override;
@@ -483,7 +567,11 @@ public:
     int32_t device{defaultDevice};
     int32_t DLACore{-1};
     int32_t batch{batchNotProvided};
+#if TRT_WINML
+    bool graph{false}; // RTX uses rtxCudaGraphStrategy instead of in-trtexec CUDA graph.
+#else
     bool graph{true};
+#endif // TRT_WINML
     float persistentCacheRatio{defaultPersistentCacheRatio};
     void parse(Arguments& arguments) override;
     static void help(std::ostream& out);
@@ -521,6 +609,10 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype);
 
 std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType);
 
+#if TRT_WINML
+std::ostream& operator<<(std::ostream& os, nvinfer1::DynamicShapesKernelSpecializationStrategy strategy);
+std::ostream& operator<<(std::ostream& os, nvinfer1::CudaGraphStrategy strategy);
+#endif // TRT_WINML
 
 inline std::ostream& operator<<(std::ostream& os, nvinfer1::Dims const& dims)
 {

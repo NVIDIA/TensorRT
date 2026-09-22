@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.3.0
+ARG CUDA_VERSION=13.4.1
 ARG OS_VERSION=24.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 11.2.1.2
+ENV TRT_VERSION=11.3.0.99
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Setup user account and edit default account
@@ -38,7 +38,7 @@ RUN mkdir -p /workspace && chown trtuser /workspace
 
 # Install requried libraries + aarch64 toolchains
 RUN apt-get update && apt-get install -y software-properties-common
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends --allow-change-held-packages \
     libcurl4-openssl-dev \
     wget \
     git \
@@ -91,24 +91,29 @@ RUN cd /tmp && \
     rm -rf /tmp/googletest
 
 # Install CUDA cross compile toolchain
-RUN wget https://developer.download.nvidia.com/compute/cuda/13.3.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-3-local_13.3.0-1_all.deb && \
-    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-3-local_13.3.0-1_all.deb && \
-    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-3-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
+RUN wget https://developer.download.nvidia.com/compute/cuda/13.4.1/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-4-local_13.4.1-1_all.deb && \
+    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-4-local_13.4.1-1_all.deb && \
+    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-4-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
     apt-get update && \
-    apt-get -y install cuda-cross-sbsa-13-3
+    apt-get -y install cuda-cross-sbsa-13-4
 
-# Unpack libnvinfer.
-
-RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.2.1/tars/TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-13.3-Release-external.tar.zst && \
-    tar -xf TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-13.3-Release-external.tar.zst && \
-    cp -a TensorRT-11.2.1.2/lib/*.so* /usr/lib/aarch64-linux-gnu
+# Install TensorRT
+ARG CUDA_VERSION
+COPY docker/downloadTRT.sh /tmp/downloadTRT.sh
+RUN case "${CUDA_VERSION}" in \
+        13.*) TRT_CUDA_VERSION=13.4 ;; \
+        12.*) TRT_CUDA_VERSION=12.9 ;; \
+        *) echo "Unsupported CUDA_VERSION: ${CUDA_VERSION}" && exit 1 ;; \
+    esac && \
+    /tmp/downloadTRT.sh --aarch64 --cuda "${TRT_CUDA_VERSION}"
 
 # Link required library
 RUN cd /usr/aarch64-linux-gnu/lib && ln -sf librt.so.1 librt.so
 
 # Set environment and working directory
-ENV TRT_LIBPATH /usr/lib/aarch64-linux-gnu
-ENV TRT_OSSPATH /workspace/TensorRT
+ENV TRT_ROOT=/opt/TensorRT-$TRT_VERSION
+ENV TRT_LIBPATH=/opt/TensorRT-$TRT_VERSION/lib
+ENV TRT_OSSPATH=/workspace/TensorRT
 WORKDIR /workspace
 
 USER trtuser

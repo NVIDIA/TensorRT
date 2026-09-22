@@ -17,17 +17,14 @@
 
 import numbers
 
-from polygraphy import constants, mod, util
+from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.model import ModelArgs
 from polygraphy.tools.script import (
-    Script,
-    inline,
     make_invocable,
     make_invocable_if_nondefault,
-    safe,
 )
 
 
@@ -69,30 +66,6 @@ class DataLoaderArgs(BaseArgs):
             default=None,
         )
         self.group.add_argument(
-            "--int-min",
-            help="[DEPRECATED: Use --val-range] Minimum integer value for random integer inputs",
-            type=int,
-            default=None,
-        )
-        self.group.add_argument(
-            "--int-max",
-            help="[DEPRECATED: Use --val-range] Maximum integer value for random integer inputs",
-            type=int,
-            default=None,
-        )
-        self.group.add_argument(
-            "--float-min",
-            help="[DEPRECATED: Use --val-range] Minimum float value for random float inputs",
-            type=float,
-            default=None,
-        )
-        self.group.add_argument(
-            "--float-max",
-            help="[DEPRECATED: Use --val-range] Maximum float value for random float inputs",
-            type=float,
-            default=None,
-        )
-        self.group.add_argument(
             "--iterations",
             "--iters",
             metavar="NUM",
@@ -115,28 +88,20 @@ class DataLoaderArgs(BaseArgs):
         custom_loader_group.add_argument(
             "--load-inputs",
             "--load-input-data",
-            help="Path(s) to load inputs. The file(s) should be a JSON-ified "
-            "List[Dict[str, numpy.ndarray]], i.e. a list where each element is the feed_dict for a single iteration. "
-            "When this option is used, all other data loader arguments are ignored. ",
+            help="Path(s) to load inputs from. Each path may be a single JSON file or a directory "
+            "of per-iteration JSON files (as written by `--save-inputs <dir>`); a directory is "
+            "read one iteration at a time (constant memory). Multiple paths are chained in order. "
+            "Overrides all other data loader options.",
             default=[],
             dest="load_inputs_paths",
             nargs="+",
         )
         custom_loader_group.add_argument(
             "--data-loader-script",
-            help="Path to a Python script that defines a function that loads input data. "
-            "The function should take no arguments and return a generator or iterable that yields input data (Dict[str, np.ndarray]). "
-            "When this option is used, all other data loader arguments are ignored. "
-            "By default, Polygraphy looks for a function called `load_data`. You can specify a custom function name "
-            "by separating it with a colon. For example: `my_custom_script.py:my_func`",
-            default=None,
-        )
-
-        self.group.add_argument(
-            "--data-loader-func-name",
-            help="[DEPRECATED - function name can be specified with --data-loader-script like so: `my_custom_script.py:my_func`] "
-            "When using a data-loader-script, this specifies the name of the function "
-            "that loads data. Defaults to `load_data`. ",
+            help="Path to a Python script defining a no-argument function that yields "
+            "Dict[str, np.ndarray] inputs. Overrides all other data loader options. "
+            "Looks for `load_data` by default; specify a custom name with a colon: "
+            "`my_script.py:my_func`",
             default=None,
         )
 
@@ -146,32 +111,13 @@ class DataLoaderArgs(BaseArgs):
             seed (int): The seed to use for random data generation.
             val_range (Dict[str, Tuple[int]]): Per-input ranges of values to generate.
             iterations (int): The number of iterations for which to generate data.
-            load_inputs_paths (List[str]): Path(s) from which to load inputs.
+            load_inputs_paths (List[str]): Path(s) (files or per-iteration directories) to load inputs from.
             data_loader_script (str): Path to a custom script to load inputs.
             data_loader_func_name (str): Name of the function in the custom data loader script that loads data.
             data_loader_backend_module (str): Module to be used that provides arrays.
         """
 
-        def omit_none_tuple(tup):
-            if all([elem is None for elem in tup]):
-                return None
-            return tup
-
         self.seed = args_util.get(args, "seed")
-
-        self._int_range = omit_none_tuple(
-            tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max"))
-        )
-        self._float_range = omit_none_tuple(
-            tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max"))
-        )
-        if self._int_range or self._float_range:
-            mod.warn_deprecated(
-                "--int-min/--int-max and --float-min/--float-max",
-                use_instead="--val-range, which allows you to specify per-input data ranges,",
-                remove_in="0.50.0",
-                always_show_warning=True,
-            )
 
         self.val_range = args_util.parse_arglist_to_dict(
             args_util.get(args, "val_range"), cast_to=lambda x: tuple(args_util.cast(x))
@@ -203,23 +149,9 @@ class DataLoaderArgs(BaseArgs):
                 args_util.get(args, "data_loader_script"), default_func_name="load_data"
             )
         )
-        func_name = args_util.get(args, "data_loader_func_name")
-        if func_name is not None:
-            mod.warn_deprecated(
-                "--data-loader-func-name",
-                "--data-loader-script",
-                "0.50.0",
-                always_show_warning=True,
-            )
-            self.data_loader_func_name = func_name
-
         if self.load_inputs_paths or self.data_loader_script:
             for arg in [
                 "seed",
-                "int_min",
-                "int_max",
-                "float_min",
-                "float_max",
                 "val_range",
                 "iterations",
             ]:
@@ -243,13 +175,15 @@ class DataLoaderArgs(BaseArgs):
             )
             needs_invoke = True
         elif self.load_inputs_paths:
-            script.add_import(imports=["load_json"], frm="polygraphy.json")
-            data_loader = safe(
-                "[]\nfor input_data_path in {load_inputs_paths}:"
-                "\n{tab}{data_loader}.extend(load_json(input_data_path, description='input data'))",
-                load_inputs_paths=self.load_inputs_paths,
-                data_loader=Script.DATA_LOADER_NAME,
-                tab=inline(safe(constants.TAB)),
+            # StreamingDataLoader lazily yields one feed_dict per iteration (constant memory for a
+            # per-iteration directory); the non-streaming path materializes it via DataLoaderCache.
+            script.add_import(
+                imports=["StreamingDataLoader"], frm="polygraphy.comparator"
+            )
+            data_loader = make_invocable(
+                "StreamingDataLoader",
+                self.load_inputs_paths,
+                allow_dirs=True,
             )
         else:
             using_random_data = True
@@ -268,8 +202,6 @@ class DataLoaderArgs(BaseArgs):
                 seed=self.seed,
                 iterations=self.iterations,
                 input_metadata=user_input_metadata_str,
-                int_range=self._int_range,
-                float_range=self._float_range,
                 val_range=self.val_range,
                 data_loader_backend_module=self.data_loader_backend_module,
             )

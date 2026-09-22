@@ -18,7 +18,9 @@
 #ifndef TENSORRT_COMMON_H
 #define TENSORRT_COMMON_H
 #include "NvInfer.h"
+#if !TRT_WINML
 #include "NvInferPlugin.h"
+#endif
 #include "logger.h"
 #include "sampleEntrypoints.h"
 #include "utils/cacheUtils.h"
@@ -423,6 +425,54 @@ inline float getMaxValue(const float* buffer, int64_t size)
     return *std::max_element(buffer, buffer + size);
 }
 
+#if !TRT_WINML && ENABLE_FEATURE_WEAK_TYPING
+inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inRange = 2.0F, float outRange = 4.0F)
+{
+    for (int i = 0; i < network->getNbLayers(); i++)
+    {
+        auto layer = network->getLayer(i);
+        for (int j = 0; j < layer->getNbInputs(); j++)
+        {
+            nvinfer1::ITensor* input{layer->getInput(j)};
+            if (input != nullptr && !input->dynamicRangeIsSet())
+            {
+                ASSERT(input->setDynamicRange(-inRange, inRange));
+            }
+        }
+    }
+
+    for (int i = 0; i < network->getNbLayers(); i++)
+    {
+        auto layer = network->getLayer(i);
+        for (int j = 0; j < layer->getNbOutputs(); j++)
+        {
+            nvinfer1::ITensor* output{layer->getOutput(j)};
+            if (output != nullptr && !output->dynamicRangeIsSet())
+            {
+                if (layer->getType() == nvinfer1::LayerType::kPOOLING)
+                {
+                    ASSERT(output->setDynamicRange(-inRange, inRange));
+                }
+                else
+                {
+                    ASSERT(output->setDynamicRange(-outRange, outRange));
+                }
+            }
+        }
+    }
+}
+
+inline void setDummyInt8DynamicRanges(nvinfer1::IBuilderConfig const* c, nvinfer1::INetworkDefinition* n)
+{
+    if (c->getFlag(nvinfer1::BuilderFlag::kINT8))
+    {
+        sample::gLogWarning << "No per-tensor dynamic range provided. Generating dummy values. Int8 accuracy "
+                               "is not guaranteed."
+                            << std::endl;
+        setAllDynamicRanges(n);
+    }
+}
+#endif // !TRT_WINML && ENABLE_FEATURE_WEAK_TYPING
 
 inline void enableDLA(
     nvinfer1::IBuilder* builder, nvinfer1::IBuilderConfig* config, int useDLACore, bool allowGPUFallback = true)
@@ -439,6 +489,12 @@ inline void enableDLA(
         {
             config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
         }
+#if ENABLE_FEATURE_WEAK_TYPING
+        if (!config->getFlag(nvinfer1::BuilderFlag::kINT8))
+        {
+            config->setFlag(nvinfer1::BuilderFlag::kFP16);
+        }
+#endif // ENABLE_FEATURE_WEAK_TYPING
         config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
         config->setDLACore(useDLACore);
     }
@@ -959,7 +1015,7 @@ inline int32_t getMaxPersistentCacheSize()
     CHECK(cudaGetDevice(&deviceIndex));
 
     int32_t maxPersistentL2CacheSize{};
-#if CUDART_VERSION >= 11030
+#if CUDART_VERSION >= 11030 && !TRT_WINML
     CHECK(cudaDeviceGetAttribute(&maxPersistentL2CacheSize, cudaDevAttrMaxPersistingL2CacheSize, deviceIndex));
 #endif
 

@@ -50,7 +50,7 @@ The original and the replaced model can be compared to check if they behave the 
    This will display something like:
 
    ```
-   checking toyPlugin in model
+   [I] checking toyPlugin in model
    [I] Start a subgraph matching...
    [I] 	Checking node: n1 against pattern node: Anode.
    [I] 	No match because: Op did not match. Node op was: O but pattern op was: A.
@@ -63,15 +63,15 @@ The original and the replaced model can be compared to check if they behave the 
 
    ```
    name: toyPlugin
+   op: CustomToyPlugin
    instances:
    - inputs:
-   - i1
-   - i1
-   outputs:
-   - o1
-   - o2
-   attributes:
-       x: 1
+     - i1
+     outputs:
+     - o1
+     - o2
+     attributes:
+       ToyX: 2
    ```
 
    <!-- Polygraphy Test: Ignore End -->
@@ -88,7 +88,7 @@ The original and the replaced model can be compared to check if they behave the 
    This will display something like:
 
    ```
-   checking toyPlugin in model
+   [I] checking toyPlugin in model
    [I] Start a subgraph matching...
    [I] 	Checking node: n1 against pattern node: Anode.
    [I] 	No match because: Op did not match. Node op was: O but pattern op was: A.
@@ -98,8 +98,8 @@ The original and the replaced model can be compared to check if they behave the 
    [I] Start a subgraph matching...
    [I] 	Checking node: n6 against pattern node: Anode.
    [I] 	No match because: Op did not match. Node op was: E but pattern op was: A.
-   the following plugins would be used:
-   {'toyPlugin': 1}
+   [I] the following plugins matched:
+   [I] {'toyPlugin': 1}
    ```
 
    There will be no resulting config.yaml, as this command is only for printing the number of matches per plugin

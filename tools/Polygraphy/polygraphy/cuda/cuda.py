@@ -14,8 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
 import ctypes
+import importlib.util
 import os
+import platform
 import sys
 
 from polygraphy import func, mod, util
@@ -27,6 +30,68 @@ np = mod.lazy_import("numpy")
 
 def void_ptr(val=None):
     return ctypes.c_void_p(val)
+
+
+def _cuda_runtime_wheel_dirs(subdir):
+    # The pip `nvidia-cuda-runtime-cuXX` wheel installs the runtime under
+    # `<site-packages>/nvidia/cuda_runtime/{bin (Windows), lib (Linux)}`.
+    dirs = [
+        # Some `sys.path` entries are files (a console-script `.exe`, a zipapp), not dirs; skip those.
+        os.path.join(p, "nvidia", "cuda_runtime", subdir)
+        for p in sys.path
+        if p and os.path.isdir(p)
+    ]
+    # find_spec also locates the package when it is import-reachable (e.g. via a `.pth`) but its
+    # directory is not itself on `sys.path`. Best-effort: an uninstalled wheel just raises.
+    with contextlib.suppress(Exception):
+        spec = importlib.util.find_spec("nvidia.cuda_runtime")
+        if spec is not None and spec.submodule_search_locations:
+            dirs += [
+                os.path.join(loc, subdir) for loc in spec.submodule_search_locations
+            ]
+    return dirs
+
+
+def _find_cuda_lib_dirs():
+    if sys.platform.startswith("win"):
+        # find_in_dirs does not recurse, so include each toolkit root and its `bin`.
+        toolkit_roots = [
+            os.environ.get("CUDA_PATH", ""),
+            os.environ.get("CUDA_HOME", ""),
+        ]
+        # Versioned vars (e.g. CUDA_PATH_V12_4) may be set even when CUDA_PATH is not.
+        toolkit_roots += [
+            value
+            for name, value in os.environ.items()
+            if name.startswith("CUDA_PATH_V")
+        ]
+        # On some toolkits `bin` is split by arch (bin\x64, bin\arm64); search both it and `bin`.
+        _WIN_BIN_ARCH = {"AMD64": "x64", "ARM64": "arm64"}
+        bin_subdirs = ["bin"]
+        if arch := _WIN_BIN_ARCH.get(platform.machine()):
+            # Special case: x64 emulation for Windows on ARM machines
+            if arch == "arm64" and os.environ.get("PROCESSOR_ARCHITECTURE") == "AMD64":
+                arch = "x64"
+            bin_subdirs.append(os.path.join("bin", arch))
+        cuda_paths = [
+            path
+            for root in toolkit_roots
+            if root
+            for path in [root, *[os.path.join(root, s) for s in bin_subdirs]]
+        ]
+        cuda_paths += _cuda_runtime_wheel_dirs("bin")
+        cuda_paths += os.environ.get("PATH", "").split(os.path.pathsep)
+    else:
+        cuda_paths = [
+            *os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep),
+            os.path.join("/", "usr", "local", "cuda", "lib64"),
+            os.path.join("/", "usr", "lib"),
+            os.path.join("/", "lib"),
+        ]
+        cuda_paths += _cuda_runtime_wheel_dirs("lib")
+
+    # normpath first so entries differing only in separator style dedupe (e.g. bin\arm64 vs bin/arm64).
+    return list(dict.fromkeys(os.path.normpath(p) for p in cuda_paths if p))
 
 
 @mod.export()
@@ -60,28 +125,31 @@ class Cuda:
 
         fallback_lib = None
         if sys.platform.startswith("win"):
-            cuda_paths = [os.environ.get("CUDA_PATH", "")]
-            cuda_paths += os.environ.get("PATH", "").split(os.path.pathsep)
             lib_pat = "cudart64_*.dll"
         else:
-            cuda_paths = [
-                *os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep),
-                os.path.join("/", "usr", "local", "cuda", "lib64"),
-                os.path.join("/", "usr", "lib"),
-                os.path.join("/", "lib"),
-            ]
             lib_pat = "libcudart.so*"
             fallback_lib = "libcudart.so"
 
-        cuda_paths = list(
-            filter(lambda x: x, cuda_paths)
-        )  # Filter out empty paths (i.e. "")
+        cuda_paths = _find_cuda_lib_dirs()
 
         candidates = util.find_in_dirs(lib_pat, cuda_paths)
         if not candidates:
             log_func = G_LOGGER.critical if fallback_lib is None else G_LOGGER.warning
+            if sys.platform.startswith("win"):
+                hint = (
+                    "Ensure the CUDA Toolkit is installed and that either `CUDA_PATH` points to its "
+                    "root or the directory containing `cudart64_*.dll` is on `PATH`. "
+                    "Alternatively, `pip install nvidia-cuda-runtime-cuXX` provides the runtime."
+                )
+            else:
+                hint = (
+                    "Ensure the CUDA Toolkit is installed and that the directory containing "
+                    "`libcudart.so*` is on `LD_LIBRARY_PATH`. "
+                    "Alternatively, `pip install nvidia-cuda-runtime-cuXX` provides the runtime."
+                )
             log_func(
-                f"Could not find the CUDA runtime library.\nNote: Paths searched were:\n{cuda_paths}"
+                f"Could not find the CUDA runtime library.\n{hint}\n"
+                f"Note: Paths searched were:\n{cuda_paths}"
             )
 
             lib = fallback_lib
@@ -89,6 +157,12 @@ class Cuda:
         else:
             G_LOGGER.verbose(f"Found candidate CUDA libraries: {candidates}")
             lib = candidates[0]
+
+        # On Windows (Python 3.8+), register the CUDA runtime's directory so its dependent DLLs
+        # (e.g. others shipped alongside it in a pip wheel) resolve.
+        if sys.platform.startswith("win") and hasattr(os, "add_dll_directory"):
+            with contextlib.suppress(OSError):
+                os.add_dll_directory(os.path.dirname(lib))
 
         self.handle = ctypes.CDLL(lib)
 
@@ -308,7 +382,7 @@ class DeviceView:
             mod.warn_deprecated(
                 "Using NumPy data types in DeviceView/DeviceArray",
                 use_instead=None,
-                remove_in="0.50.0",
+                remove_in="0.55.0",
             )
             G_LOGGER.warning(
                 f"In the future, you will need to use `DataType.from_dtype(device_view.dtype).numpy()` to retrieve the NumPy data type"

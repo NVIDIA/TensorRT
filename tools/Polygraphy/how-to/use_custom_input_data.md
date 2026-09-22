@@ -4,11 +4,11 @@ For any tools that use inference input data, such as `run` or `convert`, Polygra
 provides 2 ways to supply custom input data:
 
 1. `--load-inputs`/`--load-input-data`, which takes a path to a JSON file containing a
-    `List[Dict[str, np.ndarray]]`.
+    `List[Dict[str, np.ndarray]]`, or to a directory of per-iteration JSON files (as written by `--save-inputs <dir>`).
     The JSON file should be created by using Polygraphy's JSON utilities, like `save_json`,
     in the `polygraphy.json` submodule.
 
-    *NOTE: This will cause Polygraphy to load the entire object into memory and so may be*
+    *NOTE: For a single JSON file, this will cause Polygraphy to load the entire object into memory and so may be*
         *impractical or impossible if the data is very large.*
 
 2. `--data-loader-script`, which takes a path to a Python script that defines a `load_data` function

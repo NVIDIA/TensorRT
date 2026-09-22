@@ -19,8 +19,9 @@
 """
 This script demonstrates how to use Polygraphy in conjunction with APIs
 provided by a backend. Specifically, in this case, we use TensorRT APIs
-to print the network name and enable FP16 mode.
+to print the network name and enable TF32 mode.
 """
+
 import numpy as np
 import tensorrt as trt
 from polygraphy import func
@@ -30,7 +31,6 @@ from polygraphy.backend.trt import (
     NetworkFromOnnxPath,
     TrtRunner,
 )
-
 
 # TIP: The immediately evaluated functional API makes it very easy to interoperate
 # with backends like TensorRT. For details, see example 06 (`examples/api/06_immediate_eval_api`).
@@ -54,8 +54,8 @@ def load_network(builder, network, parser):
 # Our function will receive a TensorRT IBuilderConfig since that's what `CreateConfig` returns.
 @func.extend(CreateConfig())
 def load_config(config):
-    # Polygraphy supports the fp16 flag, but in case it didn't, we could do this:
-    config.set_flag(trt.BuilderFlag.FP16)
+    # Polygraphy supports the tf32 flag, but in case it didn't, we could do this:
+    config.set_flag(trt.BuilderFlag.TF32)
 
 
 def main():

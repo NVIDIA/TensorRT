@@ -16,6 +16,7 @@
  */
 
 #include "sampleUtils.h"
+#include "ArgVec.test.h"
 
 #include <gtest/gtest.h>
 
@@ -127,29 +128,55 @@ TEST(NormalizeDirectoryPath, EmptyString)
     EXPECT_EQ(normalizeDirectoryPath(""), ""sv);
 }
 
-TEST(SanitizeRemoteAutoTuningConfig, Empty)
+TEST(SanitizeRemoteConfig, Empty)
 {
-    EXPECT_EQ(sanitizeRemoteAutoTuningConfig(""), ""sv);
+    EXPECT_EQ(sanitizeRemoteConfig(""), ""sv);
 }
 
-TEST(SanitizeRemoteAutoTuningConfig, NoCredentials)
+TEST(SanitizeRemoteConfig, NoCredentials)
 {
     // No @ means no credentials section; returned as-is.
-    EXPECT_EQ(sanitizeRemoteAutoTuningConfig("ssh://host:22"), "ssh://host:22"sv);
+    EXPECT_EQ(sanitizeRemoteConfig("ssh://host:22"), "ssh://host:22"sv);
 }
 
-TEST(SanitizeRemoteAutoTuningConfig, UsernameOnly)
+TEST(SanitizeRemoteConfig, UsernameOnly)
 {
-    EXPECT_EQ(sanitizeRemoteAutoTuningConfig("ssh://user@host:22"), "ssh://***@host:22"sv);
+    EXPECT_EQ(sanitizeRemoteConfig("ssh://user@host:22"), "ssh://***@host:22"sv);
 }
 
-TEST(SanitizeRemoteAutoTuningConfig, UsernameAndPassword)
+TEST(SanitizeRemoteConfig, UsernameAndPassword)
 {
-    EXPECT_EQ(sanitizeRemoteAutoTuningConfig("ssh://user:pass@host:22"), "ssh://***@host:22"sv);
+    EXPECT_EQ(sanitizeRemoteConfig("ssh://user:pass@host:22"), "ssh://***@host:22"sv);
 }
 
-TEST(SanitizeRemoteAutoTuningConfig, WithQueryParams)
+TEST(SanitizeRemoteConfig, WithQueryParams)
 {
-    EXPECT_EQ(sanitizeRemoteAutoTuningConfig("ssh://admin:secret@server.com:22?timeout=30"),
-        "ssh://***@server.com:22?timeout=30"sv);
+    EXPECT_EQ(
+        sanitizeRemoteConfig("ssh://admin:secret@server.com:22?timeout=30"), "ssh://***@server.com:22?timeout=30"sv);
+}
+
+TEST(SanitizeArgv, MasksRemoteConfigCredentials)
+{
+    ArgVec<char*> av{"--remoteConfig=ssh://user:pass@host:22", "--safe"};
+    auto const sanitized = sanitizeArgv(av.argc(), av.argv());
+    ASSERT_EQ(sanitized.size(), 3U);
+    EXPECT_EQ(sanitized[1], "--remoteConfig=ssh://***@host:22"sv);
+    EXPECT_EQ(sanitized[2], "--safe"sv);
+}
+
+TEST(SanitizeArgv, MasksAliasCredentials)
+{
+    ArgVec<char*> av{"--remoteAutoTuningConfig=ssh://user:pass@host:22"};
+    auto const sanitized = sanitizeArgv(av.argc(), av.argv());
+    ASSERT_EQ(sanitized.size(), 2U);
+    EXPECT_EQ(sanitized[1], "--remoteAutoTuningConfig=ssh://***@host:22"sv);
+}
+
+TEST(SanitizeArgv, LeavesOtherArgumentsUntouched)
+{
+    ArgVec<char*> av{"--onnx=model.onnx", "--remoteConfig="};
+    auto const sanitized = sanitizeArgv(av.argc(), av.argv());
+    ASSERT_EQ(sanitized.size(), 3U);
+    EXPECT_EQ(sanitized[1], "--onnx=model.onnx"sv);
+    EXPECT_EQ(sanitized[2], "--remoteConfig="sv);
 }

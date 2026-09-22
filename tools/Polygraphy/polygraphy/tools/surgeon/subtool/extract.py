@@ -69,8 +69,8 @@ class Extract(BaseSurgeonSubtool):
             "--inputs <name>:<shape>:<dtype>. "
             "For example: --inputs input0:[1,3,224,224]:float32 input1:auto:auto. "
             "If omitted, uses the current model inputs. ",
-            nargs="+",
-            default=[],
+            nargs="*",
+            default=None,
         )
 
         parser.add_argument(
@@ -82,7 +82,7 @@ class Extract(BaseSurgeonSubtool):
             "For example: --outputs output0:float32 output1:auto. "
             "If omitted, uses the current model outputs. ",
             nargs="+",
-            default=[],
+            default=None,
         )
 
     def run_impl_surgeon(self, args):
@@ -98,9 +98,15 @@ class Extract(BaseSurgeonSubtool):
 
         model = super().load_model()
 
-        user_input_metadata = args_util.parse_meta(args.input_meta)
-        user_output_metadata = args_util.parse_meta(
-            args.output_meta, includes_shape=False
+        user_input_metadata = (
+            args_util.parse_meta(args.input_meta)
+            if args.input_meta is not None
+            else None
+        )
+        user_output_metadata = (
+            args_util.parse_meta(args.output_meta, includes_shape=False)
+            if args.output_meta is not None
+            else None
         )
 
         # Loads an ONNX-GS graph and create new I/O metadata w/ info missing in user_input/output_metadata.
@@ -116,7 +122,7 @@ class Extract(BaseSurgeonSubtool):
             # Makes a TensorMetadata for inputs/outputs using either the user provided information
             # or details derived from tensors.
             def make_io_meta(user_meta, tensors):
-                if not user_meta:
+                if user_meta is None:
                     return onnx_util.meta_from_gs_tensors(tensors)
 
                 new_meta = copy.copy(user_meta)
@@ -197,11 +203,11 @@ class Extract(BaseSurgeonSubtool):
                 return meta
 
             input_metadata = update_meta_from_layerwise(
-                input_metadata, user_input_metadata
+                input_metadata, user_input_metadata or TensorMetadata()
             )
             output_metadata = update_meta_from_layerwise(
                 output_metadata,
-                user_output_metadata,
+                user_output_metadata or TensorMetadata(),
                 set_shapes=self.arg_groups[OnnxInferShapesArgs].force_fallback,
             )
 

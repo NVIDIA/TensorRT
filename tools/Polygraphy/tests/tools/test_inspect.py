@@ -553,36 +553,69 @@ class TestInspectModel:
         run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
 
 
+class TestInspectModelVisual:
+    def test_visual_simple(self, poly_inspect):
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+            out_path = f.name
+        try:
+            poly_inspect(
+                [
+                    "model",
+                    ONNX_MODELS["identity"].path,
+                    "--visual",
+                    "--save-visual",
+                    out_path,
+                ]
+            )
+            with open(out_path, "r", encoding="utf-8") as fh:
+                html = fh.read()
+            assert len(html) > 0
+            assert "cytoscape" in html
+            assert "Identity" in html or "identity" in html
+        finally:
+            os.unlink(out_path)
+
+    def test_visual_subgraph(self, poly_inspect):
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+            out_path = f.name
+        try:
+            poly_inspect(
+                [
+                    "model",
+                    ONNX_MODELS["scan"].path,
+                    "--visual",
+                    "--save-visual",
+                    out_path,
+                ]
+            )
+            with open(out_path, "r", encoding="utf-8") as fh:
+                html = fh.read()
+            assert "compound" in html
+            assert "sg-container" in html
+        finally:
+            os.unlink(out_path)
+
+
 class TestInspectData:
+    # --save-outputs writes a RunResults (display_results path); --save-inputs writes a feed_dict
+    # (display_inputs path). The .json suffix forces the single-file (non-directory) routing.
+    @pytest.mark.parametrize("save_flag", ["--save-outputs", "--save-inputs"])
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_outputs(self, opts, poly_run, poly_inspect):
-        with util.NamedTemporaryFile() as outpath:
+    def test_single_file_is_inspectable(self, save_flag, opts, poly_run, poly_inspect):
+        with util.NamedTemporaryFile(suffix=".json") as outpath:
             poly_run(
                 [
                     ONNX_MODELS["identity"].path,
                     "--onnxrt",
-                    "--save-outputs",
+                    save_flag,
                     outpath.name,
                 ]
             )
             poly_inspect(["data", outpath.name] + opts)
 
-    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_inputs(self, opts, poly_run, poly_inspect):
-        with util.NamedTemporaryFile() as outpath:
-            poly_run(
-                [
-                    ONNX_MODELS["identity"].path,
-                    "--onnxrt",
-                    "--save-inputs",
-                    outpath.name,
-                ]
-            )
-            poly_inspect(["data", outpath.name] + opts)
-
-    @pytest.mark.parametrize("num_items", [-1, 1, 2, 10, 12])
+    @pytest.mark.parametrize("num_items", [-1, 1, 10, 12])
     def test_num_items(self, poly_run, poly_inspect, num_items):
-        with util.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile(suffix=".json") as outpath:
             poly_run(
                 [
                     ONNX_MODELS["dynamic_identity"].path,
@@ -618,6 +651,93 @@ class TestInspectData:
                 else:
                     assert len(items) == num_items * 2
 
+    @pytest.mark.parametrize(
+        "save_flag, save_dir, expected_strings",
+        [
+            (
+                "--save-outputs",
+                "outputs",
+                ["Run Results", "Iteration: 0", "Iteration: 1"],
+            ),
+            (
+                "--save-inputs",
+                "inputs",
+                ["Data (2 iterations)"],
+            ),
+        ],
+    )
+    def test_streaming_directory_is_inspectable(
+        self, poly_run, poly_inspect, tmp_path, save_flag, save_dir, expected_strings
+    ):
+        # An extensionless --save-outputs/--save-inputs writes a directory of per-iteration files;
+        # inspect data should read it back and display the contents.
+        save_path = str(tmp_path / save_dir)
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--iterations",
+                "2",
+                save_flag,
+                save_path,
+            ]
+        )
+        status = poly_inspect(["data", save_path, "--all"])
+        for s in expected_strings:
+            assert s in status.stdout
+
+    def test_empty_directory_errors_cleanly(self, poly_inspect, tmp_path):
+        # A directory with no per-iteration files is a clean error, not an uncaught traceback.
+        status = poly_inspect(["data", str(tmp_path)], expect_error=True)
+        output = status.stdout + status.stderr
+        assert "No per-iteration" in output
+        assert "Traceback" not in output
+
+    def test_accuracy_results_are_inspectable(self, poly_inspect, tmp_path):
+        # Saved accuracy results (as written by `run --save-accuracy-results`) display the per-output
+        # metrics and verdict.
+        import numpy as np
+        from polygraphy.comparator import (
+            Comparator,
+            IterationResult,
+            RunResults,
+            SimpleCompareFunc,
+        )
+
+        run_results = RunResults()
+        run_results["r0"] = [
+            IterationResult(
+                outputs={"out": np.array([0.0, 0.0], dtype=np.float32)},
+                runner_name="r0",
+            )
+        ]
+        run_results["r1"] = [
+            IterationResult(
+                outputs={"out": np.array([0.0, 2.0], dtype=np.float32)},
+                runner_name="r1",
+            )
+        ]
+        save_path = str(tmp_path / "acc.json")
+        Comparator.compare_accuracy(
+            run_results,
+            compare_func=SimpleCompareFunc(check_error_stat="max", atol=1.0),
+        ).save(save_path)
+
+        status = poly_inspect(["data", save_path])
+        assert "Accuracy Results" in status.stdout
+        assert "max_absdiff" in status.stdout
+
+    def test_empty_run_results(self, poly_inspect, tmp_path):
+        # An empty RunResults (0 runners) should be inspectable without error.
+        from polygraphy.comparator import RunResults
+        from polygraphy.json import save_json
+
+        save_path = str(tmp_path / "empty.json")
+        save_json(RunResults(), save_path)
+
+        status = poly_inspect(["data", save_path])
+        assert "0 runners" in status.stdout
+
 
 TACTIC_REPLAY_CASES = [
     [
@@ -642,6 +762,10 @@ TACTIC_REPLAY_CASES = [
 
 
 class TestInspectTactics:
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="--save-tactics relies on the algorithm selector API, removed in TRT 11",
+    )
     @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
     def test_show_tactics(self, case, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as replay:
@@ -776,6 +900,7 @@ class TestInspectSparsity:
             status = poly_inspect(["sparsity", ipath])
             assert status
 
+
 class TestDebugTensors:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("10.13"),
@@ -793,14 +918,24 @@ class TestDebugTensors:
                     "--save-outputs",
                     "output.json",
                     "--save-engine",
-                    "debug_unfused.engine"
+                    "debug_unfused.engine",
                 ],
-                cwd=outdir
+                cwd=outdir,
             )
-            status = poly_inspect(["model", "debug_unfused.engine", "--show", "layers", "--model-type", "engine", "--combine-tensor-info", "output.json"], cwd=outdir)
+            status = poly_inspect(
+                [
+                    "model",
+                    "debug_unfused.engine",
+                    "--show",
+                    "layers",
+                    "--model-type",
+                    "engine",
+                    "--combine-tensor-info",
+                    "output.json",
+                ],
+                cwd=outdir,
+            )
 
             assert status.stdout.count("min") == 5
-            assert status.stdout.count("max") == 5  
+            assert status.stdout.count("max") == 5
             assert status.stdout.count("avg") == 4
-
-            

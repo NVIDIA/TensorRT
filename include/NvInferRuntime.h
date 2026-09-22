@@ -117,6 +117,17 @@ struct impl::EnumMaxImpl<EngineCapability>
 //!
 //! The term "empty weights" refers to Weights with weight coefficients ( \p count == 0 and \p values == nullptr).
 //!
+//! A positive count with a null values pointer denotes a build-time weight placeholder when supplied to a supported
+//! INetworkDefinition layer creation method. This is supported for IConvolutionLayer/IDeconvolutionLayer kernel or bias
+//! weights and IScaleLayer shift or scale weights only when calling IBuilder::buildSerializedNetwork() with
+//! BuilderFlag::kREFIT_INDIVIDUAL and BuilderFlag::kSTRIP_PLAN. Such weights are implicitly refittable and must be
+//! named using the canonical Weights descriptor returned by the corresponding layer getter. A placeholder descriptor
+//! is not readable storage: count records the eventual number of values, but the null values pointer must not be
+//! dereferenced. TensorRT supplies placeholder storage during the build; the actual values must be provided through
+//! refit before inference. The canonical descriptor is an opaque identity local to its INetworkDefinition. Its values
+//! pointer must not be dereferenced or used as layer input; the descriptor may only identify the existing weights in
+//! its originating network, such as in INetworkDefinition::setWeightsName().
+//!
 class Weights
 {
 public:
@@ -1484,7 +1495,7 @@ enum class TensorFormat : int32_t
 
     //! Vector-minor format where channel dimension is third to last and unpadded.
     //!
-    //! This format requires either FP32 or UINT8 and at least three dimensions.
+    //! This format requires FP32, FP16, or UINT8 and at least three dimensions.
     kHWC = 8,
 
     //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis
@@ -1553,6 +1564,34 @@ struct impl::EnumMaxImpl<AllocatorFlag>
 };
 
 using AllocatorFlags = uint32_t;
+
+//!
+//! \enum DLAWorkspaceAllocationStrategy
+//!
+//! \brief Describes how DLA workspace memory is allocated.
+//!
+//! \see IRuntime::setDLAWorkspaceAllocationStrategy()
+//!
+enum class DLAWorkspaceAllocationStrategy : int32_t
+{
+    //! Each DLA module allocates its workspace memory separately.
+    kDEFAULT = 0,
+    //!
+    //! DLA modules deserialized by the same runtime for the same DLA core share a static workspace pool. This can
+    //! reduce memory consumption when multiple DLA engines are loaded concurrently. Each DLA core has a separate
+    //! workspace pool, and each engine captures the core selected by the runtime when it is deserialized.
+    //!
+    //! \warning Concurrent execution of engines that share DLA workspace results in undefined behavior.
+    kSHARED_STATIC = 1,
+};
+
+//! Maximum number of elements in DLAWorkspaceAllocationStrategy. \see DLAWorkspaceAllocationStrategy
+template <>
+struct impl::EnumMaxImpl<DLAWorkspaceAllocationStrategy>
+{
+    //! Number of elements in DLAWorkspaceAllocationStrategy.
+    static constexpr int32_t kVALUE = 2;
+};
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
 //! The name v_1_0 may change in future versions of TensorRT.
@@ -1870,7 +1909,10 @@ public:
     //!
     //! This function is used to specify which DLA core to use via indexing, if multiple DLA cores are available.
     //!
-    //! \warning if getNbDLACores() returns 0, then this function does nothing.
+    //! If no DLA core is set when DLAWorkspaceAllocationStrategy::kSHARED_STATIC is selected, core 0 is used
+    //! automatically.
+    //!
+    //! \warning If getNbDLACores() returns 0, then this function does nothing.
     //!
     //! \see getDLACore()
     //!
@@ -1895,6 +1937,33 @@ public:
     int32_t getNbDLACores() const noexcept
     {
         return mImpl->getNbDLACores();
+    }
+
+    //!
+    //! \brief Sets the strategy used for DLA workspace allocation by subsequent engine deserializations.
+    //!
+    //! \param strategy The DLA workspace allocation strategy.
+    //!
+    //! Engines already deserialized by this runtime retain the strategy that was selected when they were
+    //! deserialized. Selecting DLAWorkspaceAllocationStrategy::kSHARED_STATIC creates or reuses a shared workspace
+    //! for the selected DLA core. If no DLA core is selected, TensorRT selects core 0. Calling setDLACore() while
+    //! shared workspace is selected creates or reuses a separate shared workspace for the newly selected core.
+    //!
+    //! \return true if the workspace allocation strategy was changed successfully; false otherwise.
+    //!
+    bool setDLAWorkspaceAllocationStrategy(DLAWorkspaceAllocationStrategy strategy) noexcept
+    {
+        return mImpl->setDLAWorkspaceAllocationStrategy(strategy);
+    }
+
+    //!
+    //! \brief Returns the DLA workspace allocation strategy used for subsequent engine deserializations.
+    //!
+    //! \return The current DLA workspace allocation strategy.
+    //!
+    TRT_NODISCARD DLAWorkspaceAllocationStrategy getDLAWorkspaceAllocationStrategy() const noexcept
+    {
+        return mImpl->getDLAWorkspaceAllocationStrategy();
     }
 
     //!
@@ -2491,6 +2560,12 @@ public:
     //! Provided weights on CPU can be unset and released, or updated after refitCudaEngineAsync returns.
     //! Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refitCudaEngineAsync
     //! returns.
+    //!
+    //! This method does not synchronize \p stream before returning. Work submitted to \p stream after this call,
+    //! including IExecutionContext::enqueueV3(), observes the updated weights through CUDA stream ordering. Before
+    //! serializing the engine or calling IExecutionContext::executeV2(), the application must synchronize with
+    //! \p stream. Before enqueuing inference on a different stream, the application must establish an ordering
+    //! dependency on \p stream.
     //!
     //! IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
     //! weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights

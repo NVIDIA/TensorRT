@@ -3,6 +3,13 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext
+
+### Fixed
+- Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
+- Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
+- Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+
 ## v0.6.2 (2026-05-21)
 
 ### Added

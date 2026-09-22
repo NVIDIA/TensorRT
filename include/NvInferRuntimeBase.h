@@ -128,7 +128,9 @@ namespace impl
 {
 //! Declaration of EnumMaxImpl struct to store the exclusive upper bound of an enumeration type.
 template <typename T>
-struct EnumMaxImpl;
+struct EnumMaxImpl
+{
+};
 } // namespace impl
 
 //! One greater than the maximum value of enumeration type T.

@@ -28,7 +28,7 @@ class SessionFromOnnx(BaseLoader):
     Functor that builds an ONNX-Runtime inference session.
     """
 
-    def __init__(self, model_bytes, providers=None):
+    def __init__(self, model_bytes, providers=None, graph_optimization_level=None):
         """
         Builds an ONNX-Runtime inference session.
 
@@ -43,9 +43,15 @@ class SessionFromOnnx(BaseLoader):
                     match the "CPUExecutionProvider".
                     Defaults to ``["cpu"]``.
 
+            graph_optimization_level (onnxruntime.GraphOptimizationLevel):
+                    The graph optimization level to use when creating the inference session.
+                    Defaults to ``onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL`` (ONNX Runtime's
+                    own default).
+
         """
         self._model_bytes_or_path = model_bytes
         self.providers = util.default(providers, ["cpu"])
+        self.graph_optimization_level = graph_optimization_level
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -58,8 +64,14 @@ class SessionFromOnnx(BaseLoader):
         available_providers = onnxrt.get_available_providers()
         providers = []
         for prov in self.providers:
-            matched_prov_name = util.find_str_in_iterable(prov[0] if isinstance(prov, tuple) else prov, available_providers)
-            matched_prov = (matched_prov_name, prov[1]) if isinstance(prov, tuple) else matched_prov_name
+            matched_prov_name = util.find_str_in_iterable(
+                prov[0] if isinstance(prov, tuple) else prov, available_providers
+            )
+            matched_prov = (
+                (matched_prov_name, prov[1])
+                if isinstance(prov, tuple)
+                else matched_prov_name
+            )
             if matched_prov is None:
                 G_LOGGER.critical(
                     f"Could not find specified ONNX-Runtime execution provider.\nNote: Requested provider was: {prov}, but available providers are: {available_providers}"
@@ -80,6 +92,8 @@ class SessionFromOnnx(BaseLoader):
 
         options.intra_op_num_threads = process_cpu_count
         options.inter_op_num_threads = process_cpu_count
+        if self.graph_optimization_level is not None:
+            options.graph_optimization_level = self.graph_optimization_level
         return onnxrt.InferenceSession(
             model_bytes, providers=providers, sess_options=options
         )

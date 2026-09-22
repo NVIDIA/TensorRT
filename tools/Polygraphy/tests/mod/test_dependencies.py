@@ -109,6 +109,8 @@ class TestAutoinstallDeps:
     @pytest.mark.slow
     def test_can_automatically_install_deps(self, poly_venv, cmd):
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+        # API Breakage with newer versions of ONNX in onnx_graphsurgeon, so pin for now until ONNX-GS 0.5.10
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "onnx<1.20.0"])
         cmd = [poly_venv.python, *POLYGRAPHY_CMD] + cmd
         print(f"Running: {' '.join(map(str, cmd))}")
         output = poly_venv.run(cmd, capture=True)
@@ -251,6 +253,7 @@ class TestAutoinstallDeps:
         # new dependency.
         expected = [
             "fcntl",
+            "lpips",
             "matplotlib.pyplot",
             "matplotlib",
             "msvcrt",
@@ -258,7 +261,7 @@ class TestAutoinstallDeps:
             "onnx_graphsurgeon",
             "onnx.numpy_helper",
             "onnx",
-            "onnxmltools",
+            "onnxconverter_common",
             "onnxruntime.tools.symbolic_shape_infer",
             "onnxruntime",
             "tensorflow",

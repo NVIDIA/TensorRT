@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "1.0"
+      "const": "1.2"
     },
     "folder": {
       "type": [
@@ -117,34 +117,6 @@
         }
       }
     },
-    "layer_only_validation": {
-      "type": "object",
-      "required": [
-        "status",
-        "analysis_mode",
-        "messages",
-        "source_paths",
-        "report_available"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "status": {
-          "const": "passed"
-        },
-        "analysis_mode": {
-          "const": "layer_only"
-        },
-        "messages": {
-          "$ref": "#/$defs/validation_messages"
-        },
-        "source_paths": {
-          "$ref": "#/$defs/source_paths"
-        },
-        "report_available": {
-          "const": true
-        }
-      }
-    },
     "failed_validation": {
       "type": "object",
       "required": [
@@ -226,9 +198,6 @@
       "oneOf": [
         {
           "$ref": "#/$defs/layer_profile_result"
-        },
-        {
-          "$ref": "#/$defs/layer_only_result"
         },
         {
           "$ref": "#/$defs/failure_result"
@@ -326,46 +295,6 @@
         },
         "positives": {
           "$ref": "#/$defs/string_array"
-        }
-      }
-    },
-    "layer_only_result": {
-      "type": "object",
-      "required": [
-        "label",
-        "validation",
-        "layers",
-        "layer_count",
-        "graph",
-        "model",
-        "engines"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "label": {
-          "type": "string"
-        },
-        "validation": {
-          "$ref": "#/$defs/layer_only_validation"
-        },
-        "layers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/layer"
-          }
-        },
-        "layer_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "graph": {
-          "$ref": "#/$defs/graph"
-        },
-        "model": {
-          "$ref": "#/$defs/model"
-        },
-        "engines": {
-          "$ref": "#/$defs/engines"
         }
       }
     },
@@ -515,6 +444,7 @@
       "type": "object",
       "required": [
         "name",
+        "layer_index",
         "layer_type",
         "raw_layer_type",
         "tactic",
@@ -529,6 +459,10 @@
       "properties": {
         "name": {
           "type": "string"
+        },
+        "layer_index": {
+          "type": "integer",
+          "minimum": 0
         },
         "layer_type": {
           "type": "string"

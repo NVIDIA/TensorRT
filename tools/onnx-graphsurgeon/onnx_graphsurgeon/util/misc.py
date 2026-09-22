@@ -60,8 +60,8 @@ def combine_dicts(dict0, dict1):
     Combine two dictionaries. Values in the second will overwrite values in the first.
     """
     combined = OrderedDict()
-    combined.update(dict0)
-    combined.update(dict1)
+    combined.update(dict0 or {})
+    combined.update(dict1 or {})
     return combined
 
 

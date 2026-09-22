@@ -125,7 +125,15 @@ IPluginV3* ROIAlignV3PluginCreator::createPlugin(
 
 void ROIAlignV3PluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_ASSERT(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* ROIAlignV3PluginCreator::getPluginNamespace() const noexcept
@@ -287,7 +295,7 @@ int32_t ROIAlignV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, D
 int32_t ROIAlignV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     // No-op pass-through for empty ROIs
     if (mROICount == 0)
@@ -364,16 +372,24 @@ IPluginV3* ROIAlignV3::attachToContext(IPluginResourceContext* context) noexcept
 
 PluginFieldCollection const* ROIAlignV3::getFieldsToSerialize() noexcept
 {
-    mDataToSerialize.clear();
-    mDataToSerialize.emplace_back("coordinate_transformation_mode", &mAligned, PluginFieldType::kINT32, 1);
-    mDataToSerialize.emplace_back("mode", &mMode, PluginFieldType::kINT32, 1);
-    mDataToSerialize.emplace_back("output_height", &mOutputHeight, PluginFieldType::kINT32, 1);
-    mDataToSerialize.emplace_back("output_width", &mOutputWidth, PluginFieldType::kINT32, 1);
-    mDataToSerialize.emplace_back("sampling_ratio", &mSamplingRatio, PluginFieldType::kINT32, 1);
-    mDataToSerialize.emplace_back("spatial_scale", &mSpatialScale, PluginFieldType::kFLOAT32, 1);
-    mFCToSerialize.nbFields = mDataToSerialize.size();
-    mFCToSerialize.fields = mDataToSerialize.data();
-    return &mFCToSerialize;
+    try
+    {
+        mDataToSerialize.clear();
+        mDataToSerialize.emplace_back("coordinate_transformation_mode", &mAligned, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("mode", &mMode, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("output_height", &mOutputHeight, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("output_width", &mOutputWidth, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("sampling_ratio", &mSamplingRatio, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("spatial_scale", &mSpatialScale, PluginFieldType::kFLOAT32, 1);
+        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.fields = mDataToSerialize.data();
+        return &mFCToSerialize;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 size_t ROIAlignV3::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,

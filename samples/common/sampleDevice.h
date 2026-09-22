@@ -576,8 +576,13 @@ public:
 
     ~OutputAllocator() override = default;
 
+#if !TRT_WINML
     void* reallocateOutput(
         char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
+#else
+    void* reallocateOutput(
+        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept
+#endif // !TRT_WINML
     {
         // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
         // even for empty tensors, so allocate a dummy byte.
@@ -621,12 +626,14 @@ private:
 //! Set the GPU to run the inference on.
 void setCudaDevice(int32_t device, std::ostream& os);
 
+#if !TRT_WINML
 //! Get the CUDA version of the current CUDA driver.
 int32_t getCudaDriverVersion();
 
 //! Get the CUDA version of the current CUDA runtime.
 int32_t getCudaRuntimeVersion();
 
+#endif
 
 } // namespace sample
 

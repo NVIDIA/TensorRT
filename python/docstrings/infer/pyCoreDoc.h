@@ -986,6 +986,24 @@ constexpr char const* load_weights_async = R"trtdoc(
         not deserialized with deferred weight loading, weights were already loaded, or
         the plan could not be parsed.
 )trtdoc";
+
+constexpr char const* unload_weights = R"trtdoc(
+    Free the GPU weights of a deferred-loading engine and revert it to the pre-load state.
+
+    Releases the device memory occupied by the weights brought to the GPU by load_weights()
+    or load_weights_async(), and returns the engine to the state it had right after a deferred
+    deserialization: weights_loaded becomes False and the weights can be supplied again with a
+    later load_weights()/load_weights_async() call. IExecutionContexts created before the unload
+    stay valid and are refreshed in place, exactly as they are across a load. This lets an
+    application cycle several engines through one GPU weight budget by loading, running, and
+    unloading each in turn.
+
+    The caller must ensure no inference is in flight on this engine's contexts (synchronize any
+    outstanding execute_async_v3() work first); the call frees and reallocates runtime resources.
+
+    :returns: True on success, False if the engine was not deserialized with deferred weight
+        loading or weights are not currently loaded.
+)trtdoc";
 } // namespace ICudaEngineDoc
 
 namespace OutputAllocatorDoc
@@ -1758,6 +1776,24 @@ constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from 
 constexpr char const* INCLUDE_REFIT = R"trtdoc(Remain refittable if originally so.)trtdoc";
 } // namespace SerializationFlagDoc
 
+namespace DLAWorkspaceAllocationStrategyDoc
+{
+constexpr char const* kDESCRIPTION = R"trtdoc(
+    Describes how DLA workspace memory is allocated.
+
+    See :attr:`Runtime.dla_workspace_allocation_strategy`.
+)trtdoc";
+constexpr char const* kDEFAULT = R"trtdoc(Each DLA module allocates its workspace memory separately.)trtdoc";
+constexpr char const* kSHARED_STATIC = R"trtdoc(
+    DLA modules deserialized by the same runtime for the same DLA core share a static workspace pool. This can reduce
+    memory consumption when multiple DLA engines are loaded concurrently. Each DLA core has a separate workspace pool,
+    and each engine captures the core selected by the runtime when it is deserialized.
+
+    .. warning::
+        Concurrent execution of engines that share DLA workspace results in undefined behavior.
+)trtdoc";
+} // namespace DLAWorkspaceAllocationStrategyDoc
+
 namespace ExecutionContextAllocationStrategyDoc
 {
 constexpr char const* descr = R"trtdoc(Different memory allocation behaviors for IExecutionContext.)trtdoc";
@@ -1882,8 +1918,19 @@ constexpr char const* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar gpu_allocator: :class:`IGpuAllocator` The GPU allocator to be used by the :class:`Runtime` . All GPU memory
         acquired will use this allocator. If set to None, the default allocator will be used (Default: cudaMalloc/cudaFree).
-    :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
-    :ivar num_DLA_cores: :class:`int` The number of DLA engines available to this builder.
+    :ivar DLA_core: :class:`int` The DLA core used by the network. Defaults to -1. This property specifies which DLA
+        core to use by index when multiple cores are available. Its current value is the assigned DLA core, or -1 if
+        DLA is unavailable or no core is set. The value must be in the range [0, :attr:`num_DLA_cores`). If no DLA
+        core is set when :attr:`DLAWorkspaceAllocationStrategy.SHARED_STATIC` is selected, core 0 is used
+        automatically. If :attr:`num_DLA_cores` is 0, setting this property does nothing.
+    :ivar num_DLA_cores: :class:`int` The number of DLA hardware cores accessible, or 0 if DLA is unavailable.
+    :ivar dla_workspace_allocation_strategy: :class:`DLAWorkspaceAllocationStrategy` The DLA workspace allocation
+        strategy used for subsequent engine deserializations. Engines already deserialized by this runtime retain
+        the strategy that was selected when they were deserialized. Selecting
+        :attr:`DLAWorkspaceAllocationStrategy.SHARED_STATIC` creates or reuses a shared workspace for the selected
+        DLA core. If no DLA core is selected, TensorRT selects core 0. Changing :attr:`DLA_core` while shared
+        workspace is selected creates or reuses a separate shared workspace for the newly selected core. Setting this
+        property raises :class:`RuntimeError` if the workspace allocation strategy cannot be changed successfully.
     :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Runtime`.
     :ivar temporary_directory: :class:`str` The temporary directory to use when loading executable code for engines.  If set to None (the default), TensorRT will

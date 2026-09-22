@@ -92,7 +92,12 @@ extern LogStream<ILogger::Severity::kINFO> gLogInfo;
 extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 void reportValidationFailure(char const* msg, char const* file, int32_t line);
-void reportAssertion(char const* msg, char const* file, int32_t line);
+//! \brief Report a failed plugin assertion and terminate the process.
+//!
+//! This function never returns and never throws: it always exits with `EXIT_FAILURE`. Marking it
+//! `noexcept [[noreturn]]` lets `PLUGIN_ASSERT` be used inside `noexcept` functions without
+//! triggering Coverity's UNCAUGHT_EXCEPT.
+[[noreturn]] void reportAssertion(char const* msg, char const* file, int32_t line) noexcept;
 void logError(char const* msg, char const* file, char const* fn, int32_t line);
 
 //! \throw CudaError carrying \p msg, after logging it via \c gLogError.

@@ -135,6 +135,7 @@ class IRefitter;
 class IResizeLayer;
 class IReverseSequenceLayer;
 class IRuntime;
+class ISafeSerializedNetworkArtifacts;
 class IScaleLayer;
 class IScatterLayer;
 class ISelectLayer;
@@ -211,6 +212,8 @@ enum class TilingOptimizationLevel : int32_t;
 enum class EngineStat : int32_t;
 
 
+enum class DLAWorkspaceAllocationStrategy : int32_t;
+
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
 using BuilderFlags = uint32_t;
@@ -242,6 +245,7 @@ public:
     virtual std::size_t size() const noexcept = 0;
     virtual DataType type() const noexcept = 0;
 };
+
 
 class VDimensionExpr : public VRoot
 {
@@ -288,6 +292,15 @@ public:
     virtual bool getEngineHostCodeAllowed() const noexcept = 0;
     // Added in TensorRT version 10.7
     virtual nvinfer1::ICudaEngine* deserializeCudaEngineV2(IStreamReaderV2& streamReader) noexcept = 0;
+    // Added in TensorRT version 11.3
+    //!
+    //! \brief See IRuntime::setDLAWorkspaceAllocationStrategy.
+    //!
+    virtual bool setDLAWorkspaceAllocationStrategy(DLAWorkspaceAllocationStrategy strategy) noexcept = 0;
+    //!
+    //! \brief See IRuntime::getDLAWorkspaceAllocationStrategy.
+    //!
+    TRT_NODISCARD virtual DLAWorkspaceAllocationStrategy getDLAWorkspaceAllocationStrategy() const noexcept = 0;
 };
 
 class VRefitter : public VRoot

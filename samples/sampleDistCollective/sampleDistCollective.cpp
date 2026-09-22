@@ -67,6 +67,7 @@ typedef struct ncclComm* ncclComm_t;
 std::function<ncclResult_t(ncclUniqueId*)> pNcclGetUniqueId{};
 std::function<ncclResult_t(ncclComm_t*, int, ncclUniqueId, int)> pNcclCommInitRank{};
 std::function<ncclResult_t(ncclComm_t)> pNcclCommDestroy{};
+std::function<char const*(ncclResult_t)> pNcclGetErrorString{};
 // MD code end
 
 using namespace std;
@@ -76,6 +77,11 @@ using namespace std;
     do                                                                                                                 \
     {                                                                                                                  \
         ncclResult_t const r = (cmd);                                                                                  \
+        if (r != ncclSuccess && pNcclGetErrorString)                                                                   \
+        {                                                                                                              \
+            sample::gLogError << "NCCL call failed: " << #cmd << " returned " << static_cast<int>(r)                  \
+                               << " (" << pNcclGetErrorString(r) << ")" << std::endl;                                 \
+        }                                                                                                              \
         ASSERT(r == ncclSuccess);                                                                                      \
     } while (0)
 
@@ -209,12 +215,20 @@ bool initNccl()
         pNcclCommInitRank
             = l->symbolAddress<ncclResult_t(ncclComm_t*, int, ncclUniqueId, int)>("ncclCommInitRank");
         pNcclCommDestroy = l->symbolAddress<ncclResult_t(ncclComm_t)>("ncclCommDestroy");
+        try
+        {
+            pNcclGetErrorString = l->symbolAddress<char const*(ncclResult_t)>("ncclGetErrorString");
+        }
+        catch (std::exception const&)
+        {
+        }
     };
     return initLibrary(libncclPtr, "nccl.dll", fetchPtrs);
 #else
     pNcclGetUniqueId = ::ncclGetUniqueId;
     pNcclCommInitRank = ::ncclCommInitRank;
     pNcclCommDestroy = ::ncclCommDestroy;
+    pNcclGetErrorString = ::ncclGetErrorString;
     return true;
 #endif
 }

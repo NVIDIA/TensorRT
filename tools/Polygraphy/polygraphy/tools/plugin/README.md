@@ -25,6 +25,8 @@ See for example [toyPlugin](../../../examples/cli/plugin/01_match_and_replace_pl
 
 - `replace` replaces subgraphs with plugins, based on the intermediate file (config.yaml).
 
+- `autotune` replaces matched subgraphs with TensorRT plugins and searches for the best-performing combination.
+
 ## Usage
 
 See `polygraphy plugin -h` for usage information.

@@ -19,9 +19,10 @@
 """
 This script uses Polygraphy's immediately evaluated functional APIs
 to load an ONNX model, convert it into a TensorRT network, add an identity
-layer to the end of it, build an engine with FP16 mode enabled,
+layer to the end of it, build an engine with TF32 mode enabled,
 save the engine, and finally run inference.
 """
+
 import numpy as np
 from polygraphy.backend.trt import (
     TrtRunner,
@@ -50,8 +51,8 @@ def main():
     output.name = "output"
     network.mark_output(output)
 
-    # Create a TensorRT IBuilderConfig so that we can build the engine with FP16 enabled.
-    config = create_config(builder, network, fp16=True)
+    # Create a TensorRT IBuilderConfig so that we can build the engine with TF32 enabled.
+    config = create_config(builder, network, tf32=True)
 
     engine = engine_from_network((builder, network), config)
 

@@ -105,7 +105,7 @@ class TestConvertToTrt:
 
         @func.extend(CreateConfig())
         def load_config(config):
-            config.set_flag(trt.BuilderFlag.FP16)
+            config.set_flag(trt.BuilderFlag.TF32)
         """
         )
 

@@ -45,11 +45,31 @@ else()
     set(QNX_GCC_VERSION "12.2.0" CACHE STRING "")
 endif()
 
+if(${QNX_VERSION} VERSION_GREATER_EQUAL "8.0.0")
+    # DOS7 QNX Safety samples are consumed directly from the documented build
+    # output. Do not embed build-host CUDA, PDK, or TensorRT paths in them.
+    set(CMAKE_SKIP_BUILD_RPATH TRUE CACHE BOOL
+        "Do not embed build-tree library paths in DOS7 QNX Safety outputs")
+endif()
+
 set(QNX_TRIPLE aarch64-unknown-nto-qnx${QNX_VERSION})
 
 set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-gcc)
 set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++)
 set(CMAKE_CUDA_HOST_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++ CACHE FILEPATH "")
+
+# The DOS7 QNX Safety compiler supports optimization levels through O2. Keep
+# Release builds within that supported range for every compiled language.
+if(${QNX_VERSION} VERSION_GREATER_EQUAL "8.0.0")
+    if(NOT DEFINED CMAKE_CXX_FLAGS_RELEASE)
+        set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING
+            "Flags used by the CXX compiler for Release builds")
+    endif()
+    if(NOT DEFINED CMAKE_CUDA_FLAGS_RELEASE)
+        set(CMAKE_CUDA_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING
+            "Flags used by the CUDA compiler for Release builds")
+    endif()
+endif()
 
 # These linker behaviors aren't setup by default for QNX
 # They work the same as they would on Linux
@@ -77,8 +97,12 @@ include_directories(BEFORE SYSTEM
     ${QNX_HOST}/usr/lib/gcc/${QNX_TRIPLE}/${QNX_GCC_VERSION}/include
     ${QNX_TARGET}/usr/include/c++/${QNX_GCC_VERSION}/${QNX_TRIPLE}
     ${QNX_TARGET}/usr/include
-    /usr/include/aarch64-unknown-nto-qnx-safety # TensorRT Safety Headers are installed here.
 )
+if(${QNX_VERSION} VERSION_LESS "8.0.0")
+    # Legacy QNX Safety packages install TensorRT headers in this location.
+    # DOS7 builds obtain matching headers from the selected CMake package.
+    include_directories(BEFORE SYSTEM /usr/include/aarch64-unknown-nto-qnx-safety)
+endif()
 
 set(CMAKE_C_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
 set(CMAKE_CXX_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
@@ -106,12 +130,109 @@ if(NOT DEFINED CMAKE_CUDA_COMPILER)
     set(CMAKE_CUDA_COMPILER "${CUDA_ROOT}/bin/nvcc" CACHE FILEPATH "Path to nvcc compiler")
 endif()
 
+# SafeCUDA packages have used both aarch64-qnx-safe and aarch64-qnx target
+# layouts. Select the target from the installed CUDART payload because the QNX
+# SDK version does not determine the SafeCUDA package layout. Resolve target
+# directories before counting them so a compatibility symlink does not make
+# one installed payload appear ambiguous.
+set(_TRT_SAFE_CUDA_TARGET_CANDIDATES aarch64-qnx-safe aarch64-qnx)
+set(_TRT_SAFE_CUDA_TARGETS_FOUND "")
+set(_TRT_SAFE_CUDA_TARGET_REAL_PATHS_FOUND "")
+foreach(_TRT_SAFE_CUDA_TARGET IN LISTS _TRT_SAFE_CUDA_TARGET_CANDIDATES)
+    set(_TRT_SAFE_CUDA_TARGET_PATH
+        "${CUDA_ROOT}/targets/${_TRT_SAFE_CUDA_TARGET}")
+    if(EXISTS "${_TRT_SAFE_CUDA_TARGET_PATH}/lib/libcudart.so")
+        file(REAL_PATH "${_TRT_SAFE_CUDA_TARGET_PATH}"
+            _TRT_SAFE_CUDA_TARGET_REAL_PATH)
+        if(NOT _TRT_SAFE_CUDA_TARGET_REAL_PATH IN_LIST
+            _TRT_SAFE_CUDA_TARGET_REAL_PATHS_FOUND)
+            list(APPEND _TRT_SAFE_CUDA_TARGET_REAL_PATHS_FOUND
+                "${_TRT_SAFE_CUDA_TARGET_REAL_PATH}")
+            get_filename_component(_TRT_SAFE_CUDA_TARGET_CANONICAL
+                "${_TRT_SAFE_CUDA_TARGET_REAL_PATH}" NAME)
+            if(_TRT_SAFE_CUDA_TARGET_CANONICAL IN_LIST
+                _TRT_SAFE_CUDA_TARGET_CANDIDATES)
+                list(APPEND _TRT_SAFE_CUDA_TARGETS_FOUND
+                    "${_TRT_SAFE_CUDA_TARGET_CANONICAL}")
+            else()
+                # Preserve a single package-provided logical target whose
+                # symlink backing directory uses an implementation name.
+                list(APPEND _TRT_SAFE_CUDA_TARGETS_FOUND
+                    "${_TRT_SAFE_CUDA_TARGET}")
+            endif()
+        endif()
+    endif()
+endforeach()
+
+list(LENGTH _TRT_SAFE_CUDA_TARGETS_FOUND _TRT_SAFE_CUDA_TARGET_COUNT)
+if(_TRT_SAFE_CUDA_TARGET_COUNT EQUAL 0)
+    message(FATAL_ERROR
+        "SafeCUDA CUDART target not found. Checked "
+        "${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/libcudart.so and "
+        "${CUDA_ROOT}/targets/aarch64-qnx/lib/libcudart.so")
+elseif(_TRT_SAFE_CUDA_TARGET_COUNT GREATER 1)
+    message(FATAL_ERROR
+        "SafeCUDA CUDART target is ambiguous; found "
+        "'${_TRT_SAFE_CUDA_TARGETS_FOUND}' under ${CUDA_ROOT}/targets")
+endif()
+list(GET _TRT_SAFE_CUDA_TARGETS_FOUND 0 TRT_SAFE_CUDA_TARGET)
+message(STATUS "TensorRT SafeCUDA target: ${TRT_SAFE_CUDA_TARGET}")
+
+# The aarch64-qnx SafeCUDA payload provides shared CUDART. Keep the legacy
+# aarch64-qnx-safe nvcc behavior unchanged.
+set(_TRT_SAFE_CUDART_FLAG "")
+if(TRT_SAFE_CUDA_TARGET STREQUAL "aarch64-qnx")
+    set(_TRT_SAFE_CUDART_FLAG "--cudart=shared")
+endif()
+
+# The aarch64-qnx SafeCUDA runtime depends on libraries supplied by the
+# DriveOS QNX Safety PDK. Prefer an explicit CMake setting, then the matching
+# environment variable, then the standard PDK_TOP layout.
+set(_TRT_SAFE_PDK_FLAGS "")
+set(TRT_QNX_SAFE_PDK_LIBRARIES "" CACHE INTERNAL
+    "DriveOS QNX Safety PDK libraries" FORCE)
+if(TRT_SAFE_CUDA_TARGET STREQUAL "aarch64-qnx")
+    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES TRT_PDK_LIB_TARGET)
+    if((NOT DEFINED TRT_PDK_LIB_TARGET OR "${TRT_PDK_LIB_TARGET}" STREQUAL "")
+        AND DEFINED ENV{TRT_PDK_LIB_TARGET}
+        AND NOT "$ENV{TRT_PDK_LIB_TARGET}" STREQUAL "")
+        set(TRT_PDK_LIB_TARGET "$ENV{TRT_PDK_LIB_TARGET}")
+    elseif((NOT DEFINED TRT_PDK_LIB_TARGET OR "${TRT_PDK_LIB_TARGET}" STREQUAL "")
+        AND DEFINED ENV{PDK_TOP}
+        AND NOT "$ENV{PDK_TOP}" STREQUAL "")
+        set(TRT_PDK_LIB_TARGET "$ENV{PDK_TOP}/drive-qnx-safety/lib-target")
+    endif()
+
+    if(NOT DEFINED TRT_PDK_LIB_TARGET OR "${TRT_PDK_LIB_TARGET}" STREQUAL "")
+        message(FATAL_ERROR
+            "The aarch64-qnx SafeCUDA target requires the QNX Safety PDK libraries. "
+            "Set TRT_PDK_LIB_TARGET or PDK_TOP.")
+    endif()
+    set(TRT_PDK_LIB_TARGET "${TRT_PDK_LIB_TARGET}" CACHE PATH
+        "DriveOS QNX Safety PDK lib-target directory")
+
+    set(_TRT_SAFE_PDK_LIBRARIES "")
+    foreach(_TRT_SAFE_PDK_LIBRARY IN ITEMS nvdvms_client nvos_s3_safety)
+        set(_TRT_SAFE_PDK_LIBRARY_PATH
+            "${TRT_PDK_LIB_TARGET}/lib${_TRT_SAFE_PDK_LIBRARY}.so")
+        if(NOT EXISTS "${_TRT_SAFE_PDK_LIBRARY_PATH}")
+            message(FATAL_ERROR "Missing QNX Safety PDK library: ${_TRT_SAFE_PDK_LIBRARY_PATH}")
+        endif()
+        list(APPEND _TRT_SAFE_PDK_LIBRARIES "${_TRT_SAFE_PDK_LIBRARY_PATH}")
+    endforeach()
+    set(TRT_QNX_SAFE_PDK_LIBRARIES "${_TRT_SAFE_PDK_LIBRARIES}"
+        CACHE INTERNAL "DriveOS QNX Safety PDK libraries" FORCE)
+    set(_TRT_SAFE_PDK_FLAGS
+        "-L${TRT_PDK_LIB_TARGET} -lnvdvms_client -lnvos_s3_safety")
+endif()
+
 # We need to set a couple additional flags to compile with SafeCUDA.
 # 1. SafeCUDA does not contain cudadevrt, so we need to disable it by setting --cudadevrt=none
 # 2. SafeCUDA depends on the QNX Slogger2 library, which must be linked via -lslog2. It is a system library for QNX-Safe.
-# 3. Use --target-directory to tell nvcc to use aarch64-qnx-safe instead of aarch64-qnx
-#    This is critical to override nvcc's internal _TARGET_DIR_ variable
-set(CMAKE_CUDA_FLAGS_INIT "${CMAKE_CUDA_FLAGS_INIT} --cudadevrt=none -lslog2 --target-directory aarch64-qnx-safe -legacy-launch-seq")
+# 3. Use --target-directory to keep nvcc's implicit paths aligned with the
+#    installed CUDART target selected above.
+set(CMAKE_CUDA_FLAGS_INIT
+    "${CMAKE_CUDA_FLAGS_INIT} --cudadevrt=none ${_TRT_SAFE_CUDART_FLAG} -lslog2 --target-directory ${TRT_SAFE_CUDA_TARGET} -legacy-launch-seq ${_TRT_SAFE_PDK_FLAGS}")
 
 # We need to explicitly populate `CMAKE_CUDA_FLAGS` with the initial flags so they propagate to the CMake Compiler Identification phase.
 # Otherwise, they will only be initialized afterwards, which will cause the identification to fail.
@@ -119,17 +240,17 @@ set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS_INIT})
 
 # The CUDA setup for TRT-OSS is a bit wonky, so we enable the includes globally.
 include_directories(BEFORE SYSTEM
-    ${CUDA_ROOT}/targets/aarch64-qnx-safe/include
+    ${CUDA_ROOT}/targets/${TRT_SAFE_CUDA_TARGET}/include
 )
 
 link_directories(
-    ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib
-    ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/stubs
+    ${CUDA_ROOT}/targets/${TRT_SAFE_CUDA_TARGET}/lib
+    ${CUDA_ROOT}/targets/${TRT_SAFE_CUDA_TARGET}/lib/stubs
 )
 
 add_link_options(
-    "LINKER:-rpath-link=${CUDA_ROOT}/targets/aarch64-qnx-safe/lib"
-    "LINKER:-rpath-link=${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/stubs"
+    "LINKER:-rpath-link=${CUDA_ROOT}/targets/${TRT_SAFE_CUDA_TARGET}/lib"
+    "LINKER:-rpath-link=${CUDA_ROOT}/targets/${TRT_SAFE_CUDA_TARGET}/lib/stubs"
 )
 
 # Disable CMake-based cudart support as we handle the linkage manually.
