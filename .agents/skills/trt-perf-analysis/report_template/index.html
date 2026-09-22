@@ -8,6 +8,7 @@
   <title>TRT Performance Report</title>
   <link rel="icon" type="image/svg+xml" href="favicon-donut-t-v3.svg">
   <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="netron-assets.js" as="script" fetchpriority="low">
 </head>
 <body>
   <div class="page">
@@ -161,6 +162,14 @@
         <div class="netron-views" id="netron-views"></div>
       </aside>
     </main>
+
+    <footer class="page-footer">
+      <span>Copyright &copy; 2026 NVIDIA Corporation &amp; Affiliates</span>
+      <span aria-hidden="true">&middot;</span>
+      <a href="LICENSE" target="_blank" rel="noopener">License</a>
+      <span aria-hidden="true">&middot;</span>
+      <a href="ThirdPartyNotices.txt" target="_blank" rel="noopener">Third-party notices</a>
+    </footer>
   </div>
 
   <div class="panel-help-popover" id="panel-help-popover" role="tooltip" hidden>
@@ -175,7 +184,8 @@
       graphMode: 'onnx-json',
       modelName: 'model.trt_inspect.onnx.json',
       netronBase: 'netron/',
-      netronFrameMode: 'srcdoc'
+      netronFrameMode: 'srcdoc',
+      netronAssetsUrl: 'netron-assets.js'
     };
   </script>
   <script src="app.js"></script>

@@ -118,4 +118,4 @@ input and output buffers. Hence, we'll be able to activate runners on-demand qui
 ## Further Reading
 
 For more information on using dynamic shapes with TensorRT, see the
-[developer guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#work_dynamic_shapes)
+[developer guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-dynamic-shapes.html)

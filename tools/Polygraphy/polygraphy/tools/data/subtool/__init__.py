@@ -1,1 +1,2 @@
-from polygraphy.tools.data.subtool.to_input import ToInput
+from polygraphy.tools.data.subtool.concat import Concat
+from polygraphy.tools.data.subtool.merge import Merge

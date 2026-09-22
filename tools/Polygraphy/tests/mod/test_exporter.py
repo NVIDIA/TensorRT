@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import inspect
+
 import pytest
 from polygraphy import mod
 from polygraphy.backend.base import BaseLoader
@@ -226,3 +228,26 @@ class TestExporter:
 
         w, x, y, z = functor_with_type_annotations(0, 1, 2, 3)  # Set all
         assert (w, x, y, z) == (0, 2, 1, 3)
+
+
+class _DeprecatableSample:
+    pass
+
+
+class TestDeprecateClass:
+    @staticmethod
+    def _make_deprecated():
+        return mod.deprecate(remove_in="9.9.9", use_instead="_DeprecatableSample")(
+            _DeprecatableSample
+        )
+
+    def test_preserves_dunder_name(self):
+        assert self._make_deprecated().__name__ == "_DeprecatableSample"
+
+    def test_getsource_still_works(self):
+        # __qualname__ is intentionally left unchanged so inspect.getsource can find the class.
+        assert inspect.getsource(self._make_deprecated())
+
+    def test_warns_on_instantiation(self):
+        with pytest.warns(DeprecationWarning):
+            self._make_deprecated()()

@@ -81,6 +81,9 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 	This sample generates `safe_plugin.engine`, which is a binary file that contains the serialized engine data.
 
+	When the build produces a companion library holding the engine's generated host code, it is written
+	beside the engine as `safe_plugin.engine.so`. The infer part loads it from there, so keep the two together.
+
 	This sample reads ONNX model to build the network:
 
         - `mnist_safe_plugin.onnx` - The ONNX model that contains the network design with maxPoolPlugin, version 1, namespace ""

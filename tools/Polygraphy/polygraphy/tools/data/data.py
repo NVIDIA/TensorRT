@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.data.subtool import ToInput
+from polygraphy.tools.data.subtool import Concat, Merge
 
 
 class Data(Tool):
@@ -28,5 +28,6 @@ class Data(Tool):
 
     def get_subtools_impl(self):
         return "Data Manipulation Subtools", [
-            ToInput(),
+            Concat(),
+            Merge(),
         ]

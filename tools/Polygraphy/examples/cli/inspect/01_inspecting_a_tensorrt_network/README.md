@@ -35,3 +35,20 @@ into TensorRT networks, and then display them.
     ```
 
     It is also possible to show detailed layer information, including layer attributes, using `--show layers attrs weights`.
+
+2. Alternatively, use `--visual` to launch an interactive graph viewer in your browser:
+
+    <!-- Polygraphy Test: Ignore Start -->
+    ```bash
+    polygraphy inspect model identity.onnx \
+        --display-as=trt --visual
+    ```
+    <!-- Polygraphy Test: Ignore End -->
+
+    This opens the TensorRT network as an interactive DAG. Click any node to inspect
+    its inputs, outputs, and attributes in the details panel on the right:
+
+    ![./visual_viewer.png](./visual_viewer.png)
+
+    *TIP: Use `--visual-port` to specify a custom port, e.g. when running inside a*
+    *container: `polygraphy inspect model identity.onnx --display-as=trt --visual --visual-port 8080`*

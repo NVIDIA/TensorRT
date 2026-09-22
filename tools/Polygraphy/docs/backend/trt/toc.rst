@@ -8,6 +8,7 @@ Module: ``polygraphy.backend.trt``
     algorithm_selector
     calibrator
     config
+    file_reader
     loader
     profile
     runner

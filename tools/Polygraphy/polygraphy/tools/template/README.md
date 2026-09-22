@@ -23,6 +23,8 @@ The `template` tool can generate template files for various purposes.
 
 - [EXPERIMENTAL] `onnx-gs` generates a template that allows you to modify an ONNX model with ONNX-GraphSurgeon.
 
+- `shard-hints` generates a sharding hints file for use with `polygraphy multi-device shard`.
+
 ## Usage
 
 See `polygraphy template -h` for usage information.

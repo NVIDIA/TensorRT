@@ -52,6 +52,15 @@ ONNX_PYTHON_ATTR_MAPPING = {
 }
 
 
+def decode_onnx_string(raw: bytes, attr_name: str) -> str:
+    try:
+        return raw.decode()
+    except UnicodeDecodeError:
+        G_LOGGER.critical(
+            f"Attribute: {attr_name} is not valid UTF-8 ({raw[:16]!r})."
+        )
+
+
 def get_onnx_tensor_shape(
     onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto],
 ) -> List[int]:
@@ -74,7 +83,9 @@ def get_onnx_tensor_shape(
 
 
 def get_dtype_name(onnx_type):
-    return {val: key for key, val in onnx.TensorProto.DataType.items()}[onnx_type]
+    return {val: key for key, val in onnx.TensorProto.DataType.items()}.get(
+        onnx_type, f"UNKNOWN ({onnx_type})"
+    )
 
 
 def get_itemsize(dtype):
@@ -96,7 +107,7 @@ def get_itemsize(dtype):
         onnx.TensorProto.FLOAT4E2M1
     ]:
         return 0.5
-    G_LOGGER.critical(f"Unsupported type: {dtype}")
+    G_LOGGER.critical(f"Unsupported type: {get_dtype_name(dtype)}")
 
 
 def get_numpy_type(onnx_type):
@@ -277,7 +288,7 @@ class OnnxImporter(BaseImporter):
                     return Node.AttributeRef(attr.ref_attr_name, attr_type)
                 processed = getattr(attr, ONNX_PYTHON_ATTR_MAPPING[attr_str])
                 if attr_str == "STRING":
-                    processed = processed.decode()
+                    processed = decode_onnx_string(processed, attr.name)
                 elif attr_str == "TENSOR":
                     processed = OnnxImporter.import_tensor(processed)
                 elif attr_str == "GRAPH":
@@ -290,7 +301,7 @@ class OnnxImporter(BaseImporter):
                 elif attr_str == "FLOATS" or attr_str == "INTS":
                     processed = list(processed)
                 elif attr_str == "STRINGS":
-                    processed = [p.decode() for p in processed]
+                    processed = [decode_onnx_string(p, attr.name) for p in processed]
                 return processed
 
             if attr.type in ATTR_TYPE_MAPPING:
@@ -400,7 +411,7 @@ class OnnxImporter(BaseImporter):
         if onnx_function.attribute_proto:
             attrs_with_default_value = OnnxImporter.import_attributes(
                 onnx_function.attribute_proto,
-                None,
+                dict(),
                 subgraph_tensor_map,
                 opset,
                 import_domains,

@@ -1417,3 +1417,106 @@ def multiply():
         "numpy": lambda lhs, rhs: np.multiply(lhs, rhs),
         "torch": lambda lhs, rhs: torch.mul(lhs, rhs),
     }
+
+
+@mod.export()
+@dispatch()
+def pad():
+    """
+    Pads the input array on specified axes with number of pre/post padding values.
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]): The array or tensor.
+        pads (List[Tuple(int)]): The padding values for each axis
+        axes (List(int)): Optional: the axes that the pads argument corresponds to. Defaults to None.
+        constant_val (sequence or scalar): Optional: The value to pad for "constant" mode padding. Defaults to 0.
+        mode (str): The padding mode (Default - "constant")
+    """
+
+    def numpy_impl(obj, pads, axes=None, mode="constant", constant_val=0):
+        if axes is None:
+            if len(pads) != len(obj.shape):
+                raise ValueError(
+                    f"Number of padding tuples ({len(pads)}) must match number of dimensions ({len(obj.shape)})"
+                )
+            return np.pad(obj, pads, mode, constant_values=constant_val)
+        else:
+            if len(axes) != len(pads):
+                raise ValueError("Number of padding tuples and axes must be the same!")
+            final_pads = [(0, 0) for _ in range(len(obj.shape))]
+            for axis, pad_vals in zip(axes, pads):
+                final_pads[axis] = pad_vals
+            return np.pad(obj, final_pads, mode, constant_values=constant_val)
+
+    # torch.nn.Functional.pad starts with the last axis first, and expects a singular list of all pad values
+    # e.g. (last_axis_prepad, last_axis_postpad, last_axis-1_prepad ...)
+    def torch_impl(obj, pads, axes=None, mode="constant", constant_val=0):
+        if axes is None:
+            if len(pads) != len(obj.shape):
+                raise ValueError(
+                    f"Number of padding tuples ({len(pads)}) must match number of dimensions ({len(obj.shape)})"
+                )
+            # Convert list of tuple of padding values into list of padding values, and reverse it.
+            torch_pads = [x for pad_tups in pads for x in pad_tups]
+            torch_pads.reverse()
+            return torch.nn.functional.pad(obj, torch_pads, mode, constant_val)
+        else:
+            if len(axes) != len(pads):
+                raise ValueError("Number of padding tuples and axes must be the same!")
+            # Create default padding list
+            final_pads = [(0, 0) for _ in range(len(obj.shape))]
+            for axis, pad_vals in zip(axes, pads):
+                final_pads[axis] = pad_vals
+            # Similarly convert this into a list and reverse it for torch.
+            final_pads = [x for pad_tups in final_pads for x in pad_tups]
+            final_pads.reverse()
+            return torch.nn.functional.pad(obj, final_pads, mode, constant_val)
+
+    return {
+        "numpy": numpy_impl,
+        "torch": torch_impl,
+    }
+
+
+@mod.export()
+@dispatch()
+def reshape():
+    """
+    Reshapes the input tensor to the provided shape
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]): The array or tensor.
+        shape (Union[tuple(ints), List(ints)]): The new shape of the tensor.
+
+    Returns:
+        Union[Number, torch.Tensor, numpy.ndarray]: The reshaped tensor.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda obj, shape: np.reshape(obj, shape),
+        "torch": lambda obj, shape: torch.reshape(obj, shape),
+    }
+
+
+@mod.export()
+@dispatch()
+def transpose():
+    """
+    Transposes the array according to the provided axes.
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]): The array or tensor.
+        axes (Union[tuple(ints), List(ints)]): The axes to transpose.
+
+    Returns:
+        Union[Number, torch.Tensor, numpy.ndarray]: The transposed tensor.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda obj, axes: np.transpose(obj, axes),
+        "torch": lambda obj, axes: torch.permute(obj, axes),
+    }

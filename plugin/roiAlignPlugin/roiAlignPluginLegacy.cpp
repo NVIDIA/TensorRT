@@ -297,7 +297,7 @@ DimsExprs ROIAlign::getOutputDimensions(
 int32_t ROIAlign::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     // No-op pass-through for empty ROIs
     if (mROICount == 0)

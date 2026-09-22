@@ -164,7 +164,7 @@ class _CreateConfigCommon(BaseLoader):
             weight_streaming (bool):
                     TWhether to enable weight streaming for the TensorRT Engine.
             runtime_platform (trt.RuntimePlatform):
-                    Describes the intended runtime platform (operating system and CPU architecture) for the execution of the TensorRT engine. 
+                    Describes the intended runtime platform (operating system and CPU architecture) for the execution of the TensorRT engine.
                     TensorRT provides support for cross-platform engine compatibility when the target runtime platform is different from the build platform.
                     Defaults to TensorRT's default runtime platform.
             tiling_optimization_level (trt.TilingOptimizationLevel):
@@ -209,6 +209,7 @@ class _CreateConfigCommon(BaseLoader):
             network (trt.INetworkDefinition):
                     The TensorRT network for which to create the config. The network is used to
                     automatically create a default optimization profile if none are provided.
+                    If set to None, steps requiring the network will be skipped.
 
         Returns:
             trt.IBuilderConfig: The TensorRT builder configuration.
@@ -230,30 +231,38 @@ class _CreateConfigCommon(BaseLoader):
         if self.preview_features is not None:
             for preview_feature in trt.PreviewFeature.__members__.values():
                 try_run(
-                    lambda: config.set_preview_feature(
-                        preview_feature, preview_feature in self.preview_features
+                    lambda pf=preview_feature: config.set_preview_feature(
+                        pf, pf in self.preview_features
                     ),
                     "preview_features",
                 )
 
-        G_LOGGER.verbose("Setting TensorRT Optimization Profiles")
-        profiles = copy.deepcopy(self.profiles)
-        for profile in profiles:
-            # Last profile is used for set_calibration_profile.
-            calib_profile = profile.fill_defaults(network)
-            config.add_optimization_profile(calib_profile.to_trt(builder, network))
-        newline = "\n"
-        sep = ",\n"
-        G_LOGGER.info(
-            f"Configuring with profiles:[\n"
-            f"{util.indent_block(sep.join([f'Profile {index}:{newline}{util.indent_block(profile)}' for index, profile in enumerate(profiles)]))}\n]"
-        )
+        if network is not None:
+            G_LOGGER.verbose("Setting TensorRT Optimization Profiles")
+            profiles = copy.deepcopy(self.profiles)
+            for profile in profiles:
+                # Last profile is used for set_calibration_profile.
+                calib_profile = profile.fill_defaults(network)
+                config.add_optimization_profile(calib_profile.to_trt(builder, network))
+            newline = "\n"
+            sep = ",\n"
+            G_LOGGER.info(
+                f"Configuring with profiles:[\n"
+                f"{util.indent_block(sep.join([f'Profile {index}:{newline}{util.indent_block(profile)}' for index, profile in enumerate(profiles)]))}"
+                "\n]"
+            )
 
-        layer_with_precisions = {
-            layer.name: layer.precision.name
-            for layer in network
-            if layer.precision_is_set and not layer.type == trt.LayerType.SHAPE
-        }
+            try:
+                layer_with_precisions = {
+                    layer.name: layer.precision.name
+                    for layer in network
+                    if layer.precision_is_set and not layer.type == trt.LayerType.SHAPE
+                }
+            except AttributeError:
+                layer_with_precisions = {}
+        else:
+            layer_with_precisions = {}
+
         if self.precision_constraints == "obey":
             try_set_flag("OBEY_PRECISION_CONSTRAINTS")
         elif self.precision_constraints == "prefer":
@@ -328,7 +337,9 @@ class _CreateConfigCommon(BaseLoader):
                 cache = config.create_timing_cache(b"")
         except AttributeError:
             if self.timing_cache_path:
-                trt_util.fail_unavailable(f"load_timing_cache in {self.__class__.__name__}")
+                trt_util.fail_unavailable(
+                    f"load_timing_cache in {self.__class__.__name__}"
+                )
         else:
             config.set_timing_cache(cache, ignore_mismatch=False)
 
@@ -372,7 +383,7 @@ class _CreateConfigCommon(BaseLoader):
         if self.exclude_lean_runtime:
             if not self.version_compatible:
                 G_LOGGER.critical(
-                    f"Cannot set EXCLUDE_LEAN_RUNTIME if version compatibility is not enabled. "
+                    "Cannot set EXCLUDE_LEAN_RUNTIME if version compatibility is not enabled."
                 )
             try_set_flag("EXCLUDE_LEAN_RUNTIME")
 
@@ -417,7 +428,7 @@ class _CreateConfigCommon(BaseLoader):
 
         if self.weight_streaming:
             try_set_flag("WEIGHT_STREAMING")
-        
+
         if self.runtime_platform is not None:
 
             def set_runtime_platform():
@@ -452,7 +463,7 @@ class CreateConfig(_CreateConfigCommon):
         calibrator=None,
         use_dla=None,
         allow_gpu_fallback=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Creates an IBuilderConfig with TensorRT-specific features.
@@ -513,11 +524,15 @@ class CreateConfig(_CreateConfigCommon):
         # Validate that TensorRT-RTX specific flags are not used in regular TensorRT mode
         if polygraphy_config.USE_TENSORRT_RTX:
             if self.fp16 or self.int8 or self.bf16 or self.fp8:
-                G_LOGGER.critical("Precision flags (fp16, int8, bf16, fp8) are not supported with USE_TENSORRT_RTX=1.")
+                G_LOGGER.critical(
+                    "Precision flags (fp16, int8, bf16, fp8) are not supported with USE_TENSORRT_RTX=1."
+                )
             if self.use_dla:
                 G_LOGGER.critical("DLA is not supported with USE_TENSORRT_RTX=1.")
             if self.calibrator is not None:
-                G_LOGGER.critical("Custom calibrator is not supported with USE_TENSORRT_RTX=1.")
+                G_LOGGER.critical(
+                    "Custom calibrator is not supported with USE_TENSORRT_RTX=1."
+                )
 
     def _configure_flags(self, builder, network, config):
         """
@@ -525,9 +540,10 @@ class CreateConfig(_CreateConfigCommon):
 
         Args:
             builder (trt.Builder): The TensorRT builder
-            network (trt.INetworkDefinition): The TensorRT network
+            network (trt.INetworkDefinition): The TensorRT network. If None, steps requiring the network will be skipped.
             config (trt.IBuilderConfig): The TensorRT builder config to modify
         """
+
         def try_run(func, name):
             try:
                 return func()
@@ -559,14 +575,17 @@ class CreateConfig(_CreateConfigCommon):
         if self.int8:
             try_set_flag("INT8")
 
-        if self.int8:
+        if self.int8 and network is not None:
             # No Q/DQ layers means that we will need to calibrate.
             if not any(
                 layer.type in [trt.LayerType.QUANTIZE, trt.LayerType.DEQUANTIZE]
                 for layer in network
             ):
                 if self.calibrator is not None:
-                    config.int8_calibrator = self.calibrator
+                    try:
+                        config.int8_calibrator = self.calibrator
+                    except AttributeError:
+                        trt_util.fail_unavailable("int8_calibrator in CreateConfig")
                     try:
                         profiles = copy.deepcopy(self.profiles)
                         calib_profile = profiles[-1].fill_defaults(network)
@@ -591,16 +610,59 @@ class CreateConfig(_CreateConfigCommon):
                     )
 
         if self.use_dla:
+            # Check if DLA is available on the system
+            num_dla_cores = 0
+            try:
+                num_dla_cores = builder.num_DLA_cores
+            except AttributeError:
+                # Older versions of TensorRT might not have this attribute
+                G_LOGGER.warning(
+                    "Cannot determine if DLA is available on this system. "
+                    "Please ensure DLA hardware is present when using --use-dla."
+                )
+            else:
+                if num_dla_cores == 0:
+                    if not self.allow_gpu_fallback:
+                        G_LOGGER.critical(
+                            "DLA was requested via --use-dla, but no DLA hardware is available on this system. "
+                            "Please use --allow-gpu-fallback to allow layers to fall back to GPU, or remove --use-dla."
+                        )
+                    else:
+                        G_LOGGER.warning(
+                            "DLA was requested via --use-dla, but no DLA hardware is available on this system. "
+                            "Layers will fall back to GPU due to --allow-gpu-fallback."
+                        )
+
             config.default_device_type = trt.DeviceType.DLA
             config.DLA_core = 0
 
-        if self.allow_gpu_fallback:
-            try_set_flag("GPU_FALLBACK")
+            # PREFER_PRECISION_CONSTRAINTS and DIRECT_IO are deprecated as of TRT 11.0, so we
+            # only set them implicitly on older versions. Note that some TRT 11 builds still
+            # provide them, so we cannot rely on the attribute being absent.
+            # Users can still request them explicitly via `precision_constraints` and `direct_io`.
+            if mod.version(trt.__version__) < mod.version("11.0"):
+                try_set_flag("PREFER_PRECISION_CONSTRAINTS")
+
+            if self.allow_gpu_fallback:
+                try_set_flag("GPU_FALLBACK")
+            elif mod.version(trt.__version__) < mod.version("11.0"):
+                # Reformat happens on GPU, so set DIRECT_IO if fallback is disabled.
+                try_set_flag("DIRECT_IO")
 
     @util.check_called_by("__call__")
     def call_impl(self, builder, network):
         """
         Callable implementation that creates and configures the IBuilderConfig with TensorRT features.
+
+        Args:
+            builder (trt.Builder):
+                    The TensorRT builder to use to create the configuration.
+            network (trt.INetworkDefinition):
+                    The TensorRT network for which to create the config.
+                    If set to None, steps requiring the network will be skipped.
+
+        Returns:
+            trt.IBuilderConfig: The TensorRT builder configuration.
         """
         config = super().call_impl(builder, network)
 
@@ -645,6 +707,7 @@ class PostprocessConfig(BaseLoader):
             network (trt.INetworkDefinition):
                     The TensorRT network for which to create the config. The network is used to
                     automatically create a default optimization profile if none are provided.
+                    If set to None, steps requiring the network will be skipped.
 
         Returns:
             trt.IBuilderConfig:
@@ -652,6 +715,7 @@ class PostprocessConfig(BaseLoader):
         """
         config, _ = util.invoke_if_callable(self._config, builder, network)
 
-        self._func(builder, network, config)
+        if network is not None:
+            self._func(builder, network, config)
 
         return config

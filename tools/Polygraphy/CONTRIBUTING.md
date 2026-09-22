@@ -11,6 +11,14 @@
 
 0. *Optional, but recommended:* Read the [Design Principles](#design-principles) section in this document.
 
+0. Set up pre-commit hooks (first time only):
+    ```
+    pip install pre-commit
+    pre-commit install
+    ```
+    This installs a [black](https://github.com/psf/black) formatter hook that runs automatically on `git commit`.
+    You can also run it manually across all files with `pre-commit run --all-files`.
+
 1. Create a separate branch for your feature or bug fix.
     You may want to create the branch on your own fork of Polygraphy.
 
@@ -32,7 +40,7 @@
             ```
             python3 -m pip install tensorrt
             ```
-        2. Install it manually following the instructions in the [installation guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html#installing).
+        2. Install it manually following the instructions in the [installation guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing).
 
     - Run tests with: `make test`
 

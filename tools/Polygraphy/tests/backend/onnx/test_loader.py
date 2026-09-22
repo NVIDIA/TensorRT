@@ -132,6 +132,56 @@ class TestModifyOnnx:
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
 
+    def test_layerwise_skips_empty_name_outputs(self):
+        # ONNX uses an empty-name ('') output to denote an unused optional output
+        # of a multi-output op (e.g. LSTM). MARK_ALL must not mark these, otherwise
+        # it produces untyped graph outputs that break downstream inference (nvbug 5922794).
+        node = onnx.helper.make_node(
+            "Dropout", inputs=["X"], outputs=["Y", ""], name="dropout"
+        )
+        graph = onnx.helper.make_graph(
+            [node],
+            "empty_output_graph",
+            inputs=[
+                onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1])
+            ],
+            outputs=[
+                onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1])
+            ],
+        )
+        original_model = onnx.helper.make_model(graph)
+
+        model = ModifyOutputs(original_model, outputs=constants.MARK_ALL)()
+        output_names = [out.name for out in model.graph.output]
+        assert "" not in output_names
+        assert "Y" in output_names
+
+    def test_mark_by_op_type(self):
+        # identity_identity has two Identity nodes with outputs identity_out_0 and identity_out_2
+        loader = ModifyOutputs(
+            OnnxFromPath(ONNX_MODELS["identity_identity"].path),
+            mark_types=["Identity"],
+        )
+        model = loader()
+        output_names = {o.name for o in model.graph.output}
+        assert output_names == {"identity_out_0", "identity_out_2"}
+
+    def test_mark_by_op_type_case_insensitive(self):
+        loader = ModifyOutputs(
+            OnnxFromPath(ONNX_MODELS["identity_identity"].path),
+            mark_types=["identity"],  # lowercase
+        )
+        model = loader()
+        assert len(model.graph.output) == 2
+
+    def test_mark_by_op_type_unknown_does_not_raise(self):
+        loader = ModifyOutputs(
+            OnnxFromPath(ONNX_MODELS["identity_identity"].path),
+            mark_types=["Nonexistent"],
+        )
+        # G_LOGGER.error is non-critical — should not raise
+        model = loader()
+
 
 @pytest.mark.parametrize("allow_onnxruntime", [True, False])
 class TestInferShapes:
@@ -180,7 +230,11 @@ class TestConvertToFp16:
     def test_basic(self, copy):
         # Precondition.
         original_model = onnx_from_path(ONNX_MODELS["identity_identity"].path)
-        assert original_model.graph.input[0].type.tensor_type.elem_type == onnx.TensorProto.FLOAT or not copy
+        assert (
+            original_model.graph.input[0].type.tensor_type.elem_type
+            == onnx.TensorProto.FLOAT
+            or not copy
+        )
 
         # Under test.
         loader = ConvertToFp16(original_model, copy=copy)
@@ -290,15 +344,23 @@ class TestSaveOnnx:
             assert is_file_non_empty(outpath)
 
     def test_external_data(self):
-        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
-            rpath_name = os.path.basename(data.name)
-            model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
-            loader = SaveOnnx(
-                model, path.name, external_data_path=rpath_name, size_threshold=0
-            )
-            loader()
-            assert is_file_non_empty(path.name)
-            assert is_file_non_empty(data.name)
+        # `data` uses delete=False because saving overwrites (removes and rewrites) the external
+        # data file, so the NamedTemporaryFile must not also try to unlink it on exit.
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(
+            dir=".", delete=False
+        ) as data:
+            try:
+                rpath_name = os.path.basename(data.name)
+                model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
+                loader = SaveOnnx(
+                    model, path.name, external_data_path=rpath_name, size_threshold=0
+                )
+                loader()
+                assert is_file_non_empty(path.name)
+                assert is_file_non_empty(data.name)
+            finally:
+                if os.path.exists(data.name):
+                    os.remove(data.name)
 
 
 @pytest.fixture()

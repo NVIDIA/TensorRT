@@ -111,7 +111,7 @@ int32_t PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t batchSize = inputDesc[0].dims.d[0];
         int32_t maxPillarNum = inputDesc[0].dims.d[1];

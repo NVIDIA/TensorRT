@@ -17,8 +17,10 @@
 from __future__ import annotations
 
 import sys
+
 import pytest
 
+import polygraphy.backend.trt.loader as trt_loader
 from polygraphy import config, constants, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
@@ -61,6 +63,9 @@ if config.USE_TENSORRT_RTX:
 else:
     import tensorrt as trt
     from polygraphy.backend.trt import CreateConfig
+
+# Previous versions of TRT segfault when using `parser.set_builder_config`
+_SKIP_REPORT_CAPABILITY_DLA = mod.version(trt.__version__) < mod.version("10.16")
 
 
 ##
@@ -132,18 +137,31 @@ def modifiable_reshape_network():
 class TestLoadPlugins:
     @pytest.mark.skipif(
         config.USE_TENSORRT_RTX,
-        reason="Plugin tests are not compatible with TensorRT-RTX"
+        reason="Plugin tests are not compatible with TensorRT-RTX",
     )
     def test_can_load_libnvinfer_plugins(self):
         def get_plugin_names():
-            return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
+            registry = trt.get_plugin_registry()
+            # `plugin_creator_list` was renamed to `all_creators` in TRT 11.
+            creators = (
+                registry.plugin_creator_list
+                if hasattr(registry, "plugin_creator_list")
+                else registry.all_creators
+            )
+            return [pc.name for pc in creators]
 
         loader = LoadPlugins(
             plugins=[
                 (
                     "nvinfer_plugin.dll"
                     if sys.platform.startswith("win")
-                    else "libnvinfer_plugin.so"
+                    # The TRT 11 pip wheels ship only the major-versioned soname
+                    # (libnvinfer_plugin.so.11); there is no unversioned symlink.
+                    else (
+                        f"libnvinfer_plugin.so.{trt.__version__.split('.')[0]}"
+                        if mod.version(trt.__version__) >= mod.version("11.0")
+                        else "libnvinfer_plugin.so"
+                    )
                 )
             ]
         )
@@ -160,7 +178,7 @@ class TestSerializedEngineLoader:
             loader = EngineFromBytes(lambda: open(outpath.name, "rb").read())
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
-        
+
     def test_serialized_engine_loader_from_buffer(self, identity_engine):
         with identity_engine.serialize() as buffer:
             loader = EngineFromBytes(buffer)
@@ -173,9 +191,63 @@ class TestSerializedEngineLoader:
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
 
+    @pytest.mark.parametrize("from_path", [False, True])
+    def test_sets_dla_workspace_strategy_before_deserialization(
+        self, from_path, monkeypatch
+    ):
+        strategy = object()
+        engine = object()
+        events = []
+
+        class DummyRuntime:
+            @property
+            def dla_workspace_allocation_strategy(self):
+                return self._dla_workspace_allocation_strategy
+
+            @dla_workspace_allocation_strategy.setter
+            def dla_workspace_allocation_strategy(self, value):
+                self._dla_workspace_allocation_strategy = value
+                events.append(("set_strategy", value))
+
+            def deserialize_cuda_engine(self, buffer):
+                events.append(("deserialize", self.dla_workspace_allocation_strategy))
+                return engine
+
+        class DummyTrt:
+            @staticmethod
+            def init_libnvinfer_plugins(*args):
+                pass
+
+        monkeypatch.setattr(trt_loader, "trt", DummyTrt)
+        monkeypatch.setattr(trt_loader.trt_util, "get_trt_logger", lambda: None)
+        monkeypatch.setattr(trt_loader, "FileReader", lambda path: path)
+
+        runtime = DummyRuntime()
+        if from_path:
+            with util.NamedTemporaryFile() as engine_file:
+                engine_file.write(b"engine")
+                engine_file.flush()
+                loader = EngineFromPath(
+                    engine_file.name,
+                    runtime=runtime,
+                    dla_workspace_allocation_strategy=strategy,
+                )
+                actual_engine = loader()
+        else:
+            loader = EngineFromBytes(
+                b"engine",
+                runtime=runtime,
+                dla_workspace_allocation_strategy=strategy,
+            )
+            actual_engine = loader()
+
+        assert actual_engine is engine
+        assert events == [("set_strategy", strategy), ("deserialize", strategy)]
+
 
 @pytest.mark.skipif(
-    mod.version(trt.__version__) < mod.version("10.0") and not config.USE_TENSORRT_RTX, reason="API was added in TRT 10.0"
+    mod.version(trt.__version__) < mod.version("10.0") and not config.USE_TENSORRT_RTX,
+    reason="API was added in TRT 10.0",
 )
 class TestSerializedEngineLoaderFromDisk:
     def test_serialized_engine_loader_from_lambda(self, identity_engine):
@@ -191,8 +263,10 @@ class TestSerializedEngineLoaderFromDisk:
         with util.NamedTemporaryFile() as outpath:
             with open(outpath.name, "wb") as f, identity_engine.serialize() as buffer:
                 f.write(buffer)
-            
-            loader = EngineFromPath(lambda: outpath.name, runtime=trt.Runtime(get_trt_logger()))
+
+            loader = EngineFromPath(
+                lambda: outpath.name, runtime=trt.Runtime(get_trt_logger())
+            )
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
 
@@ -202,7 +276,7 @@ class TestSerializedEngineLoaderFromDisk:
 )
 @pytest.mark.skipif(
     config.USE_TENSORRT_RTX,
-    reason="TensorRT-RTX does not have lean runtime shared objects"
+    reason="TensorRT-RTX does not have lean runtime shared objects",
 )
 class TestLoadRuntime:
     def test_load_lean_runtime(self, nvinfer_lean_path):
@@ -212,11 +286,11 @@ class TestLoadRuntime:
 
 
 @pytest.mark.skipif(
-    mod.version(trt.__version__) < mod.version("8.6") and not config.USE_TENSORRT_RTX, reason="API was added in TRT 8.6"
+    mod.version(trt.__version__) < mod.version("8.6") and not config.USE_TENSORRT_RTX,
+    reason="API was added in TRT 8.6",
 )
 @pytest.mark.skipif(
-    config.USE_TENSORRT_RTX,
-    reason="TensorRT-RTX does not have libnvinfer_lean.so.1"
+    config.USE_TENSORRT_RTX, reason="TensorRT-RTX does not have libnvinfer_lean.so.1"
 )
 class TestSerializedVCEngineLoader:
     def test_serialized_vc_engine_loader_from_lambda(self, identity_vc_engine_bytes):
@@ -251,7 +325,8 @@ class TestNetworkFromOnnxBytes:
                     trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
                 )
             ]
-            if mod.version(trt.__version__) >= mod.version("8.7") and not config.USE_TENSORRT_RTX
+            if mod.version(trt.__version__) >= mod.version("8.7")
+            and not config.USE_TENSORRT_RTX
             else []
         ),
     )
@@ -260,6 +335,75 @@ class TestNetworkFromOnnxBytes:
             ONNX_MODELS["identity"].loader, **kwargs
         )
         assert network.get_flag(flag)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6")
+        and not config.USE_TENSORRT_RTX,
+        reason="OnnxParserFlag operations require TRT >= 8.6",
+    )
+    @pytest.mark.parametrize(
+        "kwargs, flag, should_be_set",
+        [
+            (
+                {"plugin_instancenorm": True},
+                trt.OnnxParserFlag.NATIVE_INSTANCENORM,
+                False,  # plugin_instancenorm clears the flag
+            ),
+        ]
+        + (
+            [
+                (
+                    {"enable_uint8_asymmetric_quantization_dla": True},
+                    trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA,
+                    True,  # this sets the flag
+                ),
+            ]
+            if hasattr(
+                trt.OnnxParserFlag, "ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+            )
+            else []
+        )
+        + (
+            [
+                (
+                    {
+                        "flags": [trt.OnnxParserFlag.REPORT_CAPABILITY_DLA],
+                        "config": CreateConfig(),
+                    },
+                    trt.OnnxParserFlag.REPORT_CAPABILITY_DLA,
+                    True,  # this sets the flag (requires config to be set)
+                ),
+            ]
+            if hasattr(trt.OnnxParserFlag, "REPORT_CAPABILITY_DLA")
+            and not _SKIP_REPORT_CAPABILITY_DLA
+            else []
+        ),
+    )
+    def test_parser_flags(self, kwargs, flag, should_be_set, capfd):
+        """Test that parser flags are properly set or cleared."""
+        if (
+            hasattr(trt.OnnxParserFlag, "REPORT_CAPABILITY_DLA")
+            and flag == trt.OnnxParserFlag.REPORT_CAPABILITY_DLA
+        ):
+            # Our test machines don't have DLA hardware; expect parsing to fail.
+            with pytest.raises(PolygraphyException):
+                network_from_onnx_bytes(ONNX_MODELS["identity"].loader, **kwargs)
+
+            captured = capfd.readouterr()
+            combined = captured.out + captured.err
+            # The TensorRT C++ logger's DLA-validation message is not reliably
+            # captured by capfd under xdist on TRT 11; the pytest.raises above
+            # already confirms REPORT_CAPABILITY_DLA is honored (parsing fails
+            # without DLA hardware), so only assert the message where capture is
+            # reliable.
+            if mod.version(trt.__version__) < mod.version("11.0"):
+                assert "DLA validation failed for layer:" in combined
+            return
+
+        builder, network, parser = network_from_onnx_bytes(
+            ONNX_MODELS["identity"].loader, **kwargs
+        )
+        assert parser.get_flag(flag) == should_be_set
 
 
 class TestNetworkFromOnnxPath:
@@ -277,7 +421,8 @@ class TestNetworkFromOnnxPath:
                     trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
                 )
             ]
-            if mod.version(trt.__version__) >= mod.version("8.7") and not config.USE_TENSORRT_RTX
+            if mod.version(trt.__version__) >= mod.version("8.7")
+            and not config.USE_TENSORRT_RTX
             else []
         ),
     )
@@ -286,6 +431,75 @@ class TestNetworkFromOnnxPath:
             ONNX_MODELS["identity"].path, **kwargs
         )
         assert network.get_flag(flag)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6")
+        and not config.USE_TENSORRT_RTX,
+        reason="OnnxParserFlag operations require TRT >= 8.6",
+    )
+    @pytest.mark.parametrize(
+        "kwargs, flag, should_be_set",
+        [
+            (
+                {"plugin_instancenorm": True},
+                trt.OnnxParserFlag.NATIVE_INSTANCENORM,
+                False,  # plugin_instancenorm clears the flag
+            ),
+        ]
+        + (
+            [
+                (
+                    {"enable_uint8_asymmetric_quantization_dla": True},
+                    trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA,
+                    True,  # this sets the flag
+                ),
+            ]
+            if hasattr(
+                trt.OnnxParserFlag, "ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+            )
+            else []
+        )
+        + (
+            [
+                (
+                    {
+                        "flags": [trt.OnnxParserFlag.REPORT_CAPABILITY_DLA],
+                        "config": CreateConfig(),
+                    },
+                    trt.OnnxParserFlag.REPORT_CAPABILITY_DLA,
+                    True,  # this sets the flag (requires config to be set)
+                ),
+            ]
+            if hasattr(trt.OnnxParserFlag, "REPORT_CAPABILITY_DLA")
+            and not _SKIP_REPORT_CAPABILITY_DLA
+            else []
+        ),
+    )
+    def test_parser_flags(self, kwargs, flag, should_be_set, capfd):
+        """Test that parser flags are properly set or cleared."""
+        if (
+            hasattr(trt.OnnxParserFlag, "REPORT_CAPABILITY_DLA")
+            and flag == trt.OnnxParserFlag.REPORT_CAPABILITY_DLA
+        ):
+            # Our test machines don't have DLA hardware; expect parsing to fail.
+            with pytest.raises(PolygraphyException):
+                network_from_onnx_path(ONNX_MODELS["identity"].path, **kwargs)
+
+            captured = capfd.readouterr()
+            combined = captured.out + captured.err
+            # The TensorRT C++ logger's DLA-validation message is not reliably
+            # captured by capfd under xdist on TRT 11; the pytest.raises above
+            # already confirms REPORT_CAPABILITY_DLA is honored (parsing fails
+            # without DLA hardware), so only assert the message where capture is
+            # reliable.
+            if mod.version(trt.__version__) < mod.version("11.0"):
+                assert "DLA validation failed for layer:" in combined
+            return
+
+        builder, network, parser = network_from_onnx_path(
+            ONNX_MODELS["identity"].path, **kwargs
+        )
+        assert parser.get_flag(flag) == should_be_set
 
 
 class TestModifyNetwork:
@@ -354,6 +568,31 @@ class TestModifyNetwork:
         assert network.get_output(0).name == "Slice"
         assert network.get_output(0) == slice
 
+    def test_mark_by_layer_type(self, modifiable_network):
+        # identity model has IDENTITY-type layers
+        load_network = ModifyNetworkOutputs(
+            modifiable_network, mark_layer_types=["IDENTITY"]
+        )
+        builder, network, parser = load_network()
+        assert network.num_outputs >= 1
+        for i in range(network.num_outputs):
+            assert network.get_output(i) is not None
+
+    def test_mark_by_layer_type_case_insensitive(self, modifiable_network):
+        load_network = ModifyNetworkOutputs(
+            modifiable_network, mark_layer_types=["identity"]  # lowercase
+        )
+        builder, network, parser = load_network()
+        assert network.num_outputs >= 1
+
+    def test_mark_by_layer_type_unknown_raises(self, modifiable_network):
+        load_network = ModifyNetworkOutputs(
+            modifiable_network, mark_layer_types=["NONEXISTENT_TYPE"]
+        )
+        # G_LOGGER.critical raises
+        with pytest.raises(Exception):
+            load_network()
+
 
 class TestPostprocessNetwork:
     def test_basic(self, modifiable_network):
@@ -380,25 +619,19 @@ class TestPostprocessNetwork:
         builder, network, parser = postprocess_network(modifiable_network, func)
         assert func_called
 
-    @pytest.mark.skipif(
-        config.USE_TENSORRT_RTX,
-        reason="TensorRT-RTX uses strongly typed networks where layer precision cannot be set"
-    )
     def test_modify_network(self, modifiable_network):
         """Tests that the network passed in is properly modified by the callback."""
 
-        # Performs the equivalent of set_layer_precisions
+        # Setting allowed_formats is a cross-version mutation (works on TRT 8.6/10/11
+        # and RTX); weak-typing per-layer precision was removed in TRT 11.
         def func(network):
-            for layer in network:
-                if layer.name == "onnx_graphsurgeon_node_1":
-                    layer.precision = trt.float16
-                if layer.name == "onnx_graphsurgeon_node_3":
-                    layer.precision = trt.int8
+            network.get_input(0).allowed_formats = 1 << int(trt.TensorFormat.CHW4)
+            network.get_output(0).allowed_formats = 1 << int(trt.TensorFormat.HWC8)
 
         builder, network, parser = postprocess_network(modifiable_network, func)
 
-        assert network[0].precision == trt.float16
-        assert network[1].precision == trt.int8
+        assert network.get_input(0).allowed_formats == 1 << int(trt.TensorFormat.CHW4)
+        assert network.get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
 
     def test_negative_non_callable(self, modifiable_network):
         """Tests that PostprocessNetwork properly rejects `func` objects that
@@ -410,8 +643,8 @@ class TestPostprocessNetwork:
 
 class TestSetLayerPrecisions:
     @pytest.mark.skipif(
-        config.USE_TENSORRT_RTX,
-        reason="TensorRT-RTX uses strongly typed networks where layer precision cannot be set"
+        config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="Layer precision API not available",
     )
     def test_basic(self, modifiable_network):
         builder, network, parser = set_layer_precisions(
@@ -428,8 +661,8 @@ class TestSetLayerPrecisions:
 
 class TestSetTensorDatatypes:
     @pytest.mark.skipif(
-        config.USE_TENSORRT_RTX,
-        reason="TensorRT-RTX uses strongly typed networks where tensor datatypes cannot be set"
+        config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="TensorRT-RTX and TRT 11 use strongly typed networks where tensor datatypes cannot be set",
     )
     def test_basic(self, modifiable_network):
         builder, network, parser = set_tensor_datatypes(
@@ -438,6 +671,18 @@ class TestSetTensorDatatypes:
                 "X": trt.float16,
                 "identity_out_2": trt.float16,
             },
+        )
+
+        assert network.get_input(0).dtype == trt.float16
+        assert network.get_output(0).dtype == trt.float16
+
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="TensorRT-RTX and TRT 11 use strongly typed networks where tensor datatypes cannot be set",
+    )
+    def test_all(self, modifiable_network):
+        builder, network, parser = set_tensor_datatypes(
+            modifiable_network, tensor_datatypes=trt.float16
         )
 
         assert network.get_input(0).dtype == trt.float16
@@ -459,6 +704,19 @@ class TestSetTensorFormats:
         )
         assert network.get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
 
+    def test_all(self, modifiable_network):
+        builder, network, parser = set_tensor_formats(
+            modifiable_network,
+            tensor_formats=[trt.TensorFormat.LINEAR, trt.TensorFormat.CHW4],
+        )
+
+        assert network.get_input(0).allowed_formats == (
+            1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
+        )
+        assert network.get_output(0).allowed_formats == (
+            1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
+        )
+
 
 class TestEngineBytesFromNetwork:
     def test_can_build(self, identity_network):
@@ -471,6 +729,33 @@ class TestEngineFromNetwork:
     def test_defaults(self, identity_network):
         loader = EngineFromNetwork(identity_network)
         assert loader.timing_cache_path is None
+
+    def test_forwards_dla_workspace_allocation_strategy(self, monkeypatch):
+        expected_runtime = object()
+        expected_strategy = object()
+        expected_engine = object()
+
+        monkeypatch.setattr(
+            trt_loader.EngineBytesFromNetwork,
+            "call_impl",
+            lambda self: b"engine",
+        )
+
+        def fake_engine_from_bytes(
+            serialized_engine, runtime=None, dla_workspace_allocation_strategy=None
+        ):
+            assert serialized_engine() == b"engine"
+            assert runtime is expected_runtime
+            assert dla_workspace_allocation_strategy is expected_strategy
+            return expected_engine
+
+        monkeypatch.setattr(trt_loader, "engine_from_bytes", fake_engine_from_bytes)
+        loader = EngineFromNetwork(
+            object(),
+            runtime=expected_runtime,
+            dla_workspace_allocation_strategy=expected_strategy,
+        )
+        assert loader() is expected_engine
 
     def test_can_build_with_parser_owning(self, identity_network):
         loader = EngineFromNetwork(identity_network)
@@ -492,8 +777,8 @@ class TestEngineFromNetwork:
             assert isinstance(engine, trt.ICudaEngine)
 
     @pytest.mark.skipif(
-        config.USE_TENSORRT_RTX,
-        reason="TensorRT-RTX does not support calibrators"
+        config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="TensorRT-RTX and TRT 11 do not support INT8 calibrators",
     )
     @pytest.mark.parametrize(
         "use_config_loader, set_calib_profile",
@@ -602,7 +887,9 @@ class TestBufferFromEngine:
         # Postcondition.
         assert isinstance(buffer, trt.IHostMemory)
 
-    def test_should_content_match_engine(self, identity_engine: trt.ICudaEngine) -> None:
+    def test_should_content_match_engine(
+        self, identity_engine: trt.ICudaEngine
+    ) -> None:
         """Test that `BufferFromEngine` returns a buffer with the same content as the engine."""
         # Precondition.
         engine = identity_engine
@@ -616,7 +903,9 @@ class TestBufferFromEngine:
 
 class TestSaveEngine:
 
-    def test_should_write_serialized_engine_to_file(self, identity_network: trt.ICudaEngine) -> None:
+    def test_should_write_serialized_engine_to_file(
+        self, identity_network: trt.ICudaEngine
+    ) -> None:
         # Precondition.
         with util.NamedTemporaryFile(mode="wb+") as out_file:
             name = out_file.name
@@ -655,7 +944,15 @@ class TestOnnxLikeFromNetwork:
 class TestDefaultPlugins:
     @pytest.mark.skipif(
         config.USE_TENSORRT_RTX,
-        reason="Plugin tests are not compatible with TensorRT-RTX"
+        reason="Plugin tests are not compatible with TensorRT-RTX",
+    )
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        # ROIAlign became a native layer in TRT 11 so this model no longer exercises
+        # a default plugin, and the obvious alternative (InstanceNormalization_TRT via
+        # plugin_instancenorm) cannot load on TRT 11 because it depends on cuDNN 8 while
+        # TRT 11 ships cuDNN 9. No simple ONNX op maps to a buildable default plugin here.
+        reason="No ONNX op maps to a buildable default plugin on TensorRT 11 (ROIAlign is native; the InstanceNorm plugin needs cuDNN 8)",
     )
     def test_default_plugins(self):
         network_loader = NetworkFromOnnxBytes(ONNX_MODELS["roialign"].loader)

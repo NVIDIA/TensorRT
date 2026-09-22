@@ -36,11 +36,18 @@ def _make_debug_listener():
     class DebugTensorWriter(trt.IDebugListener):
         def __init__(self):
             trt.IDebugListener.__init__(self)
-            self.debug_tensor_outputs = {}
+            self.polygraphy_debug_tensor_outputs = {}
 
         def process_debug_tensor(self, addr, location, type, shape, name, stream):
-            if type in [util.try_getattr(trt, "fp8"), util.try_getattr(trt, "int4"), util.try_getattr(trt, "fp4"), util.try_getattr(trt, "bfloat16")]:
-                G_LOGGER.warning(f"Not supported datatype for debug tensor in polygraphy: {type}")
+            if type in [
+                util.try_getattr(trt, "fp8"),
+                util.try_getattr(trt, "int4"),
+                util.try_getattr(trt, "fp4"),
+                util.try_getattr(trt, "bfloat16"),
+            ]:
+                G_LOGGER.warning(
+                    f"Not supported datatype for debug tensor in polygraphy: {type}"
+                )
                 return
 
             cuda.wrapper().stream_synchronize(stream)
@@ -49,7 +56,9 @@ def _make_debug_listener():
             buffer = np.zeros(shape, dtype=DataType.to_dtype(datatype, "numpy"))
             buffer = util.array.resize_or_reallocate(buffer, size)
             if location == trt.TensorLocation.HOST:
-                ctypes.memmove(util.array.data_ptr(buffer), addr, size * datatype.itemsize)
+                ctypes.memmove(
+                    util.array.data_ptr(buffer), addr, size * datatype.itemsize
+                )
             else:
                 cuda.wrapper().memcpy(
                     dst=util.array.data_ptr(buffer),
@@ -59,7 +68,9 @@ def _make_debug_listener():
                     stream_ptr=stream,
                 )
                 cuda.wrapper().stream_synchronize(stream)
-            self.debug_tensor_outputs[name] = util.array.resize_or_reallocate(buffer, shape)
+            self.polygraphy_debug_tensor_outputs[name] = (
+                util.array.resize_or_reallocate(buffer, shape)
+            )
 
     return DebugTensorWriter()
 
@@ -73,7 +84,7 @@ def _make_output_allocator():
             self.shapes = {}
             self.use_torch = False
 
-        def reallocate_output(self, tensor_name, memory, size, alignment):
+        def _reallocate(self, tensor_name, size):
             shape = (size,)
             if tensor_name not in self.buffers:
                 self.buffers[tensor_name] = (
@@ -82,9 +93,19 @@ def _make_output_allocator():
                     else torch.empty(shape, dtype=torch.uint8, device="cuda")
                 )
             else:
-                self.buffers[tensor_name] = util.array.resize_or_reallocate(self.buffers[tensor_name], shape)
-            G_LOGGER.extra_verbose(f"Reallocated output tensor: {tensor_name} to: {self.buffers[tensor_name]}")
+                self.buffers[tensor_name] = util.array.resize_or_reallocate(
+                    self.buffers[tensor_name], shape
+                )
+            G_LOGGER.extra_verbose(
+                f"Reallocated output tensor: {tensor_name} to: {self.buffers[tensor_name]}"
+            )
             return util.array.data_ptr(self.buffers[tensor_name])
+
+        def reallocate_output(self, tensor_name, memory, size, alignment):
+            return self._reallocate(tensor_name, size)
+
+        def reallocate_output_async(self, tensor_name, memory, size, alignment, stream):
+            return self._reallocate(tensor_name, size)
 
         def notify_shape(self, tensor_name, shape):
             self.shapes[tensor_name] = tuple(shape)
@@ -117,17 +138,22 @@ def _get_array_on_cpu(arr, name, host_buffers, stream, nbytes, use_torch):
         Union[numpy.ndarray, torch.Tensor]: The host buffer as a flat array of bytes.
     """
     if not util.array.is_on_gpu(arr):
-        G_LOGGER.internal_error(f"_get_array_on_cpu() should only be called with input arrays on the GPU!")
+        G_LOGGER.internal_error(
+            "_get_array_on_cpu() should only be called with input arrays on the GPU!"
+        )
 
     # The host buffer will always be a "raw" array, i.e. a flat array of bytes.
     shape = (nbytes,)
     dtype = DataType.UINT8
+
     # If we switch between torch tensors and DeviceViews between inferences, we need to reallocate the host buffer.
     if name not in host_buffers or util.array.is_torch(host_buffers[name]) != use_torch:
         host_buffers[name] = (
             np.empty(shape, dtype=DataType.to_dtype(dtype, "numpy"))
             if not use_torch
-            else torch.empty(shape, dtype=DataType.to_dtype(dtype, "torch"), device="cpu")
+            else torch.empty(
+                shape, dtype=DataType.to_dtype(dtype, "torch"), device="cpu"
+            )
         )
 
     host_buffers[name] = util.array.resize_or_reallocate(host_buffers[name], shape)
@@ -158,6 +184,7 @@ class TrtRunner(BaseRunner):
         allocation_strategy: str = None,
         weight_streaming_budget: int = None,
         weight_streaming_percent: float = None,
+        debug_listener=None,
     ):
         """
         Args:
@@ -186,6 +213,11 @@ class TrtRunner(BaseRunner):
                     The percentage of weights that TRT will keep on the GPU. It can take on the following values:
                         None or 100%: Disables weight streaming at runtime.
                         [0 to 100]: The percentage of weights TRT will stream. 0 will stream the maximum number of weights.
+            debug_listener (trt.IDebugListener):
+                    The debug listener to use each time this runner is activated.
+                    When this is not provided, the runner uses an internal listener that collects all debug tensors
+                    and merges them into the output buffers returned by ``infer()``.
+                    You can also change the listener after the runner is active using the ``set_debug_listener()`` method.
         """
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
@@ -193,6 +225,7 @@ class TrtRunner(BaseRunner):
         self.allocation_strategy = allocation_strategy
         self.weight_streaming_budget = weight_streaming_budget
         self.weight_streaming_percent = weight_streaming_percent
+        self.debug_listener = debug_listener
 
     @util.check_called_by("activate")
     def activate_impl(self):
@@ -206,7 +239,9 @@ class TrtRunner(BaseRunner):
                 self.context = self.engine.create_execution_context()
             elif allocation_strategy in ["profile", "runtime"]:
                 # Device memory will be managed by polygraphy
-                self.context = self.engine.create_execution_context(trt.ExecutionContextAllocationStrategy.USER_MANAGED)
+                self.context = self.engine.create_execution_context(
+                    trt.ExecutionContextAllocationStrategy.USER_MANAGED
+                )
             else:
                 G_LOGGER.critical("Invalid allocation strategy specified.")
             if not self.context:
@@ -229,6 +264,17 @@ class TrtRunner(BaseRunner):
         self.stream = cuda.Stream()
         self.context_memory_buffer = None
         self.output_allocator = _make_output_allocator()
+        self.input_tensor_addresses = OrderedDict()
+
+        self._active_debug_listener = None
+        if hasattr(self.context, "set_all_tensors_debug_state"):
+            listener = (
+                self.debug_listener
+                if self.debug_listener is not None
+                else _make_debug_listener()
+            )
+            self.context.set_all_tensors_debug_state(True)
+            self.set_debug_listener(listener)
 
         if self.optimization_profile is not None:
             self.set_profile(self.optimization_profile)
@@ -251,7 +297,9 @@ class TrtRunner(BaseRunner):
                     The index of the optimization profile to use.
         """
         if not hasattr(self, "context") or self.context is None:
-            G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling set_profile()")
+            G_LOGGER.critical(
+                f"{self.name:35} | Must be activated prior to calling set_profile()"
+            )
 
         try:
             self.context.set_optimization_profile_async
@@ -261,9 +309,40 @@ class TrtRunner(BaseRunner):
             if not self.context.set_optimization_profile_async(index, self.stream.ptr):
                 G_LOGGER.critical(f"Failed to set optimization profile to: {index}")
 
+    def set_debug_listener(self, listener):
+        """
+        Sets the debug listener for the current session.
+        The runner must already be active (see ``__enter__()`` or ``activate()``).
+
+        This only affects the current activation; to set a listener for all activations,
+        pass ``debug_listener`` to the constructor instead.
+
+        By default, the runner uses an internal listener that collects all debug tensors
+        and merges them into the output buffers returned by ``infer()``. Use this method
+        to replace it with your own ``trt.IDebugListener`` subclass if you want to handle
+        tensors differently.
+
+        Note that ``set_all_tensors_debug_state(True)`` is called automatically during
+        activation. You can adjust per-tensor debug state on ``runner.context`` directly.
+
+        Args:
+            listener (trt.IDebugListener):
+                    The debug listener to use for subsequent inferences.
+        """
+        if not hasattr(self, "context") or self.context is None:
+            G_LOGGER.critical(
+                f"{self.name:35} | Must be activated prior to calling set_debug_listener()"
+            )
+
+        self._active_debug_listener = listener
+        if not self.context.set_debug_listener(listener):
+            G_LOGGER.critical("Failed to set debug listener.")
+
     @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
-        return trt_util.get_metadata_from_engine(self.engine, self.context, mode=trt.TensorIOMode.INPUT)
+        return trt_util.get_metadata_from_engine(
+            self.engine, self.context, mode=trt.TensorIOMode.INPUT
+        )
 
     def _infer_impl(self, feed_dict, copy_outputs_to_host, return_raw_buffers):
         def get_io(mode):
@@ -294,13 +373,34 @@ class TrtRunner(BaseRunner):
 
                 ptr = util.array.data_ptr(underlying_array)
             else:
-                ptr = trt_util._get_array_on_gpu(underlying_array, name, self.device_input_buffers, self.stream)
+                ptr = trt_util._get_array_on_gpu(
+                    underlying_array, name, self.device_input_buffers, self.stream
+                )
+
+            # Handle formats here.
+            tensor_format = trt_util.get_tensor_format(self.engine, self.context, name)
 
             # If the format is HWC, make sure array.shape is considered after transposing back to CHW
-            if trt_util.get_tensor_format(self.engine, self.context, name) == trt.TensorFormat.HWC:
-                array_shape = trt_util.get_chw_shape_from_hwc(array.shape, self.context.get_tensor_strides(name))
+            if tensor_format == trt.TensorFormat.HWC:
+                array_shape = trt_util.get_chw_shape_from_hwc(array.shape)
             else:
                 array_shape = array.shape
+
+            # Convert linear data for vectorized format.
+            # TODO: Only CHW16 is supported for now. Also should check for directIO.
+            if (
+                tensor_format != trt.TensorFormat.LINEAR
+                and tensor_format == trt.TensorFormat.CHW16
+            ):
+                G_LOGGER.verbose(
+                    f"Converting linear data for input {name} to vectorized CHW16 format."
+                )
+                vectorized_input = trt_util.convert_linear_to_vectorized_format(
+                    self.context, name, underlying_array
+                )
+                ptr = trt_util._get_array_on_gpu(
+                    vectorized_input.array, name, self.device_input_buffers, self.stream
+                )
 
             # Only update the input shape/address if something has changed. Otherwise, we'd be
             # doing extra work unnecessarily.
@@ -308,36 +408,79 @@ class TrtRunner(BaseRunner):
             if self.context.get_tensor_shape(name) != array_shape:
                 G_LOGGER.ultra_verbose(f"Setting {name} input shape to: {array_shape}")
                 if not self.context.set_input_shape(name, array_shape):
-                    G_LOGGER.critical(f"For input: {name}, failed to set shape to: {array_shape}")
+                    G_LOGGER.critical(
+                        f"For input: {name}, failed to set shape to: {array_shape}"
+                    )
 
             if self.context.get_tensor_address(name) != ptr:
                 if not self.context.set_tensor_address(name, ptr):
-                    G_LOGGER.critical(f"For input: {name}, failed to set tensor address to: {ptr}")
+                    G_LOGGER.critical(
+                        f"For input: {name}, failed to set tensor address to: {ptr}"
+                    )
 
-        try:
-            self.context.set_all_tensors_debug_state
-        except AttributeError:
-            pass
-        else:
-            # Set up the debug listener before running inference.
-            debug_listener = _make_debug_listener()
-            self.context.set_all_tensors_debug_state(True)
-            if not self.context.set_debug_listener(debug_listener):
-                G_LOGGER.critical(f"Failed to set debug listener.")
+            self.input_tensor_addresses[name] = ptr
+
+        # Clear debug tensor outputs from the previous inference.
+        if self._active_debug_listener is not None and hasattr(
+            self._active_debug_listener, "polygraphy_debug_tensor_outputs"
+        ):
+            self._active_debug_listener.polygraphy_debug_tensor_outputs.clear()
 
         # Set up the output allocator before running inference.
         self.output_allocator.set_use_torch(use_torch and torch.cuda.is_available())
+        # Track which outputs are aliased (don't need allocator)
+        aliased_outputs = OrderedDict()
         for name in get_io(trt.TensorIOMode.OUTPUT):
-            if not self.context.set_output_allocator(name, self.output_allocator):
-                G_LOGGER.critical(f"For output: {name}, failed to set output allocator")
+            # Check if this output is aliased with an input
+            aliased_input = None
+            try:
+                aliased_input = self.engine.get_aliased_input_tensor(name)
+            except AttributeError:
+                pass
+
+            if (
+                aliased_input is not None
+                and aliased_input in self.input_tensor_addresses
+            ):
+                # This output shares memory with an input - set address directly
+                # TensorRT should guarantee that aliased tensors are not shape tensors
+                if self.engine.is_shape_inference_io(
+                    name
+                ) or self.engine.is_shape_inference_io(aliased_input):
+                    G_LOGGER.critical(
+                        f"Aliased tensor pair (output: '{name}', input: '{aliased_input}') contains a shape tensor. "
+                        "Shape tensors cannot be aliased."
+                    )
+
+                ptr = self.input_tensor_addresses[aliased_input]
+
+                if self.context.get_tensor_address(name) != ptr:
+                    if not self.context.set_tensor_address(name, ptr):
+                        G_LOGGER.critical(
+                            f"For aliased output: {name}, failed to set tensor address to: {ptr}"
+                        )
+                aliased_outputs[name] = aliased_input
+                G_LOGGER.extra_verbose(
+                    f"Output tensor '{name}' is aliased with input tensor '{aliased_input}'"
+                )
+            else:
+                # Use output allocator for non-aliased outputs
+                if not self.context.set_output_allocator(name, self.output_allocator):
+                    G_LOGGER.critical(
+                        f"For output: {name}, failed to set output allocator"
+                    )
 
         if self.allocation_strategy in ["profile", "runtime"]:
             if self.allocation_strategy == "profile":
                 # Perform per-profile allocation.
                 size_to_allocate = 0
-                if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
-                    size_to_allocate = self.engine.get_device_memory_size_for_profile_v2(
-                        self.context.active_optimization_profile
+                if config.USE_TENSORRT_RTX or mod.version(
+                    trt.__version__
+                ) >= mod.version("10.1"):
+                    size_to_allocate = (
+                        self.engine.get_device_memory_size_for_profile_v2(
+                            self.context.active_optimization_profile
+                        )
                     )
                 else:
                     size_to_allocate = self.engine.get_device_memory_size_for_profile(
@@ -351,29 +494,56 @@ class TrtRunner(BaseRunner):
                 self.context_memory_buffer = cuda.DeviceArray.raw((size_to_allocate,))
 
             self.context_memory_buffer.resize((size_to_allocate,))
-            if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
-                self.context.set_device_memory(self.context_memory_buffer.ptr, self.context_memory_buffer.allocated_nbytes)
+            if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version(
+                "10.1"
+            ):
+                self.context.set_device_memory(
+                    self.context_memory_buffer.ptr,
+                    self.context_memory_buffer.allocated_nbytes,
+                )
             else:
                 self.context.device_memory = self.context_memory_buffer.ptr
 
         if not self.context.execute_async_v3(self.stream.ptr):
-            G_LOGGER.critical("`execute_async_v3()` failed. Please see the logging output above for details.")
+            G_LOGGER.critical(
+                "`execute_async_v3()` failed. Please see the logging output above for details."
+            )
 
         output_buffers = OrderedDict()
         for name in get_io(trt.TensorIOMode.OUTPUT):
             # If we're dealing with vectorized formats, we need to return a FormattedArray.
             # Otherwise, we create a view instead with the correct shape/dtype.
-            raw_array = self.output_allocator.buffers[name]
+            if name in aliased_outputs:
+                aliased_input_name = aliased_outputs[name]
+                # Aliased output shares memory with input
+                array = feed_dict[aliased_input_name]
+                if isinstance(array, FormattedArray):
+                    raw_array = array.array
+                else:
+                    raw_array = array
 
-            shape = self.output_allocator.shapes[name]
+                # If input was on CPU, it was copied to device_input_buffers
+                if not util.array.is_on_gpu(raw_array):
+                    raw_array = self.device_input_buffers[aliased_input_name]
+
+                shape = self.context.get_tensor_shape(name)
+            else:
+                # Use output allocator buffer for non-aliased outputs
+                raw_array = self.output_allocator.buffers[name]
+                shape = self.output_allocator.shapes[name]
             # If the format is HWC, make sure the result is shaped accordingly
             tensor_format = trt_util.get_tensor_format(self.engine, self.context, name)
             if tensor_format == trt.TensorFormat.HWC:
-                shape = trt_util.get_hwc_shape_from_chw(shape, self.context.get_tensor_strides(name))
-            using_vectorized_format = tensor_format != trt.TensorFormat.LINEAR and tensor_format != trt.TensorFormat.HWC
+                shape = trt_util.get_hwc_shape_from_chw(shape)
+            using_vectorized_format = (
+                tensor_format != trt.TensorFormat.LINEAR
+                and tensor_format != trt.TensorFormat.HWC
+            )
             should_use_formatted_array = return_raw_buffers or using_vectorized_format
 
-            dtype = DataType.from_dtype(self.engine.get_tensor_dtype(name), source_module="tensorrt")
+            dtype = DataType.from_dtype(
+                self.engine.get_tensor_dtype(name), source_module="tensorrt"
+            )
 
             # The memory allocated by the output allocator may be larger than actually required.
             # If we're using a vectorized format, then we need to copy the whole thing.
@@ -399,17 +569,30 @@ class TrtRunner(BaseRunner):
                 array = FormattedArray(raw_array, shape=shape)
             else:
                 array = util.array.view(raw_array, dtype, shape)
+
+            # Convert vectorized format to linear format.
+            # TODO: Only CHW16 conversion is supported for now. Also should check for directIO.
+            if copy_outputs_to_host and tensor_format == trt.TensorFormat.CHW16:
+                G_LOGGER.verbose(
+                    f"Converting CHW16 vectorized data for output {name} to linear format."
+                )
+                array = trt_util.convert_vectorized_to_linear_format(
+                    self.context, name, raw_array
+                )
+                # We may have modified the array during conversion, so make sure it's contiguous for value comparison.
+                array = util.array.make_contiguous(array)
+
             output_buffers[name] = array
 
         self.stream.synchronize()
 
-        try:
-            self.context.set_all_tensors_debug_state
-        except AttributeError:
-            pass
-        else:
-            if debug_listener.debug_tensor_outputs:
-                output_buffers.update(debug_listener.debug_tensor_outputs)
+        if self._active_debug_listener is not None and hasattr(
+            self._active_debug_listener, "polygraphy_debug_tensor_outputs"
+        ):
+            if self._active_debug_listener.polygraphy_debug_tensor_outputs:
+                output_buffers.update(
+                    self._active_debug_listener.polygraphy_debug_tensor_outputs
+                )
 
         return output_buffers
 
@@ -443,7 +626,9 @@ class TrtRunner(BaseRunner):
         return_raw_buffers = util.default(return_raw_buffers, False)
 
         start = time.time()
-        output_buffers = self._infer_impl(feed_dict, copy_outputs_to_host, return_raw_buffers)
+        output_buffers = self._infer_impl(
+            feed_dict, copy_outputs_to_host, return_raw_buffers
+        )
         end = time.time()
         self.inference_time = end - start
 
@@ -464,17 +649,30 @@ class TrtRunner(BaseRunner):
             self.stream,
             self.context_memory_buffer,
             self.output_allocator,
+            self.input_tensor_addresses,
+            self._active_debug_listener,
         )
 
     def _set_weight_streaming_budget(self):
         # Setup weight streaming if applicable
-        if self.weight_streaming_budget != None and self.weight_streaming_percent != None:
-            G_LOGGER.warning(f"Cannot specify the weight streaming budget both in bytes and percentage. Prioritizing the bytes value.")
+        if (
+            self.weight_streaming_budget is not None
+            and self.weight_streaming_percent is not None
+        ):
+            G_LOGGER.warning(
+                "Cannot specify the weight streaming budget both in bytes and percentage. Prioritizing the bytes value."
+            )
 
         if self.weight_streaming_budget is not None:
-            assert self.weight_streaming_budget == -2 or self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
+            assert (
+                self.weight_streaming_budget == -2
+                or self.weight_streaming_budget == -1
+                or self.weight_streaming_budget >= 0
+            )
 
-        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
+        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version(
+            "10.1"
+        ):
             self._set_weight_streaming_budget_v2()
         else:
             self._set_weight_streaming_budget_v1()
@@ -499,26 +697,37 @@ class TrtRunner(BaseRunner):
                     # TensorRT RTX 1.0. For the new / V2 path, the minimum budget is 0.
                     min_budget = 0
                 max_budget = self.engine.streamable_weights_size
-                budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (max_budget - min_budget) + min_budget
+                budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (
+                    max_budget - min_budget
+                ) + min_budget
 
         if budget_bytes is not None:
             budget_bytes = int(budget_bytes)
             self.engine.weight_streaming_budget = budget_bytes
             if self.engine.weight_streaming_budget != budget_bytes:
-                G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
+                G_LOGGER.critical(
+                    f"Failed to set weight streaming budget to {budget_bytes}!"
+                )
             if budget_bytes == 0:
-                G_LOGGER.info(f"Weight streaming is disabled.")
+                G_LOGGER.info("Weight streaming is disabled.")
             elif budget_bytes == -1:
-                G_LOGGER.info(f"Weight streaming is enabled with TensorRT automatically determiing the budget.")
+                G_LOGGER.info(
+                    "Weight streaming is enabled with TensorRT automatically determining the budget."
+                )
             else:
-                G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
-
+                G_LOGGER.info(
+                    f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes."
+                )
 
     def _set_weight_streaming_budget_v2(self):
         budget_bytes = None
         if self.weight_streaming_budget is not None:
             # use V2 path
-            assert self.weight_streaming_budget == -2 or self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
+            assert (
+                self.weight_streaming_budget == -2
+                or self.weight_streaming_budget == -1
+                or self.weight_streaming_budget >= 0
+            )
             if self.weight_streaming_budget == -2:
                 budget_bytes = self.engine.streamable_weights_size
             elif self.weight_streaming_budget == -1:
@@ -531,14 +740,22 @@ class TrtRunner(BaseRunner):
             if self.weight_streaming_percent == 100:
                 budget_bytes = self.engine.streamable_weights_size
             else:
-                budget_bytes = self.weight_streaming_percent / 100.0 * (self.engine.streamable_weights_size)
+                budget_bytes = (
+                    self.weight_streaming_percent
+                    / 100.0
+                    * (self.engine.streamable_weights_size)
+                )
 
         if budget_bytes is not None:
             budget_bytes = int(budget_bytes)
             self.engine.weight_streaming_budget_v2 = budget_bytes
             if self.engine.weight_streaming_budget_v2 != budget_bytes:
-                G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
+                G_LOGGER.critical(
+                    f"Failed to set weight streaming budget to {budget_bytes}!"
+                )
             if budget_bytes == self.engine.streamable_weights_size:
-                G_LOGGER.info(f"Weight streaming is disabled.")
+                G_LOGGER.info("Weight streaming is disabled.")
             else:
-                G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
+                G_LOGGER.info(
+                    f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes."
+                )

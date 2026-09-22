@@ -2,7 +2,6 @@
 
 ## Table of Contents
 
-- [Introduction](#introduction)
 - [Subtools](#subtools)
 - [Usage](#usage)
 - [Examples](#examples)
@@ -21,9 +20,6 @@ The hints file is a JSON file that describes how to shard the model. Example:
 ```json
 {
     "parallelism": "CP",
-    "group_size": 4,
-    "root": 0,
-    "groups": [],
     "attention_layers": [
         {
             "q": "q",
@@ -32,6 +28,14 @@ The hints file is a JSON file that describes how to shard the model. Example:
             "polygraphy_class": "AttentionLayerHint"
         }
     ],
+    "dist_collectives": {
+        "group_size": 0,
+        "root": -1,
+        "nb_rank": 2,
+        "reduce_op": "max",
+        "groups": [],
+        "polygraphy_class": "DistCollective"
+    },
     "inputs": [
         {
             "name": "input",
@@ -51,19 +55,22 @@ The hints file is a JSON file that describes how to shard the model. Example:
     "k_seq_len_idx": 0,
     "v_seq_len_idx": 0,
     "kv_rank": null,
-    "reduce_scatter_reduce_op": "max",
     "polygraphy_class": "ShardHints"
 }
 ```
 
-- `parallelism`: Type of parallelism (e.g., CP/DP/PP). Currently, only CP is supported
-- `group_size`: Number of GPUs model will be run on. 0 indiciates all available GPUs will run.
-- `root`: Root rank for collectives
-- `groups`: Indices of NCCL groups in which collective operations will run. A value of [] indicates collective operations will run on all ranks with no grouping.
+- `parallelism`: Type of parallelism: `CP` (context parallelism) or `TP` (tensor parallelism)
 - `attention_layers`: List of attention layer configs:
   - `q`: Name of the Q tensor
   - `gather_kv`: Whether to all-gather K/V
   - `gather_q`: Whether to all-gather Q
+  - `replace`: (Optional) What (if any) replacement should be performed on this attention layer
+- `dist_collectives`: Configuration of DistCollective ops.
+  - `group_size`: Number of GPUs model will be run on. 0 indicates all available GPUs will run.
+  - `root`: Root rank for collectives.
+  - `nb_rank`: Number of ranks for DistCollective op.
+  - `reduce_op`: Reduction operator to be used on reduce-scatter nodes.
+  - `groups`: Indices of NCCL groups in which collective operations will run. A value of [] indicates collective operations will run on all ranks with no grouping.
 - `inputs`: List of tensors that should be reduce-scattered.
   - `name`: Name of tensor.
   - `seq_len_idx`: Index of dimension that represents sequence length for this input tensor. A non-zero index will cause transpose tensors to be inserted before and after the DistCollective node to transpose the tensor to have sequence length be the first dimension.
@@ -75,7 +82,17 @@ The hints file is a JSON file that describes how to shard the model. Example:
 - `k_seq_len_idx`: Index of dimension that represents sequence length for all K tensor(s). A non-zero index will cause transpose tensors to be inserted before and after the DistCollective node to transpose the tensor to have sequence length be the first dimension.
 - `v_seq_len_idx`: Index of dimension that represents sequence length for all V tensor(s). A non-zero index will cause transpose tensors to be inserted before and after the DistCollective node to transpose the tensor to have sequence length be the first dimension.
 - `kv_rank`: Rank all K and V tensor(s). Used as a fallback if no dimension can be obtained from the model and `k_seq_len_idx` or `v_seq_len_idx` != 0.
-- `reduce_scatter_reduce_op`: Reduction operator to be used on reduce-scatter nodes.
+
+The `shard` tool also supports one type of replacement for attention: Fused. It can be selected by using `--cp-type fused` with `polygraphy template shard-hints`.
+
+The options for Fused are:
+
+- `is_causal`: Whether or not the attention is causal
+- `q_shuffle`: Transpose permutation to apply to Q tensor before attention
+- `k_shuffle`: Transpose permutation to apply to K tensor before attention
+- `v_shuffle`: Transpose permutation to apply to V tensor before attention
+- `nb_rank`: Number of ranks for Attention op.
+
 
 ## Usage
 

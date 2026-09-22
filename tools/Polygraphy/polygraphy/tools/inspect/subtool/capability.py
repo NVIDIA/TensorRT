@@ -86,14 +86,21 @@ def supports_model(path):
     _, network = trt_backend.create_network()
     parser = trt.OnnxParser(network, trt_backend.get_trt_logger())
 
-    try:
-        parser.supports_model
-    except AttributeError:
+    model_bytes = common_backend.bytes_from_path(path)
+    # `supports_model` was removed in TensorRT 11 in favor of `supports_model_v2`,
+    # which reports support per-subgraph via separate queries instead of returning
+    # the node lists directly. We reconstruct the same (indices, supported) mapping.
+    if hasattr(parser, "supports_model_v2"):
+        supported = parser.supports_model_v2(model_bytes, path)
+        nodelists = [
+            (parser.get_subgraph_nodes(index), parser.is_subgraph_supported(index))
+            for index in range(parser.num_subgraphs)
+        ]
+    elif hasattr(parser, "supports_model"):
+        supported, nodelists = parser.supports_model(model_bytes, path)
+    else:
         trt_util.fail_unavailable("supports_model in tensorrt.OnnxParser")
 
-    supported, nodelists = parser.supports_model(
-        common_backend.bytes_from_path(path), path
-    )
     return supported, nodelists, parser
 
 

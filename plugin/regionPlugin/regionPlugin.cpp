@@ -15,8 +15,11 @@
  * limitations under the License.
  */
 #include "regionPlugin.h"
+#include <algorithm>
+#include <limits>
 #include <memory>
 #include <string_view>
+#include <utility>
 
 namespace nvinfer1::plugin
 {
@@ -38,7 +41,10 @@ void safeFree(T* ptr)
 template <typename T>
 void allocateChunk(T*& ptr, int32_t count)
 {
-    ptr = static_cast<T*>(malloc(count * sizeof(T)));
+    PLUGIN_VALIDATE(count >= 0);
+    PLUGIN_VALIDATE(std::cmp_less_equal(count, std::numeric_limits<size_t>::max() / sizeof(T)));
+    ptr = count != 0 ? static_cast<T*>(malloc(static_cast<size_t>(count) * sizeof(T))) : nullptr;
+    PLUGIN_VALIDATE((ptr != nullptr) == (count != 0));
 }
 
 struct SoftmaxTreeDeleter
@@ -93,7 +99,16 @@ Region::Region(RegionParameters params, int32_t C, int32_t H, int32_t W)
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 Region::Region(void const* buffer, size_t length)
 {
-    char const *d = reinterpret_cast<char const*>(buffer), *a = d;
+    PLUGIN_VALIDATE(buffer != nullptr);
+    char const* d = reinterpret_cast<char const*>(buffer);
+    char const* a = d;
+
+    auto const ensureAvailable = [&](uint64_t bytes) {
+        PLUGIN_VALIDATE(d <= a + length);
+        PLUGIN_VALIDATE(static_cast<uint64_t>((a + length) - d) >= bytes);
+    };
+
+    ensureAvailable(6 * sizeof(int32_t) + 8 * sizeof(bool));
     C = read<int32_t>(d);
     H = read<int32_t>(d);
     W = read<int32_t>(d);
@@ -108,13 +123,23 @@ Region::Region(void const* buffer, size_t length)
     bool namePresent = read<bool>(d);
     bool groupSizePresent = read<bool>(d);
     bool groupOffsetPresent = read<bool>(d);
+
+    size_t const perNodeBytes
+        = (static_cast<size_t>(leafPresent) + parentPresent + childPresent + groupPresent) * sizeof(int32_t);
+    size_t const perGroupBytes = (static_cast<size_t>(groupSizePresent) + groupOffsetPresent) * sizeof(int32_t);
+
     if (softmaxTreePresent)
     {
-        softmaxTree* smTreeTemp;
+        softmaxTree* smTreeTemp = nullptr;
         // need to read each element individually
         allocateChunk(smTreeTemp, 1);
+        std::unique_ptr<softmaxTree, SoftmaxTreeDeleter> smTreeOwner(smTreeTemp);
+        *smTreeTemp = softmaxTree{};
 
+        ensureAvailable(sizeof(int32_t));
         smTreeTemp->n = read<int32_t>(d);
+        PLUGIN_VALIDATE(smTreeTemp->n >= 0);
+        ensureAvailable(static_cast<uint64_t>(smTreeTemp->n) * perNodeBytes);
 
         if (leafPresent)
         {
@@ -149,7 +174,7 @@ Region::Region(void const* buffer, size_t length)
             smTreeTemp->group = nullptr;
         }
 
-        for (int32_t i = 0; i < smTreeTemp->n; i++)
+        for (int32_t i = 0; perNodeBytes != 0 && i < smTreeTemp->n; i++)
         {
             if (leafPresent)
             {
@@ -171,7 +196,9 @@ Region::Region(void const* buffer, size_t length)
 
         if (namePresent)
         {
+            ensureAvailable(static_cast<uint64_t>(smTreeTemp->n) * 256 * sizeof(char));
             allocateChunk(smTreeTemp->name, smTreeTemp->n);
+            std::fill_n(smTreeTemp->name, smTreeTemp->n, nullptr);
         }
         else
         {
@@ -190,7 +217,10 @@ Region::Region(void const* buffer, size_t length)
             }
         }
 
+        ensureAvailable(sizeof(int32_t));
         smTreeTemp->groups = read<int32_t>(d);
+        PLUGIN_VALIDATE(smTreeTemp->groups >= 0);
+        ensureAvailable(static_cast<uint64_t>(smTreeTemp->groups) * perGroupBytes);
         if (groupSizePresent)
         {
             allocateChunk(smTreeTemp->groupSize, smTreeTemp->groups);
@@ -207,7 +237,7 @@ Region::Region(void const* buffer, size_t length)
         {
             smTreeTemp->groupOffset = nullptr;
         }
-        for (int32_t i = 0; i < smTreeTemp->groups; i++)
+        for (int32_t i = 0; perGroupBytes != 0 && i < smTreeTemp->groups; i++)
         {
             if (groupSizePresent)
             {
@@ -218,7 +248,7 @@ Region::Region(void const* buffer, size_t length)
                 smTreeTemp->groupOffset[i] = read<int32_t>(d);
             }
         }
-        smTree = std::shared_ptr<softmaxTree>(smTreeTemp, SoftmaxTreeDeleter());
+        smTree = std::move(smTreeOwner);
     }
     else
     {
@@ -319,7 +349,9 @@ void Region::serialize(void* buffer) const noexcept
     if (smTree)
     {
         write(d, smTree->n);
-        for (int32_t i = 0; i < smTree->n; i++)
+        bool const hasPerNodeData = smTree->leaf != nullptr || smTree->parent != nullptr || smTree->child != nullptr
+            || smTree->group != nullptr;
+        for (int32_t i = 0; hasPerNodeData && i < smTree->n; i++)
         {
             if (smTree->leaf)
             {
@@ -350,7 +382,8 @@ void Region::serialize(void* buffer) const noexcept
             }
         }
         write(d, smTree->groups);
-        for (int32_t i = 0; i < smTree->groups; i++)
+        bool const hasPerGroupData = smTree->groupSize != nullptr || smTree->groupOffset != nullptr;
+        for (int32_t i = 0; hasPerGroupData && i < smTree->groups; i++)
         {
             if (smTree->groupSize)
             {

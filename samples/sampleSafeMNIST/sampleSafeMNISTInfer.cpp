@@ -337,7 +337,9 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
 
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(nbThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], gieModelStream.data(), engineFileSize, *recorders[0], true),
+    auto const companionSoPath = samplesSafeCommon::resolveCompanionSoPath(args.engineFileName);
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], gieModelStream.data(), engineFileSize,
+                      companionSoPath ? companionSoPath->c_str() : nullptr, *recorders[0], true),
         *recorders[0]);
 
     for (int32_t i = 1; i < nbThreads; ++i)
@@ -447,7 +449,20 @@ int32_t main(int32_t argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    TestResult result = doInference(args) ? TestResult::kPASSED : TestResult::kFAILED;
+    TestResult result = TestResult::kPASSED;
+    try
+    {
+        if (!doInference(args))
+        {
+            result = TestResult::kFAILED;
+        }
+    }
+    catch (std::runtime_error& e)
+    {
+        SAFE_LOG << e.what() << std::endl;
+        result = TestResult::kFAILED;
+    }
+
     reportTestResult("TensorRT.sample_mnist_safe_infer", result, argc, argv);
 
     return EXIT_SUCCESS;

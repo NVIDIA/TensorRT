@@ -39,7 +39,7 @@ with reduced precision.
    contain NaN or infinity (see [Checking for Intermediate NaN or Infinities](../../../../examples/cli/run/07_checking_nan_inf)):
 
    ```bash
-   polygraphy run --onnxrt identity_fp16.onnx --onnx-outputs mark all --validate
+   polygraphy run --onnxrt identity_fp16.onnx --onnx-outputs '*' --validate
    ```
 
 ## See Also

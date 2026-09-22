@@ -85,6 +85,17 @@ class TestRunScript:
         assert args_util.run_script(script_add, 1) == 1
         assert args_util.run_script(script_add, 1, 2) == 3
 
+    def test_returns_object_defined_in_script(self):
+        # run_script must return the object the script defines under the returned name. This is a
+        # regression guard for Python 3.13, where a locals()-based implementation returned None
+        # because PEP 667 makes locals() yield a fresh snapshot on each call.
+        def script_func(script):
+            result_name = safe("result")
+            script.append_suffix(safe("{:} = {:}", inline(result_name), [1, 2, 3]))
+            return result_name
+
+        assert args_util.run_script(script_func) == [1, 2, 3]
+
 
 class TestParseNumBytes:
     def test_none(self):
@@ -113,3 +124,34 @@ class TestParseNumBytes:
             match=f"Could not convert {arg} to a number of bytes",
         ):
             args_util.parse_num_bytes(arg)
+
+
+class TestGetOutputs:
+    def _make_args(self, value):
+        class FakeArgs:
+            onnx_outputs = value
+
+        return FakeArgs()
+
+    def test_wildcard(self):
+        from polygraphy import constants
+
+        result = args_util.get_outputs(self._make_args(["*"]), "onnx_outputs")
+        assert result == constants.MARK_ALL
+
+    def test_mark_all_deprecated(self):
+        from polygraphy import constants
+
+        # "mark all" still works but is deprecated
+        result = args_util.get_outputs(self._make_args(["mark", "all"]), "onnx_outputs")
+        assert result == constants.MARK_ALL
+
+    def test_regular_outputs(self):
+        result = args_util.get_outputs(
+            self._make_args(["tensor_a", "tensor_b"]), "onnx_outputs"
+        )
+        assert result == ["tensor_a", "tensor_b"]
+
+    def test_none(self):
+        result = args_util.get_outputs(self._make_args(None), "onnx_outputs")
+        assert result is None

@@ -170,6 +170,12 @@ static auto const runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffe
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
 };
 
+static auto const runtime_set_dla_workspace_allocation_strategy
+    = [](IRuntime& self, DLAWorkspaceAllocationStrategy strategy) {
+          PY_ASSERT_RUNTIME_ERROR(
+              self.setDLAWorkspaceAllocationStrategy(strategy), "Failed to set the DLA workspace allocation strategy.");
+      };
+
 static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
     return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
 };
@@ -1561,6 +1567,12 @@ void bindCore(py::module& m)
             py::arg("stat") = EngineStat::kTOTAL_WEIGHTS_SIZE, py::call_guard<py::gil_scoped_release>{})
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
+    py::enum_<DLAWorkspaceAllocationStrategy>(m, "DLAWorkspaceAllocationStrategy", py::arithmetic{},
+        DLAWorkspaceAllocationStrategyDoc::kDESCRIPTION, py::module_local())
+        .value("DEFAULT", DLAWorkspaceAllocationStrategy::kDEFAULT, DLAWorkspaceAllocationStrategyDoc::kDEFAULT)
+        .value("SHARED_STATIC", DLAWorkspaceAllocationStrategy::kSHARED_STATIC,
+            DLAWorkspaceAllocationStrategyDoc::kSHARED_STATIC);
+
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);
 
@@ -1870,6 +1882,8 @@ void bindCore(py::module& m)
         .def("load_runtime", &IRuntime::loadRuntime, "path"_a, RuntimeDoc::load_runtime)
         .def_property(
             "engine_host_code_allowed", &IRuntime::getEngineHostCodeAllowed, &IRuntime::setEngineHostCodeAllowed)
+        .def_property("dla_workspace_allocation_strategy", &IRuntime::getDLAWorkspaceAllocationStrategy,
+            lambdas::runtime_set_dla_workspace_allocation_strategy)
         .def("__del__", &utils::doNothingDel<IRuntime>);
 
     // Refitter

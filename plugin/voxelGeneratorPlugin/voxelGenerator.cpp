@@ -133,7 +133,7 @@ nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(int32_t outputInde
 {
     try
     {
-        PLUGIN_VALIDATE(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
         auto batchSize = inputs[0].d[0];
         if (outputIndex == 0)
         {
@@ -171,9 +171,9 @@ bool VoxelGeneratorPlugin::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 3);
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 3);
         PluginTensorDesc const& in = inOut[pos];
         if (pos == 0) // PointCloud Array --- x, y, z, w
         {
@@ -209,10 +209,10 @@ void VoxelGeneratorPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc con
 {
     try
     {
-        PLUGIN_VALIDATE(in != nullptr);
-        PLUGIN_VALIDATE(out != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 3);
+        PLUGIN_ASSERT(in != nullptr);
+        PLUGIN_ASSERT(out != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 3);
 
         mPointFeatureNum = in[0].desc.dims.d[2];
         mGridXSize = npRound((mMaxXRange - mMinXRange) / mPillarXSize);
@@ -256,7 +256,7 @@ int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDes
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
 
         int32_t batchSize = inputDesc[0].dims.d[0];
         int32_t maxNumPoints = inputDesc[0].dims.d[1];
@@ -392,7 +392,7 @@ void VoxelGeneratorPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -512,7 +512,7 @@ void VoxelGeneratorPluginCreator::setPluginNamespace(char const* libNamespace) n
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

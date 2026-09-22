@@ -55,16 +55,10 @@ about TensorRT engines, i.e. plan files:
             Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
             Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
 
-        ---- 1 Layer(s) Per Profile ----
-        - Profile: 0
-            Layer 0    | node_of_Y [Op: Reformat]
-                {X [shape=(1, 2, -1, -1)]}
-                 -> {Y [shape=(1, 2, -1, -1)]}
-
-        - Profile: 1
-            Layer 0    | node_of_Y [profile 1] [Op: MyelinReformat]
-                {X [profile 1] [shape=(1, 2, -1, -1)]}
-                 -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
+        ---- 1 Layer(s) ----
+        Layer 0    | node_of_Y [Op: Reformat]
+            {X [dtype=float32, shape=(1, 2, -1, -1), Format: Float]}
+             -> {Y [dtype=float32, shape=(1, 2, -1, -1), Format: Float]}
     ```
 
     It is also possible to show more detailed layer information using `--show layers attrs`.
@@ -80,3 +74,18 @@ about TensorRT engines, i.e. plan files:
          -> {Y [dtype=float32, shape=(1, 2, -1, -1), Format: Float, min=0.42, max=0.72, avg=0.57]}
     ```
     <!-- Polygraphy Test: Ignore End -->
+
+3. Alternatively, use `--visual` to launch an interactive graph viewer in your browser:
+
+    <!-- Polygraphy Test: Ignore Start -->
+    ```bash
+    polygraphy inspect model dynamic_identity.engine --visual
+    ```
+    <!-- Polygraphy Test: Ignore End -->
+
+    This opens the engine as an interactive DAG. When the engine has multiple optimization
+    profiles (as in this example), a profile selector appears in the toolbar so you can
+    switch between them. Click any node to inspect its layer details — including tactic
+    information — in the panel on the right:
+
+    ![./visual_viewer.png](./visual_viewer.png)

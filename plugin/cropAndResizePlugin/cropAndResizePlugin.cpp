@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,11 +71,11 @@ int32_t CropAndResizeDynamicPlugin::getOutputShapes(DimsExprs const* inputs, int
 {
     try
     {
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(inputs[0].nbDims == 4);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(inputs[0].nbDims == 4);
 
         // 5D output (N, R, C, H, W)
         outputs[0].nbDims = 5;
@@ -99,7 +99,7 @@ int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, P
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         // Our plugin outputs only one tensor
         void* output = outputs[0];
@@ -184,11 +184,11 @@ int32_t CropAndResizeDynamicPlugin::getOutputDataTypes(
 {
     try
     {
-        PLUGIN_VALIDATE(inputTypes != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_ASSERT(inputTypes != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
         // One output
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(outputTypes != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(outputTypes != nullptr);
         outputTypes[0] = DataType::kFLOAT;
         return STATUS_SUCCESS;
     }
@@ -204,9 +204,9 @@ int32_t CropAndResizeDynamicPlugin::onShapeChange(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(inputs != nullptr);
 
         // Re-validate dimensions and update internal state if needed
         // Here we can update mDepth, mInputHeight, mInputWidth, mNumBoxes if they change
@@ -243,8 +243,8 @@ bool CropAndResizeDynamicPlugin::supportsFormatCombination(
     try
     {
         // 2 inputs, 1 outputs, so 3 input/output in total
-        PLUGIN_VALIDATE(0 <= pos && pos < 3);
-        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_ASSERT(0 <= pos && pos < 3);
+        PLUGIN_ASSERT(inOut != nullptr);
         auto const* in = inOut;
         auto const* out = inOut + nbInputs;
         bool const consistentFloatPrecision = (in[0].desc.type == in[pos].desc.type);
@@ -272,7 +272,7 @@ void CropAndResizeDynamicPlugin::setPluginNamespace(char const* libNamespace) no
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -287,8 +287,8 @@ int32_t CropAndResizeDynamicPlugin::configurePlugin(
     try
     {
         // Validate input/output counts and update internal state based on input dimensions
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
         mDepth = in[0].desc.dims.d[1];
         mInputHeight = in[0].desc.dims.d[2];
         mInputWidth = in[0].desc.dims.d[3];
@@ -380,7 +380,7 @@ void CropAndResizeDynamicPluginCreator::setPluginNamespace(char const* pluginNam
 {
     try
     {
-        PLUGIN_VALIDATE(pluginNamespace != nullptr);
+        PLUGIN_ASSERT(pluginNamespace != nullptr);
         mNamespace = pluginNamespace;
     }
     catch (std::exception const& e)

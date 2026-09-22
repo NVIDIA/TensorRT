@@ -28,6 +28,7 @@
 #include <iostream>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,9 +39,15 @@ namespace sample
 {
 using LibraryPtr = std::unique_ptr<samplesCommon::DynamicLibrary>;
 
+#if TRT_WINML
+std::string const TRT_NVINFER_NAME = "tensorrt_rtx";
+std::string const TRT_ONNXPARSER_NAME = "tensorrt_onnxparser_rtx";
+std::string const TRT_LIB_SUFFIX = "_" + std::to_string(NV_TENSORRT_MINOR);
+#else
 std::string const TRT_NVINFER_NAME = "nvinfer";
 std::string const TRT_ONNXPARSER_NAME = "nvonnxparser";
 std::string const TRT_LIB_SUFFIX = "";
+#endif
 
 #if !TRT_STATIC
 #if defined(_WIN32)
@@ -50,6 +57,8 @@ std::string const kNVINFER_LIBNAME = std::string(TRT_NVINFER_NAME) + std::string
     + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
 std::string const kNVINFER_SAFE_LIBNAME
     = std::string{"nvinfer_safe_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_SAFE_DEBUG_LIBNAME
+    = std::string{"nvinfer_safe_debug_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
 std::string const kNVONNXPARSER_LIBNAME = std::string(TRT_ONNXPARSER_NAME) + std::string{"_"}
     + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
 std::string const kNVINFER_LEAN_LIBNAME
@@ -61,6 +70,8 @@ std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."}
 std::string const kNVINFER_LIBNAME
     = std::string{"lib"} + std::string(TRT_NVINFER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_SAFE_LIBNAME = std::string{"libnvinfer_safe.so."} + std::to_string(NV_TENSORRT_MAJOR);
+std::string const kNVINFER_SAFE_DEBUG_LIBNAME
+    = std::string{"libnvinfer_safe_debug.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVONNXPARSER_LIBNAME
     = std::string{"lib"} + std::string(TRT_ONNXPARSER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LEAN_LIBNAME = std::string{"libnvinfer_lean.so."} + std::to_string(NV_TENSORRT_MAJOR);
@@ -80,7 +91,7 @@ bool initLibrary(LibraryPtr& libPtr, std::string const& libName, FetchPtrs fetch
     try
     {
         libPtr.reset(new samplesCommon::DynamicLibrary{libName});
-        fetchFunc(libPtr.get());
+        fetchFunc(*libPtr);
     }
     catch (std::exception const& e)
     {
@@ -110,10 +121,11 @@ namespace safe
 //! function pointers for safe TensorRT operations. It is used to set up the safe runtime
 //! environment for inference with safety-certified TensorRT engines.
 //!
+//! \param settings Safe runtime library selection settings
 //! \return true if the safe runtime library was successfully loaded and initialized,
 //!         false otherwise (e.g., in static builds or if library loading fails)
 //!
-bool initNvinferSafe();
+bool initNvinferSafe(SafeRuntimeSettings const& settings);
 
 //!
 //! \brief Create a safe TRT graph from serialized engine data
@@ -124,13 +136,16 @@ bool initNvinferSafe();
 //! \param graph: Pointer to the safe TRT graph to be created
 //! \param blob: Pointer to the serialized engine data
 //! \param size: Size of the serialized engine data
+//! \param companionSoPath: Path to the engine's companion library, or nullptr when it needs none
 //! \param recorder: Reference to the safe recorder
 //! \param useManaged: Flag indicating whether to use managed memory
 //! \param allocator: Pointer to the safe memory allocator
+//! \param settings: Safe runtime library selection settings
 //! \return Error code indicating the success or failure of the operation
 //!
 nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator);
+    nvinfer2::safe::AsciiChar const* companionSoPath, ISafeRecorder& recorder, bool useManaged,
+    ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings);
 
 //!
 //! \brief Destroy a safe TRT graph and release resources
@@ -139,9 +154,10 @@ nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void c
 //! the safe TRT graph after inference with safety-certified TensorRT engines.
 //!
 //! \param graph: Pointer to the safe TRT graph to be destroyed
+//! \param settings: Safe runtime library selection settings
 //! \return Error code indicating the success or failure of the operation
 //!
-nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph);
+nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, SafeRuntimeSettings const& settings);
 
 //!
 //! \brief Get the safe plugin registry for loading plugins
@@ -150,9 +166,11 @@ nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph);
 //! for loading plugins with safety-certified TensorRT engines.
 //!
 //! \param recorder: Reference to the safe recorder
+//! \param settings: Safe runtime library selection settings
 //! \return Pointer to the safe plugin registry
 //!
-nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(ISafeRecorder& recorder);
+nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(
+    ISafeRecorder& recorder, SafeRuntimeSettings const& settings);
 } // namespace safe
 #endif
 
@@ -164,12 +182,16 @@ struct InferenceEnvironmentBase
     InferenceEnvironmentBase(InferenceEnvironmentBase&& other) = delete;
     InferenceEnvironmentBase(BuildEnvironment& bEnv)
         : engine(std::move(bEnv.engine))
+        , companionSoPath(bEnv.companionSoPath)
         , safe(bEnv.engine.isSafe())
         , cmdline(bEnv.cmdline)
     {
     }
 
     LazilyDeserializedEngine engine;
+
+    //! Path to the engine's companion library, std::nullopt when the engine needs none.
+    std::optional<std::string> companionSoPath;
     std::unique_ptr<Profiler> profiler;
     std::vector<TrtDeviceBuffer>
         deviceMemory; //< Device memory used for inference when the allocation strategy is not static.
@@ -181,7 +203,7 @@ struct InferenceEnvironmentBase
     bool safe{false};
     std::string cmdline;
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !TRT_WINML
     //! Reference outputs for accuracy validation (tuner feature, Linux enterprise/auto-only).
     //! Map from tensor name to host buffer containing reference data.
     //! Guarded because MSVC cannot instantiate vector<unordered_map<string, unique_ptr<T>>>,
@@ -201,6 +223,12 @@ struct InferenceEnvironmentStd : public InferenceEnvironmentBase
         : InferenceEnvironmentBase(bEnv)
     {
     }
+#if TRT_WINML
+    //! Storage for IRuntimeConfig objects passed non-owningly to createExecutionContext.
+    //! Declared before contexts so it outlives them — the context references the config
+    //! and serializeRuntimeCache reaches the config via context->getRuntimeConfig() at end of run.
+    std::vector<std::unique_ptr<nvinfer1::IRuntimeConfig>> runtimeConfigs;
+#endif
     std::vector<std::unique_ptr<nvinfer1::IExecutionContext>> contexts;
     std::vector<std::unique_ptr<BindingsStd>> bindings;
 
@@ -227,11 +255,13 @@ struct InferenceEnvironmentSafe : public InferenceEnvironmentBase
     InferenceEnvironmentSafe() = delete;
     InferenceEnvironmentSafe(InferenceEnvironmentSafe const& other) = delete;
     InferenceEnvironmentSafe(InferenceEnvironmentSafe&& other) = delete;
-    InferenceEnvironmentSafe(BuildEnvironment& bEnv)
+    InferenceEnvironmentSafe(BuildEnvironment& bEnv, SafeRuntimeSettings settings)
         : InferenceEnvironmentBase(bEnv)
+        , safeRuntimeSettings(settings)
     {
     }
 
+    SafeRuntimeSettings safeRuntimeSettings;
     std::vector<std::unique_ptr<BindingsSafe>> bindings;
     //! deleters for aux. streams, per cloned graph
     std::vector<std::shared_ptr<std::nullptr_t>> mAuxStreamsDeleters;
@@ -249,6 +279,13 @@ inline nvinfer1::IExecutionContext* InferenceEnvironmentStd::getContext(int32_t 
 //!
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system);
 
+#if TRT_WINML
+//! \brief Drive JIT compilation for a deferred-deserialized engine without running inference.
+//! Creates a one-shot IExecutionContext (which forces JIT) and saves the runtime cache if
+//! --runtimeCacheFile was supplied via \p inference.
+//! \return true on success, false if context creation or cache serialization fails.
+bool populateRuntimeCacheForDeferredJit(nvinfer1::ICudaEngine& engine, InferenceOptions const& inference);
+#endif // TRT_WINML
 
 #if ENABLE_UNIFIED_BUILDER
 //!
@@ -273,7 +310,7 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys);
 bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& iEnv, int32_t device,
     std::vector<InferenceTrace>& trace, ReportingOptions const& reporting);
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !TRT_WINML
 //!
 //! \brief Load reference outputs from files into InferenceEnvironmentBase::refOutputsAll.
 //! \param pairIndex Index of the refPair to use (default 0 for backward compatibility).

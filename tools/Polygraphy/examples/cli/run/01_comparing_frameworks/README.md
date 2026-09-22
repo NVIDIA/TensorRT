@@ -52,12 +52,12 @@ ONNXRT, use one of the supported precision flags (e.g. `--tf32`, `--fp16`,`--int
 For example:
 
 ```bash
-polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
+polygraphy run dynamic_identity.onnx --trt --tf32 --onnxrt \
     --input-shapes X:[1,2,4,4]
 ```
 
 > :warning: Getting acceptable accuracy with INT8 precision typically requires an additional calibration step:
-  see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8)
+  see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
   and instructions on [how to do calibration](../../../../examples/cli/convert/01_int8_calibration_in_tensorrt)
   with Polygraphy on the command line.
 
@@ -97,10 +97,10 @@ then the `max` comparison will fail but the `elemwise` comparison may
 pass.
 
 Putting it all together, the below example runs a `median` comparison between
-TensorRT using FP16 and ONNX-Runtime, using absolute and relative tolerances of `0.001`:
+TensorRT using TF32 and ONNX-Runtime, using absolute and relative tolerances of `0.001`:
 
 ```bash
-polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
+polygraphy run dynamic_identity.onnx --trt --tf32 --onnxrt \
     --input-shapes X:[1,2,4,4] \
     --atol 0.001 --rtol 0.001 --check-error-stat median
 ```
@@ -113,20 +113,43 @@ polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
 When network outputs do not match, it can be useful to compare per-layer outputs
 to see where the error is introduced. To do so, you can use the `--trt-outputs`
 and `--onnx-outputs` options respectively. These options accept one or more
-output names as their arguments. The special value `mark all` indicates that all
-tensors in the model should be compared:
+output names as their arguments. Using `*` marks all tensors in the model as
+outputs:
 
 ```bash
  polygraphy run dynamic_identity.onnx --trt --onnxrt \
-     --trt-outputs mark all \
-     --onnx-outputs mark all
+     --trt-outputs '*' \
+     --onnx-outputs '*'
+```
+
+Both options support fnmatch wildcard patterns, so you can also select tensors
+by name pattern (e.g. `'inter*'` to match all tensors whose names start with
+`inter`):
+
+```bash
+polygraphy run dynamic_identity.onnx --trt --onnxrt \
+    --trt-outputs 'inter*' \
+    --onnx-outputs 'inter*'
+```
+
+You can also mark outputs selectively by node/layer type using
+`--onnx-outputs-by-type` / `--trt-outputs-by-type`. For ONNX, type names
+correspond to ONNX op types (e.g. `Conv`, `Add`); for TRT, they correspond to
+`trt.LayerType` enum values (e.g. `CONVOLUTION`, `ACTIVATION`). Matching is
+case-insensitive, and if a type is not found, Polygraphy will suggest similar
+names:
+
+```bash
+polygraphy run dynamic_identity.onnx --trt --onnxrt \
+    --trt-outputs-by-type IDENTITY \
+    --onnx-outputs-by-type Identity
 ```
 
 To find the first mismatched output more easily, you can use the `--fail-fast`
 option which will cause the tool to exit after the first mismatch between
 outputs.
 
-Note that use of `--trt-outputs mark all` can sometimes perturb the generated
+Note that use of `--trt-outputs '*'` can sometimes perturb the generated
 engine due to differences in timing, layer fusion choices, and format
 constraints, which can hide the failure.  In that case, you may have to use a
 more sophisticated approach to bisect the failing model and generate a reduced

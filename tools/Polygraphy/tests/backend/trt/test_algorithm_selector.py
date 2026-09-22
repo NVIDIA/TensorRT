@@ -19,7 +19,7 @@ from collections import namedtuple
 
 import pytest
 import tensorrt as trt
-from polygraphy import config, util
+from polygraphy import config, mod, util
 from polygraphy.backend.trt import (
     Algorithm,
     TacticRecorder,
@@ -31,7 +31,17 @@ from polygraphy.exception import PolygraphyException
 
 # Skip all tests in this file if TensorRT-RTX is enabled
 if config.USE_TENSORRT_RTX:
-    pytest.skip("Algorithm selector tests are not compatible with TensorRT-RTX", allow_module_level=True)
+    pytest.skip(
+        "Algorithm selector tests are not compatible with TensorRT-RTX",
+        allow_module_level=True,
+    )
+
+# The algorithm selector API (IAlgorithmSelector) was removed in TensorRT 11.
+if mod.version(trt.__version__) >= mod.version("11.0"):
+    pytest.skip(
+        "Algorithm selector API was removed in TensorRT 11",
+        allow_module_level=True,
+    )
 
 
 FakeAlgorithmContext = namedtuple(

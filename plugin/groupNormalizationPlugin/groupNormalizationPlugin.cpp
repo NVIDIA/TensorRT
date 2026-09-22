@@ -81,8 +81,8 @@ nvinfer1::DimsExprs GroupNormalizationPlugin::getOutputDimensions(
     try
     {
         // Input (from previous layer), scale and bias are the three inputs to the plugin.
-        PLUGIN_VALIDATE(nbInputs == 3);
-        PLUGIN_VALIDATE(index == 0);
+        PLUGIN_ASSERT(nbInputs == 3);
+        PLUGIN_ASSERT(index == 0);
         return inputs[0];
     }
     catch (std::exception const& e)
@@ -100,7 +100,7 @@ void GroupNormalizationPlugin::attachToContext(
         std::string kFULL_NAME = std::string(kGROUP_NORM_NAME) + ", version: " + std::string(kGROUP_NORM_VERSION);
         mCudnnWrapper = createPluginCudnnWrapper(gpuAllocator, kFULL_NAME.c_str());
         mCudnnHandle = mCudnnWrapper->getCudnnHandle();
-        PLUGIN_VALIDATE(mCudnnHandle);
+        PLUGIN_ASSERT(mCudnnHandle);
         PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnCreateTensorDescriptor(&mTensorDesc));
         PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnCreateTensorDescriptor(&mBNTensorDesc));
     }
@@ -130,12 +130,12 @@ int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inpu
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
-        PLUGIN_VALIDATE(mBnScales != nullptr && mBnScales->mPtr != nullptr);
-        PLUGIN_VALIDATE(mBnBias != nullptr && mBnBias->mPtr != nullptr);
-        PLUGIN_VALIDATE(mCudnnHandle != nullptr);
-        PLUGIN_VALIDATE(mTensorDesc != nullptr);
-        PLUGIN_VALIDATE(mBNTensorDesc != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(mBnScales != nullptr && mBnScales->mPtr != nullptr);
+        PLUGIN_ASSERT(mBnBias != nullptr && mBnBias->mPtr != nullptr);
+        PLUGIN_ASSERT(mCudnnHandle != nullptr);
+        PLUGIN_ASSERT(mTensorDesc != nullptr);
+        PLUGIN_ASSERT(mBNTensorDesc != nullptr);
     }
     catch (std::exception const& e)
     {
@@ -198,9 +198,9 @@ bool GroupNormalizationPlugin::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE(pos < nbInputs + nbOutputs);
-        PLUGIN_VALIDATE(pos >= 0);
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT(pos < nbInputs + nbOutputs);
+        PLUGIN_ASSERT(pos >= 0);
         return ((inOut[pos].type == nvinfer1::DataType::kFLOAT) && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR
             && inOut[pos].type == inOut[0].type);
     }
@@ -247,10 +247,10 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
 {
     try
     {
-        PLUGIN_VALIDATE(in != nullptr);
-        PLUGIN_VALIDATE(out != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 3);
-        PLUGIN_VALIDATE(nbOutputs == getNbOutputs());
+        PLUGIN_ASSERT(in != nullptr);
+        PLUGIN_ASSERT(out != nullptr);
+        PLUGIN_ASSERT(nbInputs == 3);
+        PLUGIN_ASSERT(nbOutputs == getNbOutputs());
 
         nvinfer1::Dims inputDims = in[0].desc.dims;
         int32_t const batchSize = inputDims.d[0];
@@ -271,7 +271,7 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
         // Allocate scale/bias tensors needed for cudnnBatchNorm.
         mNbScaleBias = batchSize * mNbGroups;
         auto allocScaleBias = [this](std::shared_ptr<CudaBind<float>>& buf, float value) {
-            PLUGIN_VALIDATE(mNbScaleBias > 0);
+            PLUGIN_ASSERT(mNbScaleBias > 0);
             if (!buf || !buf->mPtr || buf->mSize != mNbScaleBias)
             {
                 // Allocate device memory.
@@ -334,7 +334,7 @@ void GroupNormalizationPlugin::setPluginNamespace(char const* libNamespace) noex
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -382,7 +382,7 @@ void GroupNormalizationPluginCreator::setPluginNamespace(char const* libNamespac
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

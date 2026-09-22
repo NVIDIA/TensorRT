@@ -7,11 +7,12 @@ in addition to NumPy arrays. When PyTorch tensors are provided in the inputs, th
 will return the outputs as PyTorch tensors as well. This can be especially useful in
 cases where PyTorch supports a data type that is not supported by NumPy, such as BFloat16.
 
-Polygraphy's included TensorRT `Calibrator` can also accept PyTorch tensors directly.
+Polygraphy's included TensorRT `Calibrator` can also accept PyTorch tensors directly; see the
+[INT8 Calibration In TensorRT](../04_int8_calibration_in_tensorrt/) example for details.
 
 This example uses PyTorch tensors on the GPU where possible (i.e. if a GPU-enabled version
 of PyTorch is installed). When the tensors already reside on GPU memory, no additional copies
-are required in the runner/calibrator.
+are required in the runner.
 
 ## Running The Example
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Polygraphy"
+  short_description: "Prepare Polygraphy release merge requests"
+  default_prompt: "Use $release-polygraphy to prepare a new Polygraphy release and open a merge request to develop."

@@ -183,15 +183,51 @@ class Lint(Tool):
 
             # Update the input metadata of the singleton graph so that it can be used for inference
             # NOTE: nodes can treat the same tensor as two or more inputs, but a graph should be defined with uniquely named value infos.
-            singleton_input_dict = {
-                inp.name: inp.to_variable(
-                    shape=self.cache[inp.name].shape,
-                    dtype=self.cache[inp.name].dtype,
-                )
-                for inp in singleton.inputs
-                if isinstance(inp, gs.Variable)
-            }
+            singleton_input_dict = {}
+            for inp in singleton.inputs:
+                if isinstance(inp, gs.Variable):
+                    if inp.name in self.cache:
+                        cache_val = self.cache[inp.name]
+                        if isinstance(cache_val, list):
+                            # For sequence inputs, construct a minimal Variable without dtype/shape
+                            singleton_input_dict[inp.name] = gs.Variable(name=inp.name)
+                        else:
+                            singleton_input_dict[inp.name] = inp.to_variable(
+                                shape=cache_val.shape,
+                                dtype=cache_val.dtype,
+                            )
+
+            # Create a copy of the node to avoid modifying the original graph's node
+            # and to ensure the node uses the new input variables created above.
+            # We also need to copy outputs to avoid modifying the original tensors' producers.
+            new_node_inputs = []
+            for inp in node.inputs:
+                if isinstance(inp, gs.Variable) and inp.name in singleton_input_dict:
+                    new_node_inputs.append(singleton_input_dict[inp.name])
+                else:
+                    new_node_inputs.append(inp)
+
+            new_node_outputs = []
+            for out in node.outputs:
+                if isinstance(out, gs.Variable):
+                    new_node_outputs.append(
+                        gs.Variable(name=out.name, dtype=out.dtype, shape=out.shape)
+                    )
+                else:
+                    new_node_outputs.append(out)
+
+            new_node = gs.Node(
+                op=node.op,
+                name=node.name,
+                attrs=node.attrs,
+                domain=node.domain,
+                inputs=new_node_inputs,
+                outputs=new_node_outputs,
+            )
+
+            singleton.nodes = [new_node]
             singleton.inputs = list(singleton_input_dict.values())
+            singleton.outputs = new_node_outputs
 
             return singleton
 
@@ -326,7 +362,7 @@ class Lint(Tool):
             1. updates the passing and failing nodes in the summary dictionary `self.summary`.
             The `node_name` is added to the `passing` or `failing` list based on the `level` and `message`.
                 If `node_name` is not None, the following logic is used to determine if the node is passing or failing:
-                    - If `message` is None, the node is marked as passing, irrespecitive of the `level` if that node isn't already
+                    - If `message` is None, the node is marked as passing, irrespective of the `level` if that node isn't already
                     in the failing set.
                     - If `message` is not None, and `level` is `Lint.Level.EXCEPTION`, the node is marked as failing,
                     and removed from the passing set if exists.
@@ -589,7 +625,7 @@ class Lint(Tool):
             Node-level specification errors are caught and ignored, as they will be caught by the linting process incrementally.
 
             Performing this for correct ONNX specifications in the graph-level is important as a pre-linting step
-            before checking correctness of each node seperately.
+            before checking correctness of each node separately.
             For example, if an ONNX Graph with duplicated inputs is passed, this will not be caught when linting at the node-level.
 
             The checks performed are:
@@ -644,56 +680,86 @@ class Lint(Tool):
             # The stdout redirector code was generalized from a post on Eli Bendersky's website.
             # The original code for POSIX-specific systems can be found at https://eli.thegreenplace.net/2015/redirecting-all-kinds-of-stdout-in-python/.
 
+            ENCODING = "utf-16-le" if os.name == "nt" else "utf-8"
+
             @contextlib.contextmanager
-            def stderr_redirector(stream):
-                # The original fd stderr points to. Usually 2 on POSIX systems.
-                original_stderr_fd = sys.stderr.fileno()
+            def capture_c_stream(stream_name, capture_buffer):
+                is_stdout = stream_name == "stdout"
+                sys_stream = sys.stdout if is_stdout else sys.stderr
 
-                def _redirect_stderr(to_fd):
-                    """Redirect stderr to the given file descriptor."""
-                    # Flush and close sys.stderr - also closes the file descriptor
-                    sys.stderr.close()
-                    # Make original_stderr_fd point to the same file as to_fd
-                    os.dup2(to_fd, original_stderr_fd)
-                    # Create a new sys.stderr that points to the redirected fd
-                    sys.stderr = io.TextIOWrapper(os.fdopen(original_stderr_fd, "wb"))
-
-                # Save a copy of the original stderr fd in saved_stderr_fd
-                saved_stderr_fd = os.dup(original_stderr_fd)
+                # Check if the stream has a fileno() method (it might not in test environments)
                 try:
-                    # Create a temporary file and redirect stderr to it
+                    original_fd = sys_stream.fileno()
+                except (io.UnsupportedOperation, AttributeError):
+                    # Fallback to contextlib.redirect_stdout/stderr when fileno() is not available
+                    # This happens in test environments where stdout/stderr might be a StringIO
+                    # Convert BytesIO to TextIOWrapper for redirect_stdout/stderr.
+                    # Use the same encoding that will later be used to decode the captured buffer.
+                    text_stream = io.TextIOWrapper(
+                        capture_buffer, encoding=ENCODING, write_through=True
+                    )
+                    redirector = (
+                        contextlib.redirect_stdout
+                        if is_stdout
+                        else contextlib.redirect_stderr
+                    )
+                    try:
+                        with redirector(text_stream):
+                            yield
+                    finally:
+                        # Ensure the stream is flushed
+                        text_stream.flush()
+                        # Detach the buffer to prevent TextIOWrapper from closing the underlying BytesIO
+                        text_stream.detach()
+                    return
+
+                # Save a copy of the original fd
+                saved_fd = os.dup(original_fd)
+                try:
+                    # Flush the stream to ensure any pending data is written before we redirect
+                    sys_stream.flush()
+
+                    # Create a temporary file and redirect stream to it
                     tfile = tempfile.TemporaryFile(mode="w+b")
-                    _redirect_stderr(tfile.fileno())
-                    # Yield to caller, then redirect stderr back to the saved fd
-                    yield
-                    _redirect_stderr(saved_stderr_fd)
-                    # Copy contents of temporary file to the given stream
+                    # Redirect original_fd to point to the temporary file
+                    os.dup2(tfile.fileno(), original_fd)
+
+                    try:
+                        # Yield to caller
+                        yield
+                    finally:
+                        # Flush again to capture any pending data
+                        sys_stream.flush()
+                        # Restore original_fd to point to the saved fd
+                        os.dup2(saved_fd, original_fd)
+
+                    # Copy contents of temporary file to the given buffer
                     tfile.flush()
                     tfile.seek(0, io.SEEK_SET)
-                    stream.write(tfile.read())
-                finally:
+                    capture_buffer.write(tfile.read())
                     tfile.close()
-                    os.close(saved_stderr_fd)
+                finally:
+                    os.close(saved_fd)
 
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
-                captured_stdout = io.StringIO()
+                captured_stdout = io.BytesIO()
                 captured_stderr = io.BytesIO()
                 captured_exception = None
                 result = None
-                with contextlib.redirect_stdout(captured_stdout), stderr_redirector(
-                    captured_stderr
+                with capture_c_stream("stdout", captured_stdout), capture_c_stream(
+                    "stderr", captured_stderr
                 ):
                     try:
                         # Execute the function
                         result = func(*args, **kwargs)
                     except Exception as err:  # pylint: disable=broad-except
                         captured_exception = err
-                UTF_TYPE = "utf-16-le" if os.name == "nt" else "utf-8"
+
                 stderr_msg = captured_stderr.getvalue().decode(
-                    UTF_TYPE
+                    ENCODING
                 )  # platform-dependent
-                stdout_msg = captured_stdout.getvalue()
+                stdout_msg = captured_stdout.getvalue().decode(ENCODING)
                 return (result, captured_exception, stderr_msg, stdout_msg)
 
             return wrapper
@@ -824,7 +890,7 @@ class Lint(Tool):
         user_input_metadata = self.arg_groups[ModelArgs].input_shapes
         if user_input_metadata:
             graph = tools_util.override_input_shapes(graph, user_input_metadata)
-        G_LOGGER.verbose("ONNX Model loaded into linter succesfully.")
+        G_LOGGER.verbose("ONNX Model loaded into linter successfully.")
         # rename any nodes with empty names
         _handle_empty_names(graph)
 
@@ -897,27 +963,32 @@ class Lint(Tool):
                     )
                     # NOTE: we ignore stdout and stderr as it contains info from polygraphy not relevant to linting.
                     err_str = str(exception) if exception else ""
+                    level = Lint.Level.EXCEPTION
+                    TYPEINFO_ERR_SUBSTR = "does not have type information"
+
                     if any(
-                        [
-                            substr in err_str
-                            for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS
-                        ]
+                        substr in err_str for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS
                     ):
-                        self.report.add(
-                            level=Lint.Level.WARNING,
-                            source=Lint.Source.ONNXRUNTIME,
-                            message=err_str,
-                            node_name=g.name,
-                            op=g.nodes[0].op,
+                        level = Lint.Level.WARNING
+                    elif TYPEINFO_ERR_SUBSTR in err_str:
+                        # If this message is due to sequence inputs, suppress it entirely
+                        # Detect if this node has sequence inputs based on cached values
+                        has_sequence_input = any(
+                            isinstance(lcm.cache.get(inp.name, None), list)
+                            for inp in g.inputs
+                            if isinstance(inp, gs.Variable)
                         )
-                    else:
-                        self.report.add(
-                            level=Lint.Level.EXCEPTION,
-                            source=Lint.Source.ONNXRUNTIME,
-                            message=err_str,
-                            node_name=g.name,
-                            op=g.nodes[0].op,
-                        )
+                        # Downgrade specific ORT message about missing type info to INFO in case of sequence inputs
+                        if has_sequence_input:
+                            level = Lint.Level.INFO
+
+                    self.report.add(
+                        level=level,
+                        source=Lint.Source.ONNXRUNTIME,
+                        message=err_str,
+                        node_name=g.name,
+                        op=g.nodes[0].op,
+                    )
 
                 # update : cache new outputs if any, and remove stale tensors from cache.
                 lcm.update(inference_output)

@@ -5,7 +5,7 @@
 TensorRT can often be used to run models trained in FP32 using lower-precision
 implementations (in particular TF32 and FP16) with little to no additional
 effort needed.  Note this generally _isn't_ the case when using INT8, which
-requires extra steps as described [here](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8)
+requires extra steps as described [here](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
 to achieve acceptable accuracy.
 
 You can easily check whether the generated engine satisfies accuracy

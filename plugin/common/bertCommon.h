@@ -85,18 +85,6 @@ constexpr size_t packedMaskSize384 = xmmasM384 * threadsPerCta384;
 
 namespace nvinfer1
 {
-namespace pluginInternal
-{
-template <typename T>
-struct CudaDeleter
-{
-    void operator()(T* buf)
-    {
-        PLUGIN_CUASSERT(cudaFree(buf));
-    }
-};
-
-} // namespace pluginInternal
 namespace plugin
 {
 
@@ -344,7 +332,7 @@ struct CublasConfigHelper
 };
 
 template <typename T>
-using cuda_unique_ptr = std::unique_ptr<T, pluginInternal::CudaDeleter<T>>;
+using cuda_unique_ptr = std::unique_ptr<T, pluginInternal::CudaDeleter>;
 
 template <typename T>
 using cuda_shared_ptr = std::shared_ptr<T>;
@@ -352,7 +340,7 @@ using cuda_shared_ptr = std::shared_ptr<T>;
 template <typename T>
 void make_cuda_shared(cuda_shared_ptr<T>& ptr, void* cudaMem)
 {
-    ptr.reset(static_cast<T*>(cudaMem), pluginInternal::CudaDeleter<T>());
+    ptr.reset(static_cast<T*>(cudaMem), pluginInternal::CudaDeleter());
 }
 
 struct WeightsWithOwnership : public nvinfer1::Weights

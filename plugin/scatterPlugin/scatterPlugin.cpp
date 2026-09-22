@@ -130,7 +130,7 @@ int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
 int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
         && workspace != nullptr);
 
     int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS];

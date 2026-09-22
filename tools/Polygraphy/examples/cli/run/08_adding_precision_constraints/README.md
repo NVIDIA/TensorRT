@@ -3,7 +3,7 @@
 ## Introduction
 
 When a model trained in FP32 is used to build a TensorRT engine that leverages
-[reduced precision optimizations](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#reduced-precision),
+[reduced precision optimizations](https://docs.nvidia.com/deeplearning/tensorrt/10.x.x/inference-library/precision-control.html),
 certain layers in the model may need to be constrained to run in FP32 to
 preserve acceptable accuracy.
 
@@ -95,7 +95,7 @@ as a part of which you can set layer precisions.
 
 The below section assumes you have read through the example on
 [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
-and have a basic understanding of how to use the [TensorRT Python API](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/index.html).
+and have a basic understanding of how to use the [TensorRT Python API](https://docs.nvidia.com/deeplearning/tensorrt/10.x.x/_static/python-api/index.html).
 
 First, run ONNX-Runtime on the model to generate reference inputs and golden outputs:
 
@@ -135,4 +135,4 @@ polygraphy run constrained_network.py --precision-constraints prefer \
   reduced precision optimizations using Polygraphy.
 * [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually) for
   instructions on how to create network script templates.
-* [TensorRT Python API Reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/index.html)
+* [TensorRT Python API Reference](https://docs.nvidia.com/deeplearning/tensorrt/10.x.x/_static/python-api/index.html)

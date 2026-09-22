@@ -172,7 +172,7 @@ int32_t ModulatedDeformableConvPluginDynamicLegacy::enqueue(nvinfer1::PluginTens
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
             && workSpace != nullptr);
 
         int32_t batch = inputDesc[0].dims.d[0];
@@ -274,7 +274,7 @@ void ModulatedDeformableConvPluginDynamicLegacy::attachToContext(
     {
         mCublasWrapper = createPluginCublasWrapper(gpuAllocator);
         mCublasHandle = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(mCublasHandle);
+        PLUGIN_ASSERT(mCublasHandle);
     }
     catch (std::exception const& e)
     {

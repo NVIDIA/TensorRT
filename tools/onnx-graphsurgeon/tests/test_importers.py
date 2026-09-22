@@ -25,8 +25,10 @@ import pytest
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable, SparseValues
 from onnx_graphsurgeon.ir.function import Function
+from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.logger import G_LOGGER
+from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 
 from onnx_models import (
     dim_param_model,
@@ -64,6 +66,29 @@ class TestOnnxImporter(object):
         assert type(tensor) == Variable
         assert tensor.name == name
         assert tensor.dtype == expected_type
+        assert tuple(tensor.shape) == shape
+
+    def test_import_constant_tensor_rejects_unknown_dtype(self):
+        onnx_tensor = onnx.helper.make_tensor(
+            "test_unknown", onnx.TensorProto.FLOAT, [2], [1.0, 2.0]
+        )
+        onnx_tensor.data_type = 999
+
+        with pytest.raises(OnnxGraphSurgeonException, match="Unsupported type"):
+            OnnxImporter.import_tensor(onnx_tensor)
+
+    def test_import_variable_tensor_preserves_unknown_dtype(self):
+        name = "test_unknown"
+        shape = (1, 2)
+        onnx_tensor = onnx.helper.make_tensor_value_info(
+            name, onnx.TensorProto.FLOAT, shape
+        )
+        onnx_tensor.type.tensor_type.elem_type = 999
+
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tensor.name == name
+        assert tensor.dtype == 999
         assert tuple(tensor.shape) == shape
 
     def test_import_constant_tensor(self):
@@ -114,6 +139,18 @@ class TestOnnxImporter(object):
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tuple(tensor.shape) == shape
+
+    @pytest.mark.parametrize("attr_type", ["STRING", "STRINGS"])
+    def test_import_node_rejects_non_utf8_strings(self, attr_type):
+        raw = b"\xff\xfe\x00not-utf8"
+        onnx_node = onnx.helper.make_node("Test", ["x"], ["y"])
+        value = raw if attr_type == "STRING" else [raw, b"variable"]
+        onnx_node.attribute.append(onnx.helper.make_attribute("bad_attr", value))
+
+        with pytest.raises(OnnxGraphSurgeonException, match="bad_attr"):
+            OnnxImporter.import_node(
+                onnx_node, OrderedDict(), OrderedDict(), opset=11, import_domains=None
+            )
 
     # TODO: Test all attribute types - missing graph
     def test_import_node(self):
@@ -217,6 +254,28 @@ class TestOnnxImporter(object):
         assert sorted(outputs) == sorted([t.name for t in func.outputs])
         assert sorted([n.op_type for n in nodes]) == sorted([n.op for n in func.nodes])
         assert attribute_protos[0].i == func.attrs[attribute_protos[0].name]
+
+    # A function attribute may have a GRAPH-typed default value.
+    def test_import_function_graph_attr_default(self):
+        subgraph = onnx.helper.make_graph(
+            [onnx.helper.make_node("Identity", ["A"], ["B"])], "subgraph", [], []
+        )
+        onnx_function = onnx.helper.make_function(
+            "com.test",
+            "Test",
+            ["X"],
+            ["Y"],
+            [onnx.helper.make_node("Identity", ["X"], ["Y"])],
+            [onnx.helper.make_operatorsetid("ai.onnx", 18)],
+            attribute_protos=[onnx.helper.make_attribute("body", subgraph)],
+        )
+
+        func = OnnxImporter.import_function(onnx_function)
+
+        body = func.attrs["body"]
+        assert isinstance(body, Graph)
+        assert body.name == "subgraph"
+        assert [node.op for node in body.nodes] == ["Identity"]
 
     @pytest.mark.parametrize(
         "model",
@@ -352,6 +411,31 @@ class TestOnnxImporter(object):
             and type(sparse_tensor._values) == SparseValues
         )
         assert (tensors["w_sparse"]._values.load() == ref_value).all()
+
+    @pytest.mark.parametrize(
+        "indices, index_shape, dense_shape",
+        [
+            ([999], [1], [2, 2]),
+            ([-1], [1], [2, 2]),
+            ([1, 2], [1, 2], [2, 2]),
+        ],
+    )
+    def test_import_sparse_tensor_rejects_out_of_bounds_indices(
+        self, indices, index_shape, dense_shape
+    ):
+        values = onnx.helper.make_tensor(
+            "w_sparse", onnx.TensorProto.FLOAT, [1], [1.0]
+        )
+        indices_tensor = onnx.helper.make_tensor(
+            "indices", onnx.TensorProto.INT64, index_shape, indices
+        )
+        sparse_tensor = onnx.helper.make_sparse_tensor(
+            values, indices_tensor, dense_shape
+        )
+
+        tensor = OnnxImporter.import_tensor(sparse_tensor)
+        with pytest.raises(OnnxGraphSurgeonException, match="out of bounds"):
+            _ = tensor.values
 
     def test_import_fp4_tensor(self):
         name = "test_fp4"

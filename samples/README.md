@@ -30,12 +30,7 @@
 | [cute_dsl_plugin](python/cute_dsl_plugin) | Python | INetwork | Python-based TRT plugin for RMSNorm with a CuteDSL kernel |
 | [attention_mdtrt](python/attention_mdtrt) | Python | ONNX | Multi-device attention inference with MPI and NCCL |
 
-### 3. Application Samples
-| Sample | Language | Format | Description |
-|---|---|---|---|
-| [detectron2](python/detectron2) | Python | ONNX | Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT |
-
-### 4. Safety Samples
+### 3. Safety Samples
 | Sample | Language | Format | Description |
 |---|---|---|---|
 | [sampleSafeMNIST](sampleSafeMNIST) | C++ | ONNX | Build a Safety Engine for MNIST |
@@ -54,7 +49,7 @@ Many samples require the TensorRT sample data package. If not already mounted un
 
 2. Extract and set up the data:
     ```bash
-    unzip tensorrt_sample_data_xxx.zip
+    unzip tensorrt_sample_data_*.zip
     mkdir -p /usr/src/tensorrt/data
     cp -r tensorrt_sample_data_*/* /usr/src/tensorrt/data/
     export TRT_DATADIR=/usr/src/tensorrt/data

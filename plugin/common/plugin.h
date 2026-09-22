@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,14 +20,18 @@
 #include "common/checkMacrosPlugin.h"
 #include "cublasWrapper.h"
 #include "cudnnWrapper.h"
+#include <concepts>
 #include <cstring>
 #include <cuda_runtime.h>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 // Enumerator for status
@@ -82,6 +86,16 @@ protected:
 std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> createPluginCudnnWrapper(
     void* executionContextIdentifier, char const* callerPluginName);
 std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> createPluginCublasWrapper(void* executionContextIdentifier);
+
+//! Deleter that releases device memory allocated with cudaMalloc.
+struct CudaDeleter
+{
+    //! Frees \p buf.
+    void operator()(void* buf)
+    {
+        PLUGIN_CUASSERT(cudaFree(buf));
+    }
+};
 } // namespace pluginInternal
 
 namespace plugin
@@ -165,6 +179,30 @@ struct CudaBind
         }
     }
 };
+
+//! Owns \p T in device memory. Unlike CudaBind, this is movable. Use UniqueDevicePtr<T[]> for arrays.
+template <typename T>
+using UniqueDevicePtr = std::unique_ptr<T, pluginInternal::CudaDeleter>;
+
+//! \return an uninitialized device array of \p count elements, e.g. makeUniqueDevice<float[]>(42).
+template <typename T>
+requires(std::is_unbounded_array_v<T>) [[nodiscard]] UniqueDevicePtr<T> makeUniqueDevice(size_t count)
+{
+    void* ptr{nullptr};
+    PLUGIN_CUASSERT(cudaMalloc(&ptr, count * sizeof(std::remove_extent_t<T>)));
+    return UniqueDevicePtr<T>{static_cast<std::remove_extent_t<T>*>(ptr)};
+}
+
+//! \return a device array holding the size and values of \p host.
+template <typename T, std::ranges::contiguous_range R>
+requires(std::is_unbounded_array_v<T>&& std::same_as<std::remove_extent_t<T>, std::ranges::range_value_t<R>>)
+    [[nodiscard]] UniqueDevicePtr<T> makeUniqueDevice(R const& host)
+{
+    auto const hostSpan = std::span<std::remove_extent_t<T> const>(host);
+    auto device = makeUniqueDevice<T>(hostSpan.size());
+    PLUGIN_CUASSERT(cudaMemcpy(device.get(), hostSpan.data(), hostSpan.size_bytes(), cudaMemcpyHostToDevice));
+    return device;
+}
 
 // Convert a 64-bit dimension to a 32-bit dimension.
 // Throw exception if it doesn't fit.

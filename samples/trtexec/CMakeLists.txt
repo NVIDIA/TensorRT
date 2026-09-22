@@ -22,17 +22,26 @@ endif()
 
 # Windows-specific configuration for long path support
 if(MSVC)
-    # For long path support to work on Windows, users must 
+    # For long path support to work on Windows, users must
     # additionally enable a system-level setting.
     # Adding manifest as a source file works on CMake 3.4+.
-    target_sources(trtexec PRIVATE trtexec.manifest)
+    if(TRT_IS_LINUX_TO_WINDOWS_CROSS_COMPILATION)
+        # Remove all content in the manifest file before the <?xml ...?> tag
+        # to ensure lld-link is able to parse the file.
+        file(READ trtexec.manifest trtexec_manifest_content)
+        string(REGEX REPLACE "<!--.*-->\n\n" "" trtexec_manifest_content "${trtexec_manifest_content}")
+        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/trtexec.manifest "${trtexec_manifest_content}")
+
+        target_sources(trtexec PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/trtexec.manifest)
+    else()
+        target_sources(trtexec PRIVATE trtexec.manifest)
+    endif()
 endif()
 
 installLibraries(
     TARGETS trtexec
     OPTIONAL
     COMPONENT external
-    EXPORT TensorRT
 )
 
 # When statically linked, trtexec requires the plugins library.

@@ -66,6 +66,17 @@ class TestScript:
         ex_out = f"Dummy({expected}, x={expected})"
         assert out.unwrap() == ex_out
 
+    def test_invoke_rejects_args_without_valid_repr(self):
+        class NoValidRepr:
+            def __repr__(self):
+                return "<NoValidRepr: 2>"
+
+        with pytest.raises(
+            PolygraphyInternalException,
+            match="Could not generate valid Python for: Dummy",
+        ):
+            make_invocable("Dummy", x=NoValidRepr())
+
     def test_invoke_none_args(self):
         assert make_invocable("Dummy", None).unwrap() == "Dummy(None)"
         assert make_invocable("Dummy", x=None).unwrap() == "Dummy()"
@@ -95,3 +106,41 @@ class TestScript:
         script.add_import("example", frm="mod")
         script.add_import("also", frm="mod", imp_as="temp")
         assert "from mod import also as temp, example" in str(script)
+
+    def test_add_var_renders_category_header(self):
+        script = Script()
+        script.add_var(
+            make_invocable("SimpleCompareFunc"),
+            "simple_cmp",
+            category="Comparison Functions",
+        )
+        assert "# Comparison Functions\nsimple_cmp = SimpleCompareFunc()" in str(script)
+
+    def test_add_var_category_insertion_order(self):
+        script = Script()
+        script.add_var(
+            make_invocable("SimpleCompareFunc"),
+            "simple_cmp",
+            category="Comparison Functions",
+        )
+        script.add_var(
+            make_invocable("OnnxFromPath", "model.onnx"),
+            "load_onnx",
+            category="Loaders",
+        )
+        out = str(script)
+        assert out.index("# Comparison Functions") < out.index("# Loaders")
+
+    def test_add_var_dedupes_identical(self):
+        script = Script()
+        first = script.add_var(make_invocable("SimpleCompareFunc"), "cmp")
+        second = script.add_var(make_invocable("SimpleCompareFunc"), "cmp")
+        # An identical construction string reuses the same variable rather than emitting a new one.
+        assert str(first) == str(second) == "cmp"
+
+    def test_add_var_force_re_adds_identical(self):
+        script = Script()
+        script.add_var(make_invocable("SimpleCompareFunc"), "cmp")
+        forced = script.add_var(make_invocable("SimpleCompareFunc"), "cmp", force=True)
+        # force=True adds a distinct variable even when the construction string is identical.
+        assert str(forced) == "cmp_1"

@@ -24,5 +24,3 @@ set(CMAKE_CXX_COMPILER g++)
 if(NOT DEFINED CUDAToolkit_ROOT)
   set(CUDAToolkit_ROOT /usr/local/cuda CACHE STRING "CUDA ROOT dir")
 endif()
-
-set(TRT_PLATFORM_ID "x86_64")

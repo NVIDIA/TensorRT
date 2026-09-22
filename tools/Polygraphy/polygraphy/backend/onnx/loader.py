@@ -28,9 +28,7 @@ from polygraphy.logger import G_LOGGER, LogMode
 np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx>=1.8.1")
 onnxrt = mod.lazy_import("onnxruntime>=1.10.0")
-onnxmltools = mod.lazy_import(
-    "onnxmltools==1.11.1", requires=["onnxconverter_common>=1.12.2"]
-)
+onnxconverter_common = mod.lazy_import("onnxconverter_common>=1.12.2")
 tf = mod.lazy_import("tensorflow<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util", log=False)
@@ -236,7 +234,9 @@ class ModifyOutputs(BaseLoadOnnxCopy):
     Functor that modifies the outputs of an ONNX model.
     """
 
-    def __init__(self, model, outputs=None, exclude_outputs=None, copy=None):
+    def __init__(
+        self, model, outputs=None, exclude_outputs=None, copy=None, mark_types=None
+    ):
         """
         Modifies outputs of an ONNX model.
 
@@ -246,16 +246,22 @@ class ModifyOutputs(BaseLoadOnnxCopy):
 
             outputs (Sequence[str]):
                     Names of tensors to mark as outputs. If provided, this will override the
-                    existing model outputs.
+                    existing model outputs. Supports fnmatch wildcard patterns (e.g. ``"conv_*"``).
                     If a value of `constants.MARK_ALL` is used instead of a list, all tensors in the network are marked.
             exclude_outputs (Sequence[str]):
-                    Names of tensors to exclude as outputs. This can be useful in conjunction with
-                    ``outputs=constants.MARK_ALL`` to omit outputs.
+                    Names of tensors to exclude as outputs. Supports fnmatch wildcard patterns (e.g. ``"conv_*"``).
+                    This can be useful in conjunction with ``outputs=constants.MARK_ALL`` to omit outputs.
             copy (bool): Whether to create a copy of the model first. Defaults to False.
+            mark_types (Sequence[str]):
+                    Op type names (case-insensitive) whose output tensors should be marked as outputs.
+                    For example, ``mark_types=["Conv", "Add"]`` marks the outputs of all Conv and Add nodes.
+                    If a requested type is not found in the model, a non-critical error is logged with
+                    suggestions for similar types.
         """
         super().__init__(model, copy)
         self.outputs = outputs
         self.exclude_outputs = exclude_outputs
+        self.mark_types = mark_types
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -270,6 +276,9 @@ class ModifyOutputs(BaseLoadOnnxCopy):
             model = onnx_util.mark_layerwise(model)
         elif self.outputs is not None:
             model = onnx_util.mark_outputs(model, self.outputs)
+
+        if self.mark_types is not None:
+            model = onnx_util.mark_by_op_type(model, self.mark_types)
 
         if self.exclude_outputs is not None:
             model = onnx_util.unmark_outputs(model, self.exclude_outputs)
@@ -304,7 +313,7 @@ class ConvertToFp16(BaseLoadOnnxCopy):
         model = self.load()
 
         G_LOGGER.info("Converting float tensors to float16")
-        model = onnxmltools.utils.float16_converter.convert_float_to_float16(
+        model = onnxconverter_common.float16.convert_float_to_float16(
             model, keep_io_types=True, disable_shape_infer=True
         )
         return model
@@ -896,6 +905,12 @@ class SaveOnnx(BaseLoader):
             G_LOGGER.verbose(
                 f"Saving external data for ONNX model to: {external_data_path}"
             )
+            # onnx >= 1.18's convert_model_to_external_data raises FileExistsError rather than
+            # overwriting when the external data file already exists. Saving is expected to
+            # overwrite, so remove a stale file at the location first. Guard on isfile so a
+            # directory at that path is left untouched (os.remove would also raise on one).
+            if external_data_path and os.path.isfile(external_data_path):
+                os.remove(external_data_path)
             try:
                 onnx.external_data_helper.convert_model_to_external_data(
                     model,

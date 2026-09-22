@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import os
+
 import numpy as np
 import pytest
 import tensorrt as trt
@@ -24,7 +26,12 @@ from polygraphy import constants, util
 from polygraphy.backend.trt import Algorithm, TacticReplayData, TensorInfo
 from polygraphy.comparator import IterationResult, RunResults
 from polygraphy.exception import PolygraphyException
-from polygraphy.json import Decoder, Encoder, from_json, load_json, to_json
+from polygraphy.json import Decoder, Encoder, from_json, load_json, save_json, to_json
+from polygraphy.json.serde import (
+    ITERATION_FILE_INDEX_WIDTH,
+    IterationWriter,
+    list_iteration_files,
+)
 
 
 class Dummy:
@@ -90,8 +97,10 @@ class TestDecoder:
         assert set(Decoder.polygraphy_registered.keys()) == {
             "__polygraphy_encoded_Algorithm",
             "__polygraphy_encoded_AttentionLayerHint",
+            "__polygraphy_encoded_DistCollective",
             "__polygraphy_encoded_Dummy",
             "__polygraphy_encoded_FormattedArray",
+            "__polygraphy_encoded_FusedAttention",
             "__polygraphy_encoded_IterationContext",
             "__polygraphy_encoded_IterationResult",
             "__polygraphy_encoded_LazyArray",
@@ -102,10 +111,26 @@ class TestDecoder:
             "__polygraphy_encoded_TacticReplayData",
             "__polygraphy_encoded_Tensor",
             "__polygraphy_encoded_TensorInfo",
+            "__polygraphy_encoded_AccuracyResult",
+            "__polygraphy_encoded_AccuracyResults",
+            "__polygraphy_encoded_OutputCompareResult",
+            "__polygraphy_encoded_PerceptualMetricsResult",
+            "__polygraphy_encoded_L2Result",
+            "__polygraphy_encoded_CosineSimilarityResult",
+            "__polygraphy_encoded_PsnrResult",
+            "__polygraphy_encoded_SnrResult",
+            "__polygraphy_encoded_SimpleThreshold",
+            "__polygraphy_encoded_L2Threshold",
+            "__polygraphy_encoded_CosineSimilarityThreshold",
+            "__polygraphy_encoded_PsnrThreshold",
+            "__polygraphy_encoded_SnrThreshold",
+            "__polygraphy_encoded_LpipsThreshold",
             "Algorithm",
             "AttentionLayerHint",
+            "DistCollective",
             "Dummy",
             "FormattedArray",
+            "FusedAttention",
             "IterationContext",
             "IterationResult",
             "LazyArray",
@@ -117,6 +142,20 @@ class TestDecoder:
             "TacticReplayData",
             "Tensor",
             "TensorInfo",
+            "AccuracyResult",
+            "AccuracyResults",
+            "OutputCompareResult",
+            "PerceptualMetricsResult",
+            "L2Result",
+            "CosineSimilarityResult",
+            "PsnrResult",
+            "SnrResult",
+            "SimpleThreshold",
+            "L2Threshold",
+            "CosineSimilarityThreshold",
+            "PsnrThreshold",
+            "SnrThreshold",
+            "LpipsThreshold",
         }
 
 
@@ -216,3 +255,62 @@ class TestImplementations:
 def test_load_json_errors_if_file_nonexistent():
     with pytest.raises(FileNotFoundError, match="No such file"):
         load_json("polygraphy-nonexistent-path")
+
+
+class TestIterationWriter:
+    def test_single_file_snapshots_on_accumulate(self, tmp_path):
+        # With copy_on_accumulate, a single-file writer snapshots each appended object so later
+        # mutation of a reused buffer does not corrupt what was already accumulated.
+        path = str(tmp_path / "inputs.json")
+        buffer = {"x": np.zeros((2,), dtype=np.float32)}
+        with IterationWriter(path, copy_on_accumulate=True) as writer:
+            writer.append(buffer)
+            buffer["x"][:] = 99.0  # mutate the reused buffer before the next append
+            writer.append(buffer)
+        loaded = load_json(path)
+        assert [float(fd["x"][0]) for fd in loaded] == [0.0, 99.0]
+
+    def test_disabled_when_path_none(self, tmp_path):
+        # A None path disables writing entirely (used when --save-* is not provided).
+        writer = IterationWriter(None)
+        writer.append({"x": np.zeros((1,), dtype=np.float32)})
+        writer.flush()
+        assert os.listdir(tmp_path) == []
+
+    def test_rejects_nonempty_directory(self, tmp_path):
+        # A per-iteration (extensionless) directory must be empty or not yet exist, so existing
+        # files are never overwritten or deleted.
+        out_dir = tmp_path / "outputs"
+        out_dir.mkdir()
+        (out_dir / "leftover.json").write_text("{}")
+        with pytest.raises(PolygraphyException, match="not empty"):
+            IterationWriter(str(out_dir))
+
+    def test_rejects_file_at_extensionless_path(self, tmp_path):
+        # An extensionless path that already exists as a regular file is an error (it is treated as
+        # a directory of per-iteration files).
+        path = tmp_path / "outputs"
+        path.write_text("not a directory")
+        with pytest.raises(PolygraphyException, match="a file already exists there"):
+            IterationWriter(str(path))
+
+
+class TestListIterationFiles:
+    def test_ordered_lexically(self, tmp_path):
+        # Zero-padded index names (as written by IterationWriter) sort correctly under a pure
+        # lexical sort, so 10 follows 2 rather than 1.
+        for index in [0, 1, 2, 10, 11]:
+            save_json(
+                {"x": np.zeros((1,), dtype=np.float32)},
+                str(tmp_path / f"{index:0{ITERATION_FILE_INDEX_WIDTH}d}.json"),
+            )
+        (tmp_path / "manifest.json").write_text("{}")
+        files = list_iteration_files(str(tmp_path))
+        assert [os.path.basename(f) for f in files] == [
+            "0000000000.json",
+            "0000000001.json",
+            "0000000002.json",
+            "0000000010.json",
+            "0000000011.json",
+            "manifest.json",
+        ]

@@ -182,11 +182,10 @@ def check_warnings_on_loader_impl_methods():
 
 
 @pytest.fixture()
-@pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="Fixture has not been updated to work on Windows",
-)
 def nvinfer_lean_path():
+    if sys.platform.startswith("win"):
+        pytest.skip("Fixture has not been updated to work on Windows")
+
     lean_library_name = ctypes.util.find_library("nvinfer_lean")
     for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep) + [
         "/usr/lib/x86_64-linux-gnu"

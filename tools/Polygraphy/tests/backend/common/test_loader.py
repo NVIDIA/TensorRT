@@ -75,3 +75,65 @@ class TestImporter:
                 PolygraphyException, match="Could not import symbol: non_existent from"
             ):
                 invoke_from_script(f.name, "non_existent")
+
+    def test_invoke_class_is_instantiated(self):
+        # When the imported symbol is a class, it is instantiated and the instance is invoked.
+        script = dedent(
+            """
+            from collections import OrderedDict
+            from polygraphy.comparator import BaseCompareFunc
+
+            class MyCompareFunc(BaseCompareFunc):
+                def __call__(self, iter_result0, iter_result1):
+                    return OrderedDict(out=True)
+            """
+        )
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(script)
+            f.flush()
+            os.fsync(f.fileno())
+
+            result = InvokeFromScript(f.name, "MyCompareFunc")(None, None)
+            assert dict(result) == {"out": True}
+
+    def test_invoke_forwards_attributes(self):
+        # Attribute access is forwarded to the loaded object, so a BaseCompareFunc loaded from a
+        # script exposes its threshold API (this is what lets --compare-func-script work with
+        # --check-average).
+        script = dedent(
+            """
+            from collections import OrderedDict
+            from polygraphy.comparator import BaseCompareFunc, L2Threshold
+
+            class MyCompareFunc(BaseCompareFunc):
+                def __call__(self, iter_result0, iter_result1):
+                    return OrderedDict(out=True)
+                def thresholds_for(self, output_name):
+                    return L2Threshold(1.0)
+            """
+        )
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(script)
+            f.flush()
+            os.fsync(f.fileno())
+
+            compare_func = InvokeFromScript(f.name, "MyCompareFunc")
+            assert compare_func.thresholds_for("out").metric_fields() == ["l2_norm"]
+
+    def test_invoke_does_not_forward_missing_attributes(self):
+        # A plain function does not expose a threshold API, so the forwarding raises (which lets
+        # compare_accuracy reject it cleanly with check_average=True).
+        script = dedent(
+            """
+            from collections import OrderedDict
+            def compare_outputs(iter_result0, iter_result1):
+                return OrderedDict(out=True)
+            """
+        )
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(script)
+            f.flush()
+            os.fsync(f.fileno())
+
+            compare_func = InvokeFromScript(f.name, "compare_outputs")
+            assert not hasattr(compare_func, "thresholds_for")

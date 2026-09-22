@@ -16,13 +16,12 @@
 # limitations under the License.
 #
 """
-This script demonstrates how to use PyTorch tensors with the TensorRT runner and calibrator.
+This script demonstrates how to use PyTorch tensors with the TensorRT runner.
 """
 
 import torch
 
 from polygraphy.backend.trt import (
-    Calibrator,
     CreateConfig,
     TrtRunner,
     engine_from_network,
@@ -30,22 +29,15 @@ from polygraphy.backend.trt import (
 )
 
 # If your PyTorch installation has GPU support, then we'll allocate the tensors
-# directly in GPU memory. This will mean that the calibrator and runner can skip the
+# directly in GPU memory. This will mean that the runner can skip the
 # host-to-device copy we would otherwise incur with NumPy arrays.
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def calib_data():
-    for _ in range(4):
-        yield {"x": torch.ones((1, 1, 2, 2), dtype=torch.float32, device=DEVICE)}
-
-
 def main():
-    calibrator = Calibrator(data_loader=calib_data())
-
     engine = engine_from_network(
         network_from_onnx_path("identity.onnx"),
-        config=CreateConfig(int8=True, calibrator=calibrator),
+        config=CreateConfig(),
     )
 
     with TrtRunner(engine) as runner:

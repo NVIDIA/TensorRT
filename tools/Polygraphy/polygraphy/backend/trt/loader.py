@@ -84,14 +84,21 @@ class CreateNetwork(BaseLoader):
     Functor that creates an empty TensorRT network.
     """
 
-    def __init__(self, explicit_batch=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
+    def __init__(
+        self,
+        explicit_batch=None,
+        strongly_typed=None,
+        mark_unfused_tensors_as_debug_tensors=None,
+    ):
         """
         Creates an empty TensorRT network.
 
         Args:
             explicit_batch (bool):
                     Whether to create the network with explicit batch mode.
-                    Defaults to True.
+                    Defaults to True when TRT < 10.0 (standard TensorRT) or TRT-RTX < 1.5,
+                    and None otherwise. The TRT-RTX path is active when
+                    ``POLYGRAPHY_USE_TENSORRT_RTX=1`` (i.e. ``config.USE_TENSORRT_RTX`` is True).
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
@@ -99,12 +106,22 @@ class CreateNetwork(BaseLoader):
                     Whether to mark unfused tensors as debug tensors.
                     Defaults to False.
         """
+
+        def explicit_batch_supported(version):
+            return (
+                version < mod.version("1.5")
+                if config.USE_TENSORRT_RTX
+                else version < mod.version("10.0")
+            )
+
         self.explicit_batch = util.default(
             explicit_batch,
-            True if mod.version(trt.__version__) < mod.version("10.0") else None,
+            True if explicit_batch_supported(mod.version(trt.__version__)) else None,
         )
         self.strongly_typed = util.default(strongly_typed, False)
-        self.mark_unfused_tensors_as_debug_tensors = util.default(mark_unfused_tensors_as_debug_tensors, False)
+        self.mark_unfused_tensors_as_debug_tensors = util.default(
+            mark_unfused_tensors_as_debug_tensors, False
+        )
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -142,7 +159,15 @@ class CreateNetwork(BaseLoader):
 
 
 class BaseNetworkFromOnnx(BaseLoader):
-    def __init__(self, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
+    def __init__(
+        self,
+        flags=None,
+        plugin_instancenorm=None,
+        strongly_typed=None,
+        mark_unfused_tensors_as_debug_tensors=None,
+        enable_uint8_asymmetric_quantization_dla=None,
+        config=None,
+    ):
         """
         Args:
             flags (List[trt.OnnxParserFlag]):
@@ -156,20 +181,68 @@ class BaseNetworkFromOnnx(BaseLoader):
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
+            mark_unfused_tensors_as_debug_tensors (bool):
+                    Whether to mark unfused tensors as debug tensors.
+                    Defaults to False.
+            enable_uint8_asymmetric_quantization_dla (bool):
+                    [DEPRECATED - use `flags` instead]
+                    Whether to enable uint8 and asymmetric quantization for DLA.
+                    Use `flags=[trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA]` instead.
+                    Defaults to False.
+            config (Union[trt.IBuilderConfig, Callable(trt.Builder, trt.INetworkDefinition) -> trt.IBuilderConfig]):
+                    A TensorRT builder configuration or a callable that returns one.
+                    This is required when using certain ONNX parser flags such as
+                    ``trt.OnnxParserFlag.REPORT_CAPABILITY_DLA``.
+                    Defaults to None.
         """
+
+        if enable_uint8_asymmetric_quantization_dla is not None:
+            mod.warn_deprecated(
+                "enable_uint8_asymmetric_quantization_dla",
+                "`flags=[trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA]`",
+                "0.55.0",
+                module_name=__name__,
+                always_show_warning=True,
+            )
+            if enable_uint8_asymmetric_quantization_dla:
+                try:
+                    dla_flag = (
+                        trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA
+                    )
+                except AttributeError:
+                    trt_util.fail_unavailable(
+                        "trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+                    )
+
+                flags = list(flags) if flags is not None else []
+                if dla_flag not in flags:
+                    flags.append(dla_flag)
+
+                dla_flag = trt.OnnxParserFlag.NATIVE_INSTANCENORM
+                if flags is not None and dla_flag in flags:
+                    flags.remove(dla_flag)
+
         self.flags = flags
         self.plugin_instancenorm = util.default(plugin_instancenorm, False)
         self.strongly_typed = util.default(strongly_typed, False)
-        self.mark_unfused_tensors_as_debug_tensors = util.default(mark_unfused_tensors_as_debug_tensors, False)
+        self.mark_unfused_tensors_as_debug_tensors = util.default(
+            mark_unfused_tensors_as_debug_tensors, False
+        )
+        self._config = config
 
     @util.check_called_by("__call__")
     def call_impl(self):
-        builder, network = create_network(strongly_typed=self.strongly_typed, mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors)
+        builder, network = create_network(
+            strongly_typed=self.strongly_typed,
+            mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors,
+        )
         # Initialize plugin library for the parser.
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
         parser = trt.OnnxParser(network, trt_util.get_trt_logger())
         # Set flags if applicable.
-        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("8.6"):
+        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version(
+            "8.6"
+        ):
             if self.flags:
                 masked_flags = 0
                 for f in self.flags:
@@ -177,6 +250,21 @@ class BaseNetworkFromOnnx(BaseLoader):
                 parser.flags = masked_flags
             if self.plugin_instancenorm:
                 parser.clear_flag(trt.OnnxParserFlag.NATIVE_INSTANCENORM)
+
+        # Set builder config on parser if provided (required for some parser flags like REPORT_CAPABILITY_DLA)
+        if self._config is not None:
+            # We haven't populated the network yet, so don't consider it when creating the config:
+            trt_config, _ = util.invoke_if_callable(self._config, builder, network=None)
+            try:
+                success = parser.set_builder_config(trt_config)
+                if not success:
+                    G_LOGGER.critical("Failed to set builder config on ONNX parser. ")
+            except AttributeError:
+                G_LOGGER.warning(
+                    "This version of TensorRT does not support parser.set_builder_config(). "
+                    "Some parser flags like REPORT_CAPABILITY_DLA may not work correctly."
+                )
+
         return builder, network, parser
 
 
@@ -187,7 +275,14 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     """
 
     def __init__(
-        self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None
+        self,
+        model_bytes,
+        flags=None,
+        plugin_instancenorm=None,
+        strongly_typed=None,
+        mark_unfused_tensors_as_debug_tensors=None,
+        enable_uint8_asymmetric_quantization_dla=None,
+        config=None,
     ):
         """
         Parses an ONNX model.
@@ -207,12 +302,27 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
+            mark_unfused_tensors_as_debug_tensors (bool):
+                    Whether to mark unfused tensors as debug tensors.
+                    Defaults to False.
+            enable_uint8_asymmetric_quantization_dla (bool):
+                    [DEPRECATED - use `flags` instead]
+                    Whether to enable uint8 and asymmetric quantization for DLA.
+                    Use `flags=[trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA]` instead.
+                    Defaults to False.
+            config (Union[trt.IBuilderConfig, Callable(trt.Builder, trt.INetworkDefinition) -> trt.IBuilderConfig]):
+                    A TensorRT builder configuration or a callable that returns one.
+                    This is required when using certain ONNX parser flags such as
+                    ``trt.OnnxParserFlag.REPORT_CAPABILITY_DLA``.
+                    Defaults to None.
         """
         super().__init__(
             flags=flags,
             plugin_instancenorm=plugin_instancenorm,
             strongly_typed=strongly_typed,
-            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors
+            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors,
+            enable_uint8_asymmetric_quantization_dla=enable_uint8_asymmetric_quantization_dla,
+            config=config,
         )
         self._model_bytes = model_bytes
 
@@ -237,7 +347,16 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
     This loader supports models with weights stored in an external location.
     """
 
-    def __init__(self, path, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
+    def __init__(
+        self,
+        path,
+        flags=None,
+        plugin_instancenorm=None,
+        strongly_typed=None,
+        mark_unfused_tensors_as_debug_tensors=None,
+        enable_uint8_asymmetric_quantization_dla=None,
+        config=None,
+    ):
         """
         Parses an ONNX model from a file.
 
@@ -255,12 +374,27 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
+            mark_unfused_tensors_as_debug_tensors (bool):
+                    Whether to mark unfused tensors as debug tensors.
+                    Defaults to False.
+            enable_uint8_asymmetric_quantization_dla (bool):
+                    [DEPRECATED - use `flags` instead]
+                    Whether to enable uint8 and asymmetric quantization for DLA.
+                    Use `flags=[trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA]` instead.
+                    Defaults to False.
+            config (Union[trt.IBuilderConfig, Callable(trt.Builder, trt.INetworkDefinition) -> trt.IBuilderConfig]):
+                    A TensorRT builder configuration or a callable that returns one.
+                    This is required when using certain ONNX parser flags such as
+                    ``trt.OnnxParserFlag.REPORT_CAPABILITY_DLA``.
+                    Defaults to None.
         """
         super().__init__(
             flags=flags,
             plugin_instancenorm=plugin_instancenorm,
             strongly_typed=strongly_typed,
-            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors
+            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors,
+            enable_uint8_asymmetric_quantization_dla=enable_uint8_asymmetric_quantization_dla,
+            config=config,
         )
         self.path = path
 
@@ -343,16 +477,20 @@ class ModifyNetworkOutputs(PostprocessNetwork):
     """
 
     @staticmethod
-    def _apply(network, outputs, exclude_outputs):
+    def _apply(network, outputs, exclude_outputs, mark_layer_types=None):
         if outputs == constants.MARK_ALL:
             trt_util.mark_layerwise(network)
         elif outputs is not None:
             trt_util.mark_outputs(network, outputs)
+        if mark_layer_types is not None:
+            trt_util.mark_by_layer_type(network, mark_layer_types)
         if exclude_outputs is not None:
             trt_util.unmark_outputs(network, exclude_outputs)
         return network
 
-    def __init__(self, network, outputs=None, exclude_outputs=None):
+    def __init__(
+        self, network, outputs=None, exclude_outputs=None, mark_layer_types=None
+    ):
         """
         Modifies outputs in a TensorRT ``INetworkDefinition``.
 
@@ -363,14 +501,18 @@ class ModifyNetworkOutputs(PostprocessNetwork):
 
             outputs (Sequence[str]):
                     Names of tensors to mark as outputs. If provided, this will override the outputs
-                    already marked in the network.
+                    already marked in the network. Supports fnmatch wildcard patterns (e.g. ``"conv_*"``).
                     If a value of `constants.MARK_ALL` is used instead of a list, all tensors in the network are marked.
             exclude_outputs (Sequence[str]):
-                    Names of tensors to exclude as outputs. This can be useful in conjunction with
-                    ``outputs=constants.MARK_ALL`` to omit outputs.
+                    Names of tensors to exclude as outputs. Supports fnmatch wildcard patterns (e.g. ``"conv_*"``).
+                    This can be useful in conjunction with ``outputs=constants.MARK_ALL`` to omit outputs.
+            mark_layer_types (Sequence[str]):
+                    Layer type names (case-insensitive) whose output tensors should be marked as outputs.
+                    Names are matched against ``trt.LayerType`` enum values, e.g. ``["CONVOLUTION", "ACTIVATION"]``.
+                    If a requested type is not found, a critical error is raised with suggestions for similar types.
         """
         func = lambda network: ModifyNetworkOutputs._apply(
-            network, outputs, exclude_outputs
+            network, outputs, exclude_outputs, mark_layer_types
         )
         super().__init__(network, func, "ModifyNetworkOutputs")
 
@@ -394,7 +536,10 @@ class SetLayerPrecisions(PostprocessNetwork):
 
         for layer in network:
             if layer.name in layer_precisions:
-                layer.precision = layer_precisions[layer.name]
+                try:
+                    layer.precision = layer_precisions[layer.name]
+                except AttributeError:
+                    trt_util.fail_unavailable("layer precision in SetLayerPrecisions")
         return network
 
     def __init__(self, network, layer_precisions):
@@ -413,25 +558,64 @@ class SetLayerPrecisions(PostprocessNetwork):
 
 
 @mod.export(funcify=True)
+class SetDecomposableAttentions(PostprocessNetwork):
+    """
+    Functor that marks all IAttention layers in a TensorRT ``INetworkDefinition`` as decomposable.
+
+    This allows TRT to fall back to decomposed MatMul+Softmax+MatMul kernels when no dedicated
+    fused attention kernel is available for the given dtype/mask/shape/GPU combination.
+    Corresponds to ``IAttention::setDecomposable(true)`` in the TensorRT C++ API.
+    """
+
+    @staticmethod
+    def _apply(network):
+        for i in range(network.num_layers):
+            layer = network.get_layer(i)
+            if layer.type == trt.LayerType.ATTENTION_INPUT:
+                layer.__class__ = trt.IAttentionInputLayer
+                layer.attention.decomposable = True
+        return network
+
+    def __init__(self, network):
+        """
+        Marks all IAttention layers as decomposable in a TensorRT ``INetworkDefinition``.
+
+        Args:
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
+        """
+        func = lambda network: SetDecomposableAttentions._apply(network)
+        super().__init__(network, func, "SetDecomposableAttentions")
+
+
+@mod.export(funcify=True)
 class SetTensorDatatypes(PostprocessNetwork):
     """
     Functor that sets tensor datatypes for network I/O tensors in a TensorRT ``INetworkDefinition``.
     """
 
     @staticmethod
-    def _apply(network, tensor_datatypes):
-        tensor_map = trt_util.get_all_tensors(network)
-        util.check_sequence_contains(
-            tensor_map.keys(),
-            tensor_datatypes.keys(),
-            name="the network",
-            items_name="tensors",
-            check_extra=False,
-            log_func=G_LOGGER.warning,
-        )
+    def _apply(network, tensor_datatypes: dict | trt.DataType):
+        tensor_map = trt_util.get_all_io_tensors(network)
 
-        for name, dtype in tensor_datatypes.items():
-            tensor_map[name].dtype = dtype
+        if isinstance(tensor_datatypes, dict):
+            util.check_sequence_contains(
+                tensor_map.keys(),
+                tensor_datatypes.keys(),
+                name="the network",
+                items_name="tensors",
+                check_extra=False,
+                log_func=G_LOGGER.warning,
+            )
+
+            for name, dtype in tensor_datatypes.items():
+                tensor_map[name].dtype = dtype
+
+        else:
+            for name in tensor_map.keys():
+                tensor_map[name].dtype = tensor_datatypes
+
         return network
 
     def __init__(self, network, tensor_datatypes):
@@ -442,8 +626,8 @@ class SetTensorDatatypes(PostprocessNetwork):
             network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
                     A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
                     To omit the parser, return a tuple containing just the builder and network.
-            tensor_datatypes (Dict[str, trt.DataType]):
-                    A mapping of tensor names to their desired data types.
+            tensor_datatypes (Dict[str, trt.DataType]) or trt.DataType:
+                    A mapping of tensor names to their desired data types, or a single datatype to apply to all I/O tensors.
         """
         func = lambda network: SetTensorDatatypes._apply(network, tensor_datatypes)
         super().__init__(network, func, "SetTensorDatatypes")
@@ -456,22 +640,32 @@ class SetTensorFormats(PostprocessNetwork):
     """
 
     @staticmethod
-    def _apply(network, tensor_formats):
-        tensor_map = trt_util.get_all_tensors(network)
-        util.check_sequence_contains(
-            tensor_map.keys(),
-            tensor_formats.keys(),
-            name="the network",
-            items_name="tensors",
-            check_extra=False,
-            log_func=G_LOGGER.warning,
-        )
+    def _apply(network, tensor_formats: dict | list):
+        tensor_map = trt_util.get_all_io_tensors(network)
 
-        for name, formats in tensor_formats.items():
-            mask = 0
-            for format in formats:
-                mask |= 1 << int(format)
-            tensor_map[name].allowed_formats = mask
+        if isinstance(tensor_formats, dict):
+            util.check_sequence_contains(
+                tensor_map.keys(),
+                tensor_formats.keys(),
+                name="the network",
+                items_name="tensors",
+                check_extra=False,
+                log_func=G_LOGGER.warning,
+            )
+
+            for name, formats in tensor_formats.items():
+                mask = 0
+                for format in formats:
+                    mask |= 1 << int(format)
+                tensor_map[name].allowed_formats = mask
+
+        else:
+            for name in tensor_map.keys():
+                mask = 0
+                for format in tensor_formats:
+                    mask |= 1 << int(format)
+                tensor_map[name].allowed_formats = mask
+
         return network
 
     def __init__(self, network, tensor_formats):
@@ -482,8 +676,8 @@ class SetTensorFormats(PostprocessNetwork):
             network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
                     A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
                     To omit the parser, return a tuple containing just the builder and network.
-            tensor_formats (Dict[str, List[trt.TensorFormat]]):
-                    A mapping of tensor names to their allowed formats.
+            tensor_formats (Dict[str, List[trt.TensorFormat]]) or List[trt.TensorFormat]:
+                    A mapping of tensor names to their allowed formats, or a list of formats to apply to all I/O tensors.
         """
         func = lambda network: SetTensorFormats._apply(network, tensor_formats)
         super().__init__(network, func, "SetTensorFormats")
@@ -563,7 +757,6 @@ class EngineBytesFromNetwork(BaseLoader):
             )
 
         config, _ = util.invoke_if_callable(self._config, builder, network)
-
         trt_util.try_setup_polygraphy_calibrator(config, network)
 
         G_LOGGER.super_verbose(
@@ -640,13 +833,30 @@ class EngineBytesFromNetwork(BaseLoader):
         return engine_bytes
 
 
+def _set_dla_workspace_allocation_strategy(runtime, strategy):
+    if strategy is None:
+        return
+
+    try:
+        runtime.dla_workspace_allocation_strategy = strategy
+    except AttributeError:
+        trt_util.fail_unavailable("dla_workspace_allocation_strategy")
+
+
 @mod.export(funcify=True)
 class EngineFromNetwork(EngineBytesFromNetwork):
     """
     Functor similar to EngineBytesFromNetwork, but deserializes the engine before returning.
     """
 
-    def __init__(self, network, config=None, save_timing_cache=None, runtime=None):
+    def __init__(
+        self,
+        network,
+        config=None,
+        save_timing_cache=None,
+        runtime=None,
+        dla_workspace_allocation_strategy=None,
+    ):
         """
         Builds a TensorRT serialized engine and then deserializes it.
 
@@ -667,9 +877,15 @@ class EngineFromNetwork(EngineBytesFromNetwork):
             runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
                     The runtime to use when deserializing the engine or a callable that returns one.
                     If no runtime is provided, one will be created.
+            dla_workspace_allocation_strategy (trt.DLAWorkspaceAllocationStrategy):
+                    The DLA workspace allocation strategy to use when deserializing the engine.
+                    Available in TensorRT 11.3 and later.
+                    Defaults to TensorRT's default strategy.
+                    Engines using `SHARED_STATIC` on the same DLA core must not run concurrently.
         """
         super().__init__(network, config, save_timing_cache)
         self._runtime = runtime
+        self._dla_workspace_allocation_strategy = dla_workspace_allocation_strategy
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -679,7 +895,11 @@ class EngineFromNetwork(EngineBytesFromNetwork):
         """
         # We do not invoke super().call_impl here because we would otherwise be responsible
         # for freeing it's return values.
-        return engine_from_bytes(super().call_impl, runtime=self._runtime)
+        return engine_from_bytes(
+            super().call_impl,
+            runtime=self._runtime,
+            dla_workspace_allocation_strategy=self._dla_workspace_allocation_strategy,
+        )
 
 
 @mod.export(funcify=True)
@@ -688,7 +908,12 @@ class EngineFromBytes(BaseLoader):
     Functor that deserializes an engine from a buffer.
     """
 
-    def __init__(self, serialized_engine, runtime=None):
+    def __init__(
+        self,
+        serialized_engine,
+        runtime=None,
+        dla_workspace_allocation_strategy=None,
+    ):
         """
         Deserializes an engine from a buffer.
 
@@ -698,11 +923,17 @@ class EngineFromBytes(BaseLoader):
             runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
                     The runtime to use when deserializing the engine or a callable that returns one.
                     If no runtime is provided, one will be created.
+            dla_workspace_allocation_strategy (trt.DLAWorkspaceAllocationStrategy):
+                    The DLA workspace allocation strategy to use when deserializing the engine.
+                    Available in TensorRT 11.3 and later.
+                    Defaults to TensorRT's default strategy.
+                    Engines using `SHARED_STATIC` on the same DLA core must not run concurrently.
         """
         self._serialized_engine = serialized_engine
         self._runtime = util.default(
             runtime, lambda: trt.Runtime(trt_util.get_trt_logger())
         )
+        self._dla_workspace_allocation_strategy = dla_workspace_allocation_strategy
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -714,6 +945,9 @@ class EngineFromBytes(BaseLoader):
         runtime, _ = util.invoke_if_callable(self._runtime)
 
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
+        _set_dla_workspace_allocation_strategy(
+            runtime, self._dla_workspace_allocation_strategy
+        )
         try:
             # To deserialize version compatible engines, we must signal the runtime that host code is allowed
             runtime.engine_host_code_allowed = True
@@ -732,7 +966,7 @@ class EngineFromPath(BaseLoader):
     Functor that deserializes an engine from a path.
     """
 
-    def __init__(self, path: str, runtime=None):
+    def __init__(self, path: str, runtime=None, dla_workspace_allocation_strategy=None):
         """
         Deserializes an engine from a path.
 
@@ -742,11 +976,17 @@ class EngineFromPath(BaseLoader):
             runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
                     The runtime to use when deserializing the engine or a callable that returns one.
                     If no runtime is provided, one will be created.
+            dla_workspace_allocation_strategy (trt.DLAWorkspaceAllocationStrategy):
+                    The DLA workspace allocation strategy to use when deserializing the engine.
+                    Available in TensorRT 11.3 and later.
+                    Defaults to TensorRT's default strategy.
+                    Engines using `SHARED_STATIC` on the same DLA core must not run concurrently.
         """
         self._path = path
         self._runtime = util.default(
             runtime, lambda: trt.Runtime(trt_util.get_trt_logger())
         )
+        self._dla_workspace_allocation_strategy = dla_workspace_allocation_strategy
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -758,6 +998,9 @@ class EngineFromPath(BaseLoader):
         runtime, _ = util.invoke_if_callable(self._runtime)
 
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
+        _set_dla_workspace_allocation_strategy(
+            runtime, self._dla_workspace_allocation_strategy
+        )
         try:
             # To deserialize version compatible engines, we must signal the runtime that host code is allowed
             runtime.engine_host_code_allowed = True
@@ -766,7 +1009,7 @@ class EngineFromPath(BaseLoader):
 
         if config.USE_TENSORRT_RTX:
             # Read the entire file into memory for buffer-based deserialization
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 buffer_data = f.read()
             engine = runtime.deserialize_cuda_engine(buffer_data)
         else:
@@ -812,7 +1055,9 @@ class BufferFromEngine(BaseLoader):
     Returned buffer directly references the serialized engine's memory and does not copy it.
     """
 
-    def __init__(self, engine: Union[trt.ICudaEngine, Callable[[], trt.ICudaEngine]]) -> None:
+    def __init__(
+        self, engine: Union[trt.ICudaEngine, Callable[[], trt.ICudaEngine]]
+    ) -> None:
         """
         Serializes an engine to a memoryview.
 
@@ -858,7 +1103,9 @@ class SaveEngine(BaseLoader):
         """
         engine, _ = util.invoke_if_callable(self._engine)
 
-        util.save_file(contents=buffer_from_engine(engine), dest=self.path, description="engine")
+        util.save_file(
+            contents=buffer_from_engine(engine), dest=self.path, description="engine"
+        )
         return engine
 
 
@@ -947,7 +1194,7 @@ class OnnxLikeFromNetwork(BaseLoader):
                 ):
                     try:
                         attr = list(attr)
-                        attr = attr if len(attr) > 0 else "None" # Empty Dims
+                        attr = attr if len(attr) > 0 else "None"  # Empty Dims
                     except ValueError:  # Invalid dims
                         attr = "None"
                 if hasattr(attr, "__entries"):  # TensorRT Enums
@@ -955,6 +1202,11 @@ class OnnxLikeFromNetwork(BaseLoader):
 
                 if isinstance(attr, trt.ILoop):
                     attr = attr.name
+
+                # A None attribute (e.g. an unset optional attribute, as some layers expose under
+                # TensorRT-RTX) is benign; represent it as "None", like empty/invalid Dims above.
+                if attr is None:
+                    attr = "None"
 
                 VALID_TYPES = [np.ndarray, list, int, str, bool, float]
                 if not any(isinstance(attr, cls) for cls in VALID_TYPES):
@@ -1020,4 +1272,3 @@ class MarkDebug(PostprocessNetwork):
         """
         func = lambda network: MarkDebug._apply(network, mark_debug)
         super().__init__(network, func, "MarkDebug")
-

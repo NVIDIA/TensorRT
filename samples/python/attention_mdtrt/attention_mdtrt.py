@@ -15,11 +15,16 @@
 # limitations under the License.
 #
 
-import numpy as np
-import tensorrt as trt
-import torch
 import sys
 import os
+
+try:
+    import tensorrt as trt
+except ImportError:
+    import tensorrt_rtx as trt
+
+import numpy as np
+import torch
 import time
 import argparse
 from cuda.bindings import runtime as cudart

@@ -260,6 +260,10 @@ def decode(dct):
 # Everything is encapsulated in functions so that we don't create a dependency on TensorRT
 # when objects from this file are imported.
 def get_base_selector_type():
+    if not hasattr(trt, "IAlgorithmSelector"):
+        # The algorithm selector API (IAlgorithmSelector) was removed in TensorRT 11.
+        trt_util.fail_unavailable("Algorithm selectors (TacticRecorder/TacticReplayer)")
+
     class BaseSelector(trt.IAlgorithmSelector):
         def __init__(self, data):
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
@@ -278,7 +282,7 @@ def get_base_selector_type():
     return BaseSelector
 
 
-@mod.deprecate(remove_in="0.50.0", use_instead=None)
+@mod.deprecate(remove_in="0.55.0", use_instead=None)
 @mod.export()
 def TacticRecorder(record):
     """
@@ -322,7 +326,8 @@ def TacticRecorder(record):
 
     return TacticRecorderClass()
 
-@mod.deprecate(remove_in="0.50.0", use_instead=None)
+
+@mod.deprecate(remove_in="0.55.0", use_instead=None)
 @mod.export()
 def TacticReplayer(replay):
     """

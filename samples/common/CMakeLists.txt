@@ -111,8 +111,8 @@ target_link_libraries(trt_samples_common PUBLIC
     TRT_SAMPLES::onnxparser
 )
 
-if(TARGET TRT::cudart)
-    target_link_libraries(trt_samples_common PUBLIC TRT::cudart)
+if(TARGET ${TensorRT_CMAKE_NAMESPACE}::trt_cudart)
+    target_link_libraries(trt_samples_common PUBLIC ${TensorRT_CMAKE_NAMESPACE}::trt_cudart)
 else()
     target_link_libraries(trt_samples_common PUBLIC CUDA::cudart_static)
 endif()

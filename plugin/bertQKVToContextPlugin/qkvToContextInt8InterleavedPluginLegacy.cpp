@@ -234,7 +234,7 @@ int32_t QKVToContextInterleavedPluginLegacy::enqueue(PluginTensorDesc const* inp
     PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* /* workspace */,
     cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     int32_t const total = inputDesc[0].dims.d[2];
     int32_t const B = inputDesc[1].dims.d[0] - 1;

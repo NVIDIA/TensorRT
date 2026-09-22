@@ -31,7 +31,9 @@ def register_logger_callback():
         tf.compat.v1.logging.set_verbosity(tf_sev)
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = tf_logging_level
 
-    G_LOGGER.register_callback(set_tf_logging_level)  # Will be registered when this backend is imported.
+    G_LOGGER.register_callback(
+        set_tf_logging_level
+    )  # Will be registered when this backend is imported.
 
 
 register_logger_callback()

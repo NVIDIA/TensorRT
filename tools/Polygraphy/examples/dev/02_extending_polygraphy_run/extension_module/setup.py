@@ -46,7 +46,7 @@ def main():
             "polygraphy",
             # Our included loader needs ONNX-GraphSurgeon to modify the model.
             "onnx_graphsurgeon",
-            "numpy<2",
+            "numpy",
         ],
         packages=find_packages(exclude=("tests", "tests.*")),
         # The format of the entry_points is:

@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.3.0
+ARG CUDA_VERSION=13.4.1
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION 11.2.1.2
+ENV TRT_VERSION=11.3.0.99
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -83,22 +83,6 @@ RUN apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install TensorRT
-RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.2.1/tars/TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-13.3-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-13.3-Release-external.tar.zst \
-    && cp -a TensorRT-11.2.1.2/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-11.2.1.2/python/tensorrt-11.2.1.2-cp312-none-linux_aarch64.whl ;\
-    elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.2.1/tars/TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.2.1.2-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
-    && cp -a TensorRT-11.2.1.2/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-11.2.1.2/python/tensorrt-11.2.1.2-cp312-none-linux_aarch64.whl ;\
-    else \
-    echo "Invalid CUDA_VERSION"; \
-    exit 1; \
-    fi
-
 # Install Cmake
 RUN cd /tmp && \
     wget https://github.com/Kitware/CMake/releases/download/v3.31.11/cmake-3.31.11-linux-aarch64.sh && \
@@ -126,9 +110,20 @@ RUN pip3 install --upgrade numpy
 # Download NGC client
 RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_arm64.zip && unzip ngccli_arm64.zip && chmod u+x ngc-cli/ngc && rm ngccli_arm64.zip ngc-cli.md5 && echo "no-apikey\nascii\n" | ngc-cli/ngc config set
 
+# Install TensorRT
+ARG CUDA_VERSION
+COPY docker/downloadTRT.sh /tmp/downloadTRT.sh
+RUN case "${CUDA_VERSION}" in \
+        13.*) TRT_CUDA_VERSION=13.4 ;; \
+        12.*) TRT_CUDA_VERSION=12.9 ;; \
+        *) echo "Unsupported CUDA_VERSION: ${CUDA_VERSION}" && exit 1 ;; \
+    esac && \
+    /tmp/downloadTRT.sh --aarch64 --cuda "${TRT_CUDA_VERSION}"
+
 # Set environment and working directory
-ENV TRT_LIBPATH /usr/lib/aarch64-linux-gnu/
-ENV TRT_OSSPATH /workspace/TensorRT
+ENV TRT_ROOT=/opt/TensorRT-$TRT_VERSION
+ENV TRT_LIBPATH=/opt/TensorRT-$TRT_VERSION/lib
+ENV TRT_OSSPATH=/workspace/TensorRT
 ENV PATH="/workspace/TensorRT/build/out:${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 WORKDIR /workspace

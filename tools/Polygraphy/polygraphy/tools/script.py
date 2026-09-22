@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import ast
 import os
 import sys
 import time
 from collections import OrderedDict, defaultdict
 
 import polygraphy
-from polygraphy import constants, mod, util
+from polygraphy import config, constants, mod, util
 from polygraphy.logger import G_LOGGER
 
 
@@ -124,6 +125,22 @@ def make_invocable_impl(type_str, *args, **kwargs):
     obj_str, all_args_default, all_kwargs_default = util.make_repr(
         type_str, *args, **kwargs
     )
+
+    # Generated scripts must be valid Python, but not every object has a round-trippable
+    # `repr` - e.g. a live enum value renders as `<GraphOptimizationLevel.ORT_ENABLE_ALL: 99>`.
+    # That only fails once the script is `exec`d, which reports a confusing SyntaxError against
+    # generated code, so point at the offending invocation instead.
+    if config.INTERNAL_CORRECTNESS_CHECKS:
+        try:
+            ast.parse(obj_str, mode="eval")
+        except SyntaxError:
+            G_LOGGER.internal_error(
+                f"Could not generate valid Python for: {type_str}.\n"
+                f"Note: Generated code was:\n{obj_str}\n"
+                f"This usually means one of the arguments is an object whose `repr` is not valid Python. "
+                f"Pass such arguments as inline strings instead, e.g. with `inline_identifier`."
+            )
+
     return (
         Script.String(obj_str, safe=True, inline=True),
         all_args_default,
@@ -274,12 +291,12 @@ class Script:
                     Whether to create the list of runners even if it would be empty.
         """
         self.imports = {}  # Dict[str, Set[str, str]]: Maps from: {(import, as), ...}
-        self.loaders = (
+        self.vars = (
             OrderedDict()
-        )  # Dict[str, str] Maps a string constructing a loader to a name.
-        self.loader_count = defaultdict(
+        )  # Dict[str, Tuple[str, str]] Maps a constructing string to a (variable name, category).
+        self.var_count = defaultdict(
             int
-        )  # Dict[str, int] Maps loader_id to the number of loaders sharing that ID
+        )  # Dict[str, int] Maps var_id to the number of variables sharing that ID
         self.runners = []  # List[str]
         self.preimport = []  # List[str]
         self.suffix = []  # List[str]
@@ -334,35 +351,59 @@ class Script:
         self.data_loader = data_loader_str
         return Script.DATA_LOADER_NAME
 
-    def add_loader(self, loader_str, loader_id):
+    def add_var(self, var_str, var_id, category="Variables", force: bool = None):
         """
-        Adds a loader to the script.
-        If the loader is a duplicate, returns the existing loader instead.
+        Adds a uniquely-named variable assignment to the script and returns its name.
+        If an identical ``var_str`` was already added, returns the existing variable
+        (unless ``force`` is set).
+
+        Args:
+            var_str (str):
+                    A string constructing the value. For security, must be generated using
+                    ``make_invocable`` or ``make_invocable_if_nondefault``.
+            var_id (str):
+                    A short human-readable identifier used as the base for the variable name.
+            category (str):
+                    The comment header under which to group the variable in the generated script
+                    (e.g. "Loaders", "Comparison Functions"). Defaults to "Variables".
+            force (bool):
+                    Whether to add the variable even if an identical ``var_str`` already exists.
+
+        Returns:
+            str: The name of the variable added.
+        """
+        var_str = ensure_safe(var_str).unwrap()
+
+        if var_str in self.vars and not force:
+            return self.vars[var_str][0]
+
+        unique_name = var_id
+        if self.var_count[var_id]:
+            unique_name = f"{var_id}_{self.var_count[var_id]}"
+        unique_name = Script.String(unique_name, safe=True, inline=True)
+
+        self.var_count[var_id] += 1
+        self.vars[var_str] = (unique_name, category)
+        return unique_name
+
+    def add_loader(self, loader_str, loader_id, force: bool = None):
+        """
+        Adds a loader to the script. A convenience wrapper around ``add_var`` for the "Loaders"
+        category. If the loader is a duplicate, returns the existing loader (unless ``force`` is set).
 
         Args:
             loader_str (str):
-                    A string constructing the loader.
-                    For security reasons, this must be generated using
+                    A string constructing the loader. For security, must be generated using
                     ``make_invocable`` or ``make_invocable_if_nondefault``.
             loader_id (str):
                     A short human-readable identifier for the loader.
+            force (bool):
+                    Whether to add the loader even if an identical loader already exists.
 
         Returns:
             str: The name of the loader added.
         """
-        loader_str = ensure_safe(loader_str).unwrap()
-
-        if loader_str in self.loaders:
-            return self.loaders[loader_str]
-
-        unique_name = loader_id
-        if self.loader_count[unique_name]:
-            unique_name = f"{unique_name}_{self.loader_count[loader_id]}"
-        unique_name = Script.String(unique_name, safe=True, inline=True)
-
-        self.loader_count[loader_id] += 1
-        self.loaders[loader_str] = unique_name
-        return unique_name
+        return self.add_var(loader_str, loader_id, category="Loaders", force=force)
 
     def get_runners(self):
         return Script.String("runners", safe=True, inline=True)
@@ -446,11 +487,16 @@ class Script:
             script += f"{Script.DATA_LOADER_NAME} = {self.data_loader}\n"
         script += "\n"
 
-        if self.loaders:
-            script += "# Loaders\n"
-        for loader, loader_name in self.loaders.items():
-            script += f"{loader_name} = {loader}\n"
-        script += "\n"
+        # Group variables (loaders, comparison functions, etc.) by category, preserving the
+        # order in which each category first appeared.
+        vars_by_category = {}
+        for var_str, (var_name, category) in self.vars.items():
+            vars_by_category.setdefault(category, []).append((var_name, var_str))
+        for category, entries in vars_by_category.items():
+            script += f"# {category}\n"
+            for var_name, var_str in entries:
+                script += f"{var_name} = {var_str}\n"
+            script += "\n"
 
         if self.runners or self.always_create_runners:
             script += "# Runners\n"

@@ -67,6 +67,9 @@ The Convolution layer computes a 2D (channel, height, and width) convolution, wi
     ```
 	This sample generates `safe_mnist.engine`, which is a binary file that contains the serialized engine data.
 
+	When the build produces a companion library holding the engine's generated host code, it is written
+	beside the engine as `safe_mnist.engine.so`. The infer part loads it from there, so keep the two together.
+
 	This sample reads ONNX model to build the network:
 	- `safe_mnist.onnx` - The ONNX model that contains the network design.
 

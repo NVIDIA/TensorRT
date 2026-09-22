@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -113,17 +113,24 @@ def get_plan(onnx_file_path, engine_file_path, version_compatible):
             )
         )
         plan = builder.build_serialized_network(network, config)
+        if plan is None:
+            raise RuntimeError("Failed to build the TensorRT engine")
+
+        # The version-compatible path replaces the full TensorRT module with
+        # tensorrt_dispatch after this function returns. Copy the plan while
+        # its full-runtime owner is still loaded.
+        plan_bytes = bytes(plan)
         print("Completed creating Engine")
 
         with open(engine_file_path, "wb") as f:
-            f.write(plan)
-        return plan
+            f.write(plan_bytes)
+        return plan_bytes
 
     if os.path.exists(engine_file_path):
         # If a serialized engine exists, use it instead of building an engine.
         print("Reading engine from file {}...".format(engine_file_path))
-        f = open(engine_file_path, "rb")
-        return f.read()
+        with open(engine_file_path, "rb") as f:
+            return f.read()
     return build_plan()
 
 
