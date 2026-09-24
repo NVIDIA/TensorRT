@@ -56,6 +56,10 @@ EXAMPLES = [
         "12_using_numpy_unsupported_dtypes",
         [Artifact("test_conv_bf16.onnx", infer=False)],
     ),
+    (
+        "13_transformer_block_surgery",
+        [Artifact("model.onnx"), Artifact("cleaned.onnx")],
+    ),
 ]
 
 
