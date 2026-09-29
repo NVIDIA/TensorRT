@@ -335,7 +335,9 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     used to populate it.
         """
         builder, network, parser = super().call_impl()
-        success = parser.parse(util.invoke_if_callable(self._model_bytes)[0])
+        model = util.invoke_if_callable(self._model_bytes)[0]
+        trt_util.check_onnx_slice_input_lengths(model)
+        success = parser.parse(model)
         trt_util.check_onnx_parser_errors(parser, success)
         return builder, network, parser
 
@@ -407,6 +409,7 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
                     used to populate it.
         """
         path = util.invoke_if_callable(self.path)[0]
+        trt_util.check_onnx_slice_input_lengths(path)
         builder, network, parser = super().call_impl()
         # We need to use parse_from_file for the ONNX parser to keep track of the location of the ONNX file for
         # potentially parsing any external weights.

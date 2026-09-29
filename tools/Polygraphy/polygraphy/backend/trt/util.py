@@ -96,6 +96,94 @@ def check_onnx_parser_errors(parser, success):
         )
 
 
+def check_onnx_slice_input_lengths(model):
+    """Validates Slice input lengths before invoking the TensorRT ONNX parser.
+
+    TensorRT's ONNX parser rejects models whose ``Slice`` nodes have mismatched
+    ``starts``/``ends``/``axes``/``steps`` input lengths with a low-level assertion
+    (e.g. ``Assertion failed: (starts.size() == axes.size())``), even when the
+    offending node is easy to identify from the model. This check inspects the ONNX
+    graph up front and raises a clear, actionable error that names the offending node.
+
+    Args:
+        model (Union[str, bytes]): Path to an ONNX model, or serialized ONNX model bytes.
+
+    Raises:
+        PolygraphyException: If any ``Slice`` node has inconsistent input lengths.
+    """
+    onnx = mod.lazy_import("onnx")
+
+    if isinstance(model, str):
+        model_proto = onnx.load(model)
+    else:
+        model_proto = onnx.ModelProto()
+        model_proto.ParseFromString(model)
+
+    graph = model_proto.graph
+
+    def shape_of(name):
+        # Constant weights (initializers)
+        for tensor in graph.initializer:
+            if tensor.name == name:
+                return list(tensor.dims)
+        # Constant nodes
+        for node in graph.node:
+            if node.op_type == "Constant" and name in node.output:
+                for attr in node.attribute:
+                    if attr.name == "value":
+                        return list(attr.t.dims)
+        # Graph inputs / value_info (dynamic tensors with static shapes)
+        for value_info in list(graph.input) + list(graph.value_info):
+            if value_info.name == name:
+                tensor_type = value_info.type.tensor_type
+                if tensor_type.HasField("shape"):
+                    return [dim.dim_value for dim in tensor_type.shape.dim]
+        return None
+
+    def num_elements(shape):
+        if shape is None:
+            return None
+        n = 1
+        for dim in shape:
+            if dim < 0:  # symbolic dimension
+                return None
+            n *= dim
+            if dim == 0:
+                return 0
+        return n
+
+    slice_inputs = {"starts": 1, "ends": 2, "axes": 3, "steps": 4}
+    for node in graph.node:
+        if node.op_type != "Slice":
+            continue
+
+        known = {}
+        for label, index in slice_inputs.items():
+            if len(node.input) > index and node.input[index]:
+                n = num_elements(shape_of(node.input[index]))
+                if n is not None:
+                    known[label] = n
+
+        if "starts" not in known:
+            continue
+
+        expected = known["starts"]
+        mismatched = {label: n for label, n in known.items() if n != expected}
+        if not mismatched:
+            continue
+
+        node_name = node.name or f"(unnamed, output: {node.output[0]})"
+        lengths = ", ".join(f"{label}={n} element(s)" for label, n in known.items())
+        raise PolygraphyException(
+            f"Could not import ONNX model into TensorRT: Slice node '{node_name}' has "
+            f"mismatched input lengths ({lengths}). TensorRT's ONNX parser requires "
+            f"starts, ends, axes, and steps to contain the same number of elements (see "
+            f"the ONNX Slice spec: https://onnx.ai/onnx/operators/onnx__Slice.html). "
+            f"This usually indicates the model was exported incorrectly; provide a "
+            f"matching start/end (and axis/step, if used) for every sliced axis."
+        )
+
+
 def get_layer_class_mapping():
     layer_class_mapping = {}
 

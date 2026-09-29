@@ -2,6 +2,13 @@
 
 Dates are in YYYY-MM-DD format.
 
+## Unreleased
+### Added
+- `NetworkFromOnnx` / `NetworkFromOnnxPath` now validate `Slice` input lengths before
+  invoking the TensorRT ONNX parser and raise a clear, actionable error for mismatched
+  `starts`/`ends`/`axes`/`steps` lengths instead of TensorRT's cryptic
+  `Assertion failed: (starts.size() == axes.size())`.
+
 
 ## v0.53.6 (2026-09-22)
 ### Added
