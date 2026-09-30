@@ -71,6 +71,11 @@ class TestParseMeta:
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
         assert meta[name].shape == ["batch", 3, 224, 224]
 
+    @pytest.mark.parametrize("shape", ["[1,2", "1,2]", "]1,2[", "[1,2]]"])
+    def test_unbalanced_shape_is_rejected(self, name, shape):
+        with pytest.raises(PolygraphyException, match="Could not parse"):
+            args_util.parse_meta([f"{name}:{shape}"], includes_dtype=False)
+
 
 class TestRunScript:
     def test_default_args(self):

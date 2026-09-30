@@ -3,6 +3,12 @@
 Dates are in YYYY-MM-DD format.
 
 
+## Unreleased
+### Fixed
+- Parsing a tensor shape no longer accepts a missing, extra, or reversed bracket.
+  `input:[1,2` was read as shape `[1, 2]`.
+
+
 ## v0.53.6 (2026-09-22)
 ### Added
 - `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as

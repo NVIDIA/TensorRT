@@ -38,8 +38,17 @@ def cast(val):
     """
     val = str(val.strip())
 
-    if val.strip("[]") != val:
-        return [cast(elem) for elem in val.strip("[]").split(",")]
+    if "[" in val or "]" in val:
+        well_formed = val.startswith("[") and val.endswith("]")
+        inner = val[1:-1] if well_formed else ""
+        if not well_formed or "[" in inner or "]" in inner:
+            G_LOGGER.critical(
+                f"Could not parse {val} as a list. "
+                "Lists must start with '[' and end with ']', with no other brackets."
+            )
+        if not inner.strip():
+            return []
+        return [cast(elem) for elem in inner.split(",")]
 
     try:
         return int(val)  # This fails for float strings like '0.0'
