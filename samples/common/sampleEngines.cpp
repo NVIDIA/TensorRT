@@ -1299,7 +1299,8 @@ bool networkToSerializedEngine(
     {
         auto const engineFile = build.engine;
         FileStreamWriter writer(engineFile);
-        builder.buildSerializedNetworkToStream(network, config, writer);
+        SMP_RETVAL_IF_FALSE(builder.buildSerializedNetworkToStream(network, config, writer),
+            "Engine could not be created from network", false, err);
         auto const engineSize = writer.finalize();
         std::vector<uint8_t> streamEngine(engineSize, 0);
         std::ifstream reader(engineFile, std::ios::binary);
