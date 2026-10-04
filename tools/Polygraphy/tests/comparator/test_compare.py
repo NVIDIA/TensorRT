@@ -572,6 +572,61 @@ class TestL2CompareFunc:
 
 
 class TestCosineSimilarityCompareFunc:
+    @pytest.mark.parametrize(
+        "array_type", [np.array, build_torch], ids=["numpy", "torch"]
+    )
+    @pytest.mark.parametrize(
+        "dtype, scale0, scale1",
+        [
+            (np.float32, 1e-30, 1e-30),
+            (np.float32, 1e30, 1e30),
+            (np.float64, 1e-200, 1e200),
+            (np.float64, 1e200, 1e200),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "other, expected", [([3.0, 4.0], 1.0), ([4.0, -3.0], 0.0), ([-3.0, -4.0], -1.0)]
+    )
+    def test_independent_rescaling(
+        self, array_type, dtype, scale0, scale1, other, expected
+    ):
+        lhs = array_type(np.array([3.0, 4.0], dtype=dtype) * scale0)
+        rhs = array_type(np.array(other, dtype=dtype) * scale1)
+        result = CosineSimilarityCompareFunc()(
+            IterationResult({"output": lhs}), IterationResult({"output": rhs})
+        )["output"]
+
+        assert np.isclose(result.cosine_similarity, expected, atol=1e-6)
+        assert bool(result) == (expected >= 0.997)
+
+    @pytest.mark.parametrize(
+        "array_type", [np.array, build_torch], ids=["numpy", "torch"]
+    )
+    @pytest.mark.parametrize(
+        "values0, values1, dtype, expected",
+        [
+            ([], [], np.float32, 1.0),
+            ([0.0, 0.0], [3e-30, 4e-30], np.float32, 0.0),
+            ([-2147483648, 0], [-2147483648, 0], np.int32, 1.0),
+            ([-2147483648, 0], [2147483647, 0], np.int32, -1.0),
+        ],
+    )
+    def test_scale_controls(self, array_type, values0, values1, dtype, expected):
+        lhs = array_type(values0, dtype=dtype)
+        rhs = array_type(values1, dtype=dtype)
+        original_lhs, original_rhs = (
+            util.array.to_numpy(lhs).copy(),
+            util.array.to_numpy(rhs).copy(),
+        )
+        result = CosineSimilarityCompareFunc()(
+            IterationResult({"output": lhs}), IterationResult({"output": rhs})
+        )["output"]
+
+        assert np.isclose(result.cosine_similarity, expected, atol=1e-6)
+        assert bool(result) == (expected >= 0.997)
+        np.testing.assert_array_equal(util.array.to_numpy(lhs), original_lhs)
+        np.testing.assert_array_equal(util.array.to_numpy(rhs), original_rhs)
+
     def test_identical_outputs(self):
         res0, res1 = _make_results([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
         result = CosineSimilarityCompareFunc()(res0, res1)["output"]
