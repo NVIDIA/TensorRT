@@ -3,6 +3,12 @@
 Dates are in YYYY-MM-DD format.
 
 
+## Unreleased
+### Fixed
+- Fixed a bug where `polygraphy plugin autotune` and the plugin autotuner API failed with TensorRT 11
+  because they requested the `EXPLICIT_BATCH` network flag, which TensorRT 11 removed.
+
+
 ## v0.53.6 (2026-09-22)
 ### Added
 - `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as
