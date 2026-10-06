@@ -77,8 +77,12 @@ class OptimizationStrategy:
         if not onnx_path.endswith(".onnx"):
             G_LOGGER.critical("Input must be an ONNX file")
 
+        # EXPLICIT_BATCH is implied since TensorRT 10 and was removed in TensorRT 11.
+        explicit_batch = getattr(
+            trt.NetworkDefinitionCreationFlag, "EXPLICIT_BATCH", None
+        )
         network = self.builder.create_network(
-            1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+            0 if explicit_batch is None else 1 << int(explicit_batch)
         )
         parser = trt.OnnxParser(network, self.builder.logger)
         model_data = util.load_file(onnx_path, description="ONNX model")
