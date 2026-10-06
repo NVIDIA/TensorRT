@@ -16,6 +16,7 @@
 #
 import contextlib
 import ctypes
+import glob
 import importlib.util
 import os
 import platform
@@ -32,24 +33,27 @@ def void_ptr(val=None):
     return ctypes.c_void_p(val)
 
 
-def _cuda_runtime_wheel_dirs(subdir):
-    # The pip `nvidia-cuda-runtime-cuXX` wheel installs the runtime under
-    # `<site-packages>/nvidia/cuda_runtime/{bin (Windows), lib (Linux)}`.
-    dirs = [
-        # Some `sys.path` entries are files (a console-script `.exe`, a zipapp), not dirs; skip those.
-        os.path.join(p, "nvidia", "cuda_runtime", subdir)
-        for p in sys.path
-        if p and os.path.isdir(p)
+def _cuda_runtime_wheel_dirs(*subdirs):
+    # The pip CUDA runtime wheel installs the runtime under `<site-packages>/nvidia/cuda_runtime`
+    # for CUDA 12 (`nvidia-cuda-runtime-cu12`) and `<site-packages>/nvidia/cu<major>` for CUDA 13+
+    # (`nvidia-cuda-runtime`).
+    # Some `sys.path` entries are files (a console-script `.exe`, a zipapp), not dirs; skip those.
+    nvidia_dirs = [
+        os.path.join(p, "nvidia") for p in sys.path if p and os.path.isdir(p)
     ]
+    pkg_dirs = [os.path.join(d, "cuda_runtime") for d in nvidia_dirs]
     # find_spec also locates the package when it is import-reachable (e.g. via a `.pth`) but its
     # directory is not itself on `sys.path`. Best-effort: an uninstalled wheel just raises.
     with contextlib.suppress(Exception):
         spec = importlib.util.find_spec("nvidia.cuda_runtime")
         if spec is not None and spec.submodule_search_locations:
-            dirs += [
-                os.path.join(loc, subdir) for loc in spec.submodule_search_locations
-            ]
-    return dirs
+            pkg_dirs += list(spec.submodule_search_locations)
+    pkg_dirs += [
+        pkg_dir
+        for d in nvidia_dirs
+        for pkg_dir in sorted(glob.glob(os.path.join(d, "cu[0-9]*")))
+    ]
+    return [os.path.join(d, subdir) for d in pkg_dirs for subdir in subdirs]
 
 
 def _find_cuda_lib_dirs():
@@ -79,7 +83,7 @@ def _find_cuda_lib_dirs():
             if root
             for path in [root, *[os.path.join(root, s) for s in bin_subdirs]]
         ]
-        cuda_paths += _cuda_runtime_wheel_dirs("bin")
+        cuda_paths += _cuda_runtime_wheel_dirs("bin", os.path.join("bin", "x86_64"))
         cuda_paths += os.environ.get("PATH", "").split(os.path.pathsep)
     else:
         cuda_paths = [
@@ -139,13 +143,15 @@ class Cuda:
                 hint = (
                     "Ensure the CUDA Toolkit is installed and that either `CUDA_PATH` points to its "
                     "root or the directory containing `cudart64_*.dll` is on `PATH`. "
-                    "Alternatively, `pip install nvidia-cuda-runtime-cuXX` provides the runtime."
+                    "Alternatively, `pip install nvidia-cuda-runtime` (CUDA 13+) or "
+                    "`nvidia-cuda-runtime-cu12` provides the runtime."
                 )
             else:
                 hint = (
                     "Ensure the CUDA Toolkit is installed and that the directory containing "
                     "`libcudart.so*` is on `LD_LIBRARY_PATH`. "
-                    "Alternatively, `pip install nvidia-cuda-runtime-cuXX` provides the runtime."
+                    "Alternatively, `pip install nvidia-cuda-runtime` (CUDA 13+) or "
+                    "`nvidia-cuda-runtime-cu12` provides the runtime."
                 )
             log_func(
                 f"Could not find the CUDA runtime library.\n{hint}\n"

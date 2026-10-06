@@ -3,6 +3,13 @@
 Dates are in YYYY-MM-DD format.
 
 
+## Unreleased
+### Fixed
+- Polygraphy now finds the CUDA runtime installed by the CUDA 13+ `nvidia-cuda-runtime` pip wheel, which
+  places it under `nvidia/cu13` instead of `nvidia/cuda_runtime`. Previously, without a CUDA Toolkit or
+  `LD_LIBRARY_PATH` entry, TensorRT runners failed with `OSError: libcudart.so: cannot open shared object file`.
+
+
 ## v0.53.6 (2026-09-22)
 ### Added
 - `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as
