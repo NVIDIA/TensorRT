@@ -23,18 +23,14 @@
 
 #include "trtexec.h"
 
-#if ENABLE_UNIFIED_BUILDER
-#include "safeCommon.h"
-#endif
-
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <chrono>
-#include <cstring>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -344,9 +340,8 @@ int32_t printBuildRouteHelp(std::string const& knobName)
 
     // Database stores names with a leading '-'; accept the user's input both with and without
     // the dash by comparing the unprefixed substrings.
-    auto stripDash = [](std::string const& s) -> std::string {
-        return (!s.empty() && s.front() == '-') ? s.substr(1) : s;
-    };
+    auto stripDash
+        = [](std::string const& s) -> std::string { return (!s.empty() && s.front() == '-') ? s.substr(1) : s; };
     std::string const wantedKnob = stripDash(knobName);
 
     nlohmann::ordered_json filteredOptions = nlohmann::ordered_json::array();
@@ -614,6 +609,12 @@ int32_t runOnceBuildAndInfer(
     std::unique_ptr<BuildEnvironment> bEnv(
         new BuildEnvironment(options.build.safe, options.build.versionCompatible, options.system.DLACore,
             options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath, sampleTest.getCmdline()));
+
+    if (!bEnv->greenContexts.initialize(options.build, options.system.device, sample::gLogError))
+    {
+        sample::gLogError << "CUDA green context set up failed" << std::endl;
+        return EXIT_FAILURE;
+    }
 
 #if !TRT_WINML
     bEnv->engine.setDLAWorkspaceAllocationStrategy(options.system.dlaWorkspaceAllocationStrategy);
@@ -907,8 +908,8 @@ int32_t runOnceBuildAndInfer(
         std::ofstream out(options.tuning.tuningResultFile);
         if (!out)
         {
-            sample::gLogError << "Cannot open --tuningResultFile for writing: "
-                              << options.tuning.tuningResultFile << std::endl;
+            sample::gLogError << "Cannot open --tuningResultFile for writing: " << options.tuning.tuningResultFile
+                              << std::endl;
         }
         else
         {
@@ -1015,8 +1016,7 @@ IterationResult readChildResult(std::string const& jsonPath)
     if (!in)
     {
         r.crashed = true;
-        r.errorMessage = "missing tuning result file " + jsonPath
-            + " (child likely crashed before writing)";
+        r.errorMessage = "missing tuning result file " + jsonPath + " (child likely crashed before writing)";
         return r;
     }
     try
@@ -1286,9 +1286,9 @@ void emitDryRunListing(TuningContext const& ctx)
 //! nested lambda.
 struct PhaseState
 {
-    AllOptions const& options;                           //!< Parsed options for this run.
-    Logger::TestAtom const& sampleTest;                  //!< For TASK_BEGIN/END/ABORT banners.
-    pid_t const ppid{};                                  //!< Parent PID, used in temp filenames.
+    AllOptions const& options;                             //!< Parsed options for this run.
+    Logger::TestAtom const& sampleTest;                    //!< For TASK_BEGIN/END/ABORT banners.
+    pid_t const ppid{};                                    //!< Parent PID, used in temp filenames.
     std::chrono::steady_clock::time_point const startTime; //!< Loop start, for --tuningTimeOut.
     int32_t const argc{};                                  //!< Parent argv (passed verbatim to children).
     char** const argv{};                                   //!< Parent argv (passed verbatim to children).
@@ -1332,7 +1332,8 @@ std::string makeIterationEnginePath(PhaseState const& state, char const* phaseLa
 bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* phaseLabel,
     std::vector<MixedSearchKnobResult>* positiveKnobs, double* baselineGpuTimeMsOut, int64_t skipUntil)
 {
-    sample::gLogInfo << "Tuning " << phaseLabel << ": " << phaseCtx.totalCount.toString() << " iterations." << std::endl;
+    sample::gLogInfo << "Tuning " << phaseLabel << ": " << phaseCtx.totalCount.toString() << " iterations."
+                     << std::endl;
     double baselineGpuTimeMs = std::numeric_limits<double>::infinity();
     for (BigInt i{0}; i < phaseCtx.totalCount; ++i)
     {
@@ -1343,20 +1344,21 @@ bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* p
         }
         if (state.options.tuning.timeout > 0)
         {
-            auto const elapsedS = std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - state.startTime).count();
+            auto const elapsedS
+                = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - state.startTime)
+                      .count();
             if (elapsedS >= state.options.tuning.timeout)
             {
-                sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout
-                                 << "s); stopping early." << std::endl;
+                sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout << "s); stopping early."
+                                 << std::endl;
                 return false;
             }
         }
 
         std::string const route = phaseCtx.getPathAtIndex(i);
         std::string const enginePath = makeIterationEnginePath(state, phaseLabel, i);
-        std::string const jsonPath = "/tmp/trtexec_tuning_" + std::to_string(state.ppid)
-            + "_iter" + i.toString() + ".json";
+        std::string const jsonPath
+            = "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter" + i.toString() + ".json";
 
         sample::gLogger.reportTaskBegin(state.sampleTest, i.toString(), route);
 
@@ -1380,8 +1382,9 @@ bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* p
         }
         else
         {
-            sample::gLogWarning << "Iteration [" << i.toString() << "] failed: "
-                                << (result.errorMessage.empty() ? "(no message)" : result.errorMessage) << std::endl;
+            sample::gLogWarning << "Iteration [" << i.toString()
+                                << "] failed: " << (result.errorMessage.empty() ? "(no message)" : result.errorMessage)
+                                << std::endl;
             sample::gLogger.reportTaskAbort(state.sampleTest, i.toString(), route);
         }
         // For mixed-mode phase 1, collect knobs that beat the baseline.
@@ -1517,21 +1520,21 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
     std::vector<MixedSearchKnobResult> positiveKnobs;
     double phase1BaselineMs{std::numeric_limits<double>::infinity()};
     bool const isMixed = options.tuning.tuningSearchAlgorithm == TuningSearchAlgorithm::kMIXED;
-    bool const phase1Completed
-        = runOnePhase(state, ctx, "phase1", isMixed ? &positiveKnobs : nullptr, &phase1BaselineMs, resume.resumeFromIter);
+    bool const phase1Completed = runOnePhase(
+        state, ctx, "phase1", isMixed ? &positiveKnobs : nullptr, &phase1BaselineMs, resume.resumeFromIter);
 
     if (phase1Completed && isMixed && positiveKnobs.size() > 1)
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size()
-                         << " positive knobs identified; entering phase 2." << std::endl;
+        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knobs identified; entering phase 2."
+                         << std::endl;
         TuningContext const phase2Ctx = buildMixedPhase2Context(ctx, positiveKnobs);
         // Phase 2 always starts fresh (no resume mid-phase-2).
         (void) runOnePhase(state, phase2Ctx, "phase2", nullptr, nullptr, 0);
     }
     else if (isMixed)
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size()
-                         << " positive knob(s); skipping phase 2 (need >1)." << std::endl;
+        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knob(s); skipping phase 2 (need >1)."
+                         << std::endl;
     }
 
     // 7. Promote the best iteration's engine to the user's --saveEngine path.

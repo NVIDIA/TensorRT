@@ -6524,6 +6524,9 @@ inline INormalizationLayer::~INormalizationLayer() noexcept = default;
 //! \brief Layer that represents a squeeze operation, removing unit dimensions of the first input tensor
 //! on a set of axes specified by the second input tensor.
 //!
+//! When the axes input is a nullptr, all dimensions of the first input whose size is statically 1 in
+//! the network definition are removed.
+//!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
 class ISqueezeLayer : public ILayer
@@ -6540,6 +6543,9 @@ public:
     //!
     //! - 0: Input data tensor.
     //! - 1: The axes to remove. Must resolve to a constant Int32 or Int64 1D shape tensor.
+    //!
+    //! When the axes input is set to a nullptr, all dimensions of the first input whose size is statically 1 in
+    //! the network definition are removed.
     //!
     using ILayer::setInput;
 
@@ -9850,6 +9856,35 @@ public:
     }
 
     //!
+    //! \brief Add a squeeze layer to the network, with axes given by a tensor or a nullptr.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param axes The axes to remove unit dimensions on, or nullptr to remove every dimension that is
+    //! statically 1 in the network definition.
+    //!
+    //! \see ISqueezeLayer
+    //!
+    //! When axes is non-null, the behavior is identical to addSqueeze(ITensor&, ITensor&): axes must
+    //! be resolvable to a constant Int32 or Int64 1D shape tensor, values in axes must be unique and
+    //! in the range of [-r, r-1] where r is the rank of the input tensor, and for each axis value the
+    //! corresponding dimension in the input tensor must be one.
+    //!
+    //! When axes is nullptr, removes every dimension of the input tensor whose size is statically 1 in
+    //! the network definition. The set of removed dimensions, and hence the output rank, is decided
+    //! when the layer is added or its input is replaced; it does not depend on the optimization
+    //! profile. Dynamic dimensions are retained and must not be 1, because removing one would change
+    //! the output rank. That requirement is validated at build time when the optimization profile
+    //! decides it, and otherwise at runtime. To squeeze a dynamic dimension, provide an explicit axes
+    //! tensor. Zero-sized dimensions are retained, so empty tensors are supported.
+    //!
+    //! \return The new Squeeze layer, or nullptr if it could not be created.
+    //!
+    ISqueezeLayer* addSqueeze(ITensor& input, ITensor* axes) noexcept
+    {
+        return mImpl->addSqueezeV2(input, axes);
+    }
+
+    //!
     //! \brief Add an unsqueeze layer to the network.
     //!
     //! \param input The input tensor to the layer.
@@ -10309,6 +10344,7 @@ enum class MemoryPoolType : int32_t
     //! The size of this pool must be at least 4 KiB and must be a power of 2.
     //! This defaults to 1 MiB.
     //! Orin has capacity of 1 MiB per core.
+    //! Each loadable is given the whole pool.
     //!
     kDLA_MANAGED_SRAM = 1,
 
@@ -10316,6 +10352,8 @@ enum class MemoryPoolType : int32_t
     //! kDLA_LOCAL_DRAM is host RAM used by DLA to share intermediate tensor data across operations.
     //! The size of this pool must be at least 4 KiB and must be a power of 2.
     //! This defaults to 1 GiB.
+    //! \note the compiled loadable may require less than this amount; at runtime, TensorRT will
+    //! allocate only as much as is required.
     //!
     kDLA_LOCAL_DRAM = 2,
 
@@ -10323,6 +10361,8 @@ enum class MemoryPoolType : int32_t
     //! kDLA_GLOBAL_DRAM is host RAM used by DLA to store weights and metadata for execution.
     //! The size of this pool must be at least 4 KiB and must be a power of 2.
     //! This defaults to 512 MiB.
+    //! \note the compiled loadable may require less than this amount; at runtime, TensorRT will
+    //! allocate only as much as is required.
     //!
     kDLA_GLOBAL_DRAM = 3,
 
@@ -10429,6 +10469,9 @@ enum class HardwareCompatibilityLevel : int32_t
     //! This option will disable cuDNN, cuBLAS, and cuBLASLt as tactic sources.
     //!
     //! This option is only supported for engines built on NVIDIA Turing and later GPUs.
+    //!
+    //! \warning CUDA green context profile streams are not supported with this option. The build will continue, but
+    //! the resulting engine may cause crashes or other undefined behavior during execution.
     //!
     kSAME_COMPUTE_CAPABILITY = 2,
 };
@@ -10815,21 +10858,48 @@ public:
     //!
     //! \brief Set the CUDA stream that is used to profile this network.
     //!
+    //! This is the default engine-level profile stream. A stream set through
+    //! IOptimizationProfile::setProfileStream() overrides it for that optimization profile.
+    //!
+    //! If \p stream belongs to a CUDA green context, TensorRT automatically queries the context's SM count and
+    //! co-scheduled-SM alignment, profiles each optimization profile that inherits this stream on it, and stores the
+    //! resulting execution-resource contract for each such profile in the engine. The contract conservatively limits
+    //! CGA size to the number of SMs guaranteed to be co-scheduled. If an optimization profile's effective stream is
+    //! not associated with a CUDA green context, that profile is built without a CUDA green context execution
+    //! contract.
+    //!
+    //! Using a CUDA green context requires both a TensorRT build based on CUDA Toolkit 13.0 or newer and a CUDA driver
+    //! compatible with CUDA 13.0 or newer. Ordinary profile streams remain supported with older CUDA Toolkit and
+    //! driver versions supported by TensorRT. TensorRT uses the provided stream for tactic profiling and creates
+    //! auxiliary profiling streams in the same CUDA green context.
+    //!
+    //! At runtime, TensorRT compares a CUDA green context stream's resources with the active optimization profile's
+    //! stored execution contract. If the stream has fewer SMs or a smaller CGA size, TensorRT emits a warning and
+    //! continues the enqueue. Enqueuing a profile built without CUDA green context constraints on a CUDA green context
+    //! stream also emits a warning. In either case, the configuration may cause enqueue crashes or other undefined
+    //! behavior.
+    //!
+    //! TensorRT does not inspect, redirect, or constrain CUDA streams, library handles, or kernel tactics created by
+    //! user plugins; each plugin is responsible for keeping its own CUDA work within the intended CUDA green context
+    //! and its resource limits.
+    //!
+    //! The application must keep the stream and its CUDA green context alive until the build completes.
+    //!
     //! \param stream The CUDA stream used for profiling by the builder.
     //!
-    //! \see getProfileStream()
+    //! \see getProfileStream(), IOptimizationProfile::setProfileStream()
     //!
-    void setProfileStream(const cudaStream_t stream) noexcept
+    void setProfileStream(cudaStream_t const stream) noexcept
     {
         return mImpl->setProfileStream(stream);
     }
 
     //!
-    //! \brief Get the CUDA stream that is used to profile this network.
+    //! \brief Get the default engine-level CUDA stream used to profile this network.
     //!
-    //! \return The CUDA stream set by setProfileStream, nullptr if setProfileStream has not been called.
+    //! \return The CUDA stream set by setProfileStream, or nullptr if setProfileStream has not been called.
     //!
-    //! \see setProfileStream()
+    //! \see setProfileStream(), IOptimizationProfile::getProfileStream()
     //!
     cudaStream_t getProfileStream() const noexcept
     {
@@ -11659,11 +11729,12 @@ public:
     //! \param network Network definition.
     //! \param config Builder configuration.
     //!
-    //! \return A pointer to a IHostMemory object that contains a serialized network.
+    //! \return A pointer to a IHostMemory object that contains a serialized engine.
     //!
-    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
+    //!       profile-specific stream before returning.
     //!
-    //! \see INetworkDefinition, IBuilderConfig, IHostMemory
+    //! \see INetworkDefinition, IBuilderConfig, IHostMemory, ICudaEngine
     //!
     nvinfer1::IHostMemory* buildSerializedNetwork(INetworkDefinition& network, IBuilderConfig& config) noexcept
     {
@@ -11671,10 +11742,10 @@ public:
     }
 
     //!
-    //! \brief Builds and serializes a network into stream for the given INetworkDefinition and IBuilderConfig.
+    //! \brief Builds \p network using the \p config configuration, and serializes an engine into \p writer.
     //!
-    //! This function allows building and serialization of a network without creating an engine. The engine is
-    //! finally serialized into the writer stream.
+    //! This function allows building and serialization of a network without returning an engine. The engine is
+    //! finally serialized into the \p writer stream.
     //!
     //! \param network Network definition.
     //! \param config Builder configuration.
@@ -11682,9 +11753,10 @@ public:
     //!
     //! \return true if build succeed, otherwise false.
     //!
-    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
+    //!       profile-specific stream before returning.
     //!
-    //! \see INetworkDefinition, IBuilderConfig, IStreamWriter
+    //! \see INetworkDefinition, IBuilderConfig, IStreamWriter, ICudaEngine
     //!
     bool buildSerializedNetworkToStream(
         INetworkDefinition& network, IBuilderConfig& config, IStreamWriter& writer) noexcept
@@ -11693,22 +11765,23 @@ public:
     }
 
     //!
-    //! \brief Extended form of buildSerializedNetwork that optionally permits getting the kernelText.
+    //! \brief Extended form of buildSerializedNetwork that optionally permits getting the kernel text.
     //!
     //! Similar to two-argument form, except that if an engine with safe capability is successfully built
-    //! and there are kernels, sets kernelText to ..... Otherwise sets kernelText=nullptr.
+    //! and there are kernels, sets \p kernelText to the kernel source code. Otherwise leaves \p kernelText unmodified.
     //!
-    //! This function allows building and serialization of a network without creating an engine.
+    //! This function allows building and serialization of a network without returning an engine.
     //!
     //! \param network Network definition.
     //! \param config Builder configuration.
     //! \param kernelText A reference to a pointer to a IHostMemory object that will be set to the kernel CPP code text
     //!
-    //! \return A pointer to a IHostMemory object that contains a serialized network.
+    //! \return A pointer to a IHostMemory object that contains a serialized engine.
     //!
-    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
+    //!       profile-specific stream before returning.
     //!
-    //! \see INetworkDefinition, IBuilderConfig, IHostMemory
+    //! \see INetworkDefinition, IBuilderConfig, IHostMemory, ICudaEngine
     //!
     nvinfer1::IHostMemory* buildSerializedNetwork(
         INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept
@@ -11725,7 +11798,8 @@ public:
     //!
     //! \return A pointer to a ICudaEngine object that contains an engine.
     //!
-    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
+    //!       profile-specific stream before returning.
     //!
     //! \note This function does not support \p BuilderFlag::kVERSION_COMPATIBLE.
     //! Please use \p buildSerializedNetwork to get a version compatible engine.

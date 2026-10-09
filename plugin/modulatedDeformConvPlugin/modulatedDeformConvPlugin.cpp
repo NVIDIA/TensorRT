@@ -27,6 +27,7 @@
 #include "modulatedDeformConvPlugin.h"
 #include <algorithm>
 #include <memory>
+#include <span>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -403,12 +404,12 @@ nvinfer1::PluginFieldCollection const* ModulatedDeformableConvPluginDynamicCreat
     return &mFC;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
     char const* name, nvinfer1::PluginFieldCollection const* fc, nvinfer1::TensorRTPhase phase) noexcept
 {
     try
     {
+        using namespace std::string_view_literals;
         PLUGIN_VALIDATE(fc != nullptr);
         PLUGIN_VALIDATE(fc->fields != nullptr || fc->nbFields == 0);
 
@@ -433,14 +434,14 @@ nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
 
             std::string const fieldName(field.name);
 
-            if (fieldName == "deformable_group")
+            if (fieldName == "deformable_group"sv)
             {
                 PLUGIN_VALIDATE(field.type == PluginFieldType::kINT32);
                 PLUGIN_VALIDATE(field.length == 1);
                 deformableGroup = *static_cast<int32_t const*>(field.data);
                 PLUGIN_VALIDATE(deformableGroup > 0);
             }
-            else if (fieldName == "group")
+            else if (fieldName == "group"sv)
             {
                 PLUGIN_VALIDATE(field.type == PluginFieldType::kINT32);
                 PLUGIN_VALIDATE(field.length == 1);
@@ -449,8 +450,19 @@ nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
             }
             else if (bert::elem(fieldName, {"stride", "padding", "dilation"}))
             {
-                nvinfer1::Dims* dimsPtr
-                    = (fieldName == "stride") ? &stride : ((fieldName == "padding") ? &padding : &dilation);
+                nvinfer1::Dims* dimsPtr;
+                if (fieldName == "stride"sv)
+                {
+                    dimsPtr = &stride;
+                }
+                else if (fieldName == "padding"sv)
+                {
+                    dimsPtr = &padding;
+                }
+                else
+                {
+                    dimsPtr = &dilation;
+                }
 
                 PluginFieldType const expectedFieldType
                     = isBuildPhase ? PluginFieldType::kINT32 : PluginFieldType::kINT64;
@@ -463,21 +475,19 @@ nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
                 if (isBuildPhase)
                 {
                     // During build time, data is INT32, upcast to int64 for internal storage (Dims uses int64_t).
-                    auto const* dataPtr = static_cast<int32_t const*>(field.data);
-                    dimsPtr->d[0] = dataPtr[0];
-                    dimsPtr->d[1] = dataPtr[1];
+                    auto const dataPtr = std::span(static_cast<int32_t const*>(field.data), 2);
+                    std::ranges::copy(dataPtr, dimsPtr->d);
                 }
                 else // Runtime phase
                 {
                     // During runtime, data is deserialized as INT64.
                     PLUGIN_VALIDATE(phase == nvinfer1::TensorRTPhase::kRUNTIME);
-                    auto const* dataPtr = static_cast<int64_t const*>(field.data);
-                    dimsPtr->d[0] = dataPtr[0];
-                    dimsPtr->d[1] = dataPtr[1];
+                    auto const dataPtr = std::span(static_cast<int64_t const*>(field.data), 2);
+                    std::ranges::copy(dataPtr, dimsPtr->d);
                 }
 
                 // Validate values
-                if (fieldName == "padding")
+                if (fieldName == "padding"sv)
                 {
                     PLUGIN_VALIDATE(dimsPtr->d[0] >= 0 && dimsPtr->d[1] >= 0);
                 }

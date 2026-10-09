@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 add_executable(trtexec trtexec_main.cpp trtexec.cpp)
-target_link_libraries(trtexec PRIVATE trt_samples_common)
-if (TRT_BUILD_SAMPLES)
+target_link_libraries(trtexec PRIVATE trtexec_common)
+if(TARGET tensorrt_tools)
+    add_dependencies(tensorrt_tools trtexec)
+elseif(TARGET tensorrt_samples)
     add_dependencies(tensorrt_samples trtexec)
 endif()
 
@@ -42,6 +44,7 @@ installLibraries(
     TARGETS trtexec
     OPTIONAL
     COMPONENT external
+    EXPORT TensorRT
 )
 
 # When statically linked, trtexec requires the plugins library.
@@ -66,8 +69,10 @@ set_target_properties(trtexec
 # In this mode, we build an additional binary trtexec_static that always links tensorrt_static.
 if(${TRT_BUILD_TRTEXEC_STATIC})
     add_executable(trtexec_static trtexec_main.cpp trtexec.cpp)
-    target_link_libraries(trtexec_static PRIVATE trt_samples_common)
-    if (TRT_BUILD_SAMPLES)
+    target_link_libraries(trtexec_static PRIVATE trtexec_common)
+    if(TARGET tensorrt_tools)
+        add_dependencies(tensorrt_tools trtexec_static)
+    elseif(TARGET tensorrt_samples)
         add_dependencies(tensorrt_samples trtexec_static)
     endif()
 
@@ -93,7 +98,7 @@ endif()
 if(TRT_BUILD_WINML_PLUGIN)
     set(internal_sample_name "tensorrt_rtx_internal")
     add_executable(${internal_sample_name} trtexec_main.cpp trtexec.cpp)
-    target_link_libraries(${internal_sample_name} PRIVATE trt_samples_common)
+    target_link_libraries(${internal_sample_name} PRIVATE trtexec_common)
     target_compile_definitions(${internal_sample_name} PRIVATE TRT_WINML_PLUGIN=1)
 
     installLibraries(

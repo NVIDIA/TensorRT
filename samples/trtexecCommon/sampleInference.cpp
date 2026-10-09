@@ -86,12 +86,11 @@ namespace safe
 {
 namespace
 {
-//! Function pointer to the safe runtime's `createTRTGraph` symbol.
-//! Bound by `initNvinferSafe()` when `gUseRuntime == RuntimeMode::kSAFE`; stays empty until then, or if
-//! the library fails to load.
+//! Function pointer to the safe runtime's `createTRTGraphWithSo` symbol.
+//! Bound by `initNvinferSafe()`; stays empty until then, or if the library fails to load.
 std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph*&, void const*, int64_t, nvinfer2::safe::AsciiChar const*,
     ISafeRecorder&, bool, ISafeMemAllocator*)>
-    sCreateTrtGraphInternal{};
+    sCreateTrtGraphWithSoInternal{};
 
 //! Function pointer to the safe runtime's `destroyTRTGraph` symbol. Bound as above.
 std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph* graph)> sDestroyTrtGraphInternal{};
@@ -120,7 +119,7 @@ namespace
 //! The function performs the following operations:
 //! - Dynamically loads the safe TensorRT runtime library
 //! - Retrieves and stores function pointers for:
-//!   - createTRTGraph: Creates a safe TRT graph from serialized engine data
+//!   - createTRTGraphWithSo: Creates a safe TRT graph from serialized engine data
 //!   - destroyTRTGraph: Destroys a safe TRT graph and releases resources
 //!   - getSafePluginRegistry: Gets the safe plugin registry for loading plugins
 //!
@@ -132,9 +131,9 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings)
 #if !TRT_STATIC
     static LibraryPtr libnvinfersafePtr{};
     auto fetchPtrs = [](samplesCommon::DynamicLibrary& l) {
-        sCreateTrtGraphInternal = l.symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&,
-            void const*, int64_t, nvinfer2::safe::AsciiChar const*, ISafeRecorder&, bool, ISafeMemAllocator*)>(
-            "createTRTGraph");
+        sCreateTrtGraphWithSoInternal
+            = l.symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&, void const*, int64_t,
+                nvinfer2::safe::AsciiChar const*, ISafeRecorder&, bool, ISafeMemAllocator*)>("createTRTGraphWithSo");
 
         sDestroyTrtGraphInternal
             = l.symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph * graph)>("destroyTRTGraph");
@@ -155,16 +154,15 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings)
 //! a safe TRT graph for inference with safety-certified TensorRT engines.
 //!
 nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    nvinfer2::safe::AsciiChar const* companionSoPath, ISafeRecorder& recorder, bool useManaged,
-    ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings)
+    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings)
 {
     if (!initNvinferSafe(settings))
     {
         return nvinfer1::ErrorCode::kINTERNAL_ERROR;
     }
-    ASSERT(sCreateTrtGraphInternal != nullptr);
-    // A null path is valid: it means this engine needs no companion library.
-    return sCreateTrtGraphInternal(graph, blob, size, companionSoPath, recorder, useManaged, allocator);
+    ASSERT(sCreateTrtGraphWithSoInternal != nullptr);
+    // No companion .so is bound yet; a null path matches the behavior of the legacy createTRTGraph.
+    return sCreateTrtGraphWithSoInternal(graph, blob, size, nullptr, recorder, useManaged, allocator);
 }
 
 //!
@@ -398,7 +396,7 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
         else
         {
             size_t sizeToAlloc{0};
-            const char* allocReason{nullptr};
+            char const* allocReason{nullptr};
             if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kPROFILE)
             {
                 auto const p = inference.optProfileIndex;
@@ -493,20 +491,23 @@ IRuntimeConfig* setJITRuntimeConfig(nvinfer1::ICudaEngine* engine, InferenceOpti
     if (!inference.runtimeCacheFile.empty())
     {
         nvinfer1::IRuntimeCache* runtimeCache = runtimeConfig->createRuntimeCache();
-        // deserialize runtime cache from file
+        // load runtime cache from file
+        auto const rtcLoadBegin = std::chrono::steady_clock::now();
         std::vector<char> loadedCacheBytes = samplesCommon::loadCacheFile(sample::gLogger, inference.runtimeCacheFile);
         std::vector<uint8_t> runtimeCacheBytes(loadedCacheBytes.begin(), loadedCacheBytes.end());
+        auto const rtcLoadEnd = std::chrono::steady_clock::now();
 
         if (!loadedCacheBytes.empty())
         {
-            std::vector<uint8_t> runtimeCacheBytes(loadedCacheBytes.begin(), loadedCacheBytes.end());
+            // deserialize runtime cache
             auto const rtcDeserializeBegin = std::chrono::steady_clock::now();
             runtimeCache->deserialize(runtimeCacheBytes.data(), runtimeCacheBytes.size());
             auto const rtcDeserializeEnd = std::chrono::steady_clock::now();
             sample::gLogInfo
                 << "Runtime Cache deserialized in "
-                << std::chrono::duration<float, std::milli>(rtcDeserializeEnd - rtcDeserializeBegin).count() << " ms."
-                << std::endl;
+                << std::chrono::duration<float, std::milli>(rtcDeserializeEnd - rtcDeserializeBegin).count()
+                << " ms (File loaded in " << std::chrono::duration<float, std::milli>(rtcLoadEnd - rtcLoadBegin).count()
+                << " ms)." << std::endl;
         }
         // The runtime cache is portable only within a matching environment: a loaded cache is
         // rejected (and ignored for execution) if the GPU device/SKU, the TensorRT-RTX version, or
@@ -579,8 +580,8 @@ bool populateRuntimeCacheForDeferredJit(nvinfer1::ICudaEngine& engine, Inference
         return false;
     }
     auto const tEnd = std::chrono::high_resolution_clock::now();
-    sample::gLogInfo << "Deferred JIT compilation in " << std::chrono::duration<float>(tEnd - tBegin).count()
-                     << " sec." << std::endl;
+    sample::gLogInfo << "Deferred JIT compilation in " << std::chrono::duration<float>(tEnd - tBegin).count() << " sec."
+                     << std::endl;
 
     return serializeRuntimeCache(context.get(), inference);
 }
@@ -605,7 +606,7 @@ void getSafeTensorInfo(uint32_t profileIndex, nvinfer2::safe::ITRTGraph* safeGra
 {
     nvinfer2::safe::TensorDescriptor desc;
     auto const b = tensorInfo.bindingIndex;
-    const char* name = nullptr;
+    char const* name = nullptr;
     safeGraph->getIOTensorName(name, b);
     tensorInfo.name = name;
     safeGraph->getIOTensorDescriptor(desc, name);
@@ -638,9 +639,8 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
     bool const useManagedMemory{inference.useManaged};
 
     nvinfer2::safe::ITRTGraph* tempGraph = nullptr;
-    auto const* const companionSoPath = iEnv.companionSoPath ? iEnv.companionSoPath->c_str() : nullptr;
-    if (sample::safe::createSafeTRTGraph(tempGraph, safeEngineBlob.data, safeEngineBlob.size, companionSoPath,
-            *gSafeRecorder, useManagedMemory, nullptr, iEnv.safeRuntimeSettings)
+    if (sample::safe::createSafeTRTGraph(tempGraph, safeEngineBlob.data, safeEngineBlob.size, *gSafeRecorder,
+            useManagedMemory, nullptr, iEnv.safeRuntimeSettings)
         != nvinfer2::safe::ErrorCode::kSUCCESS)
     {
         sample::gLogError << "Create Safe TRT Graph Failed." << std::endl;
@@ -852,6 +852,12 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
                             << " profiles detected but not set. Running with profile 0. Please use "
                                "--dumpOptimizationProfile to see all available profiles."
                             << std::endl;
+    }
+
+    if (!iEnv.greenContexts.prepareInferenceStreams(
+            static_cast<size_t>(inference.optProfileIndex), inference.infStreams, sample::gLogError))
+    {
+        return false;
     }
 
     for (int32_t s = 0; s < inference.infStreams; ++s)
@@ -1130,7 +1136,7 @@ public:
             }
             return result;
         }
-        catch (const std::exception&)
+        catch (std::exception const&)
         {
             return false;
         }
@@ -1172,7 +1178,7 @@ public:
             bool const result = (mGraph.executeAsync(stream.get()) == nvinfer1::ErrorCode::kSUCCESS);
             return result;
         }
-        catch (const std::exception&)
+        catch (std::exception const&)
         {
             return false;
         }
@@ -1274,11 +1280,13 @@ class IterationBase
 {
 
 public:
-    explicit IterationBase(int32_t id, InferenceOptions const& inference, BindingsBase& bindings)
+    explicit IterationBase(
+        int32_t id, InferenceOptions const& inference, BindingsBase& bindings, cudaStream_t computeStream = nullptr)
         : mBindings(bindings)
         , mStreamId(id)
         , mDepth(1 + inference.overlap)
         , mActive(mDepth)
+        , mStream{{TrtCudaStream{}, TrtCudaStream{computeStream}, TrtCudaStream{}}}
         , mEvents(mDepth)
         , mEnqueueTimes(mDepth)
     {
@@ -1460,9 +1468,9 @@ protected:
 class IterationStd : public IterationBase
 {
 public:
-    explicit IterationStd(
-        int32_t id, InferenceOptions const& inference, nvinfer1::IExecutionContext& context, BindingsStd& bindings)
-        : IterationBase(id, inference, bindings)
+    explicit IterationStd(int32_t id, InferenceOptions const& inference, nvinfer1::IExecutionContext& context,
+        BindingsStd& bindings, cudaStream_t computeStream)
+        : IterationBase(id, inference, bindings, computeStream)
     {
         createEnqueueFunction(inference, context, bindings);
     }
@@ -1924,7 +1932,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
             int32_t const streamId{threadIdx * streamsPerThread + s};
             auto iteration = std::make_unique<IterationStd>(streamId, inference,
                 *static_cast<InferenceEnvironmentStd&>(iEnv).getContext(streamId),
-                *static_cast<InferenceEnvironmentStd&>(iEnv).bindings[streamId]);
+                *static_cast<InferenceEnvironmentStd&>(iEnv).bindings[streamId],
+                iEnv.greenContexts.inferenceStream(static_cast<size_t>(streamId)));
             if (!inference.includeTransfers)
             {
                 iteration->setInputData(true);
@@ -2068,9 +2077,8 @@ bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment
     for (size_t i = 0; i < tEnvList.size(); ++i)
     {
         auto& tEnv = tEnvList[i];
-        threads.emplace_back(makeThread(
-            tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1, tEnv->device, tEnv->trace,
-            tEnv->rOptions));
+        threads.emplace_back(makeThread(tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1,
+            tEnv->device, tEnv->trace, tEnv->rOptions));
     }
     for (auto& th : threads)
     {

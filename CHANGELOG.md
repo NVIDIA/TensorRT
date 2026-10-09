@@ -1,5 +1,16 @@
 # TensorRT OSS Release Changelog
 
+## 11.4 GA - 2026-10-09
+- Parsers
+  - Added `IRefitterObserver` class and `IParser::setRefitObserver` to better handle refittable weights when parsing.
+
+- Plugins
+  - Added various C++20 updates to plugin source code.
+
+- Samples
+  - Moved samples/common files only relevant to trtexec to samples/trtexecCommon.
+
+
 ## 11.3 GA - 2026-09-22
 - General
   - Updated default CUDA version to 13.4

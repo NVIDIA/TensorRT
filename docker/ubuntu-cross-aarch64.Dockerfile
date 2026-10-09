@@ -21,7 +21,7 @@ ARG OS_VERSION=24.04
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION=11.3.0.99
+ENV TRT_VERSION=11.4.0.106
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Setup user account and edit default account

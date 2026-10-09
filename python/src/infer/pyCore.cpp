@@ -19,6 +19,7 @@
 #include "ForwardDeclarations.h"
 #include "utils.h"
 #include <chrono>
+#include <cstdint>
 #include <iomanip>
 #include <pybind11/stl.h>
 
@@ -85,6 +86,23 @@ static auto const opt_profile_get_shape_input
     }
     return shapes;
 };
+
+namespace
+{
+
+//! Return an optimization profile's CUDA stream as a Python-compatible handle.
+size_t optProfileGetProfileStream(IOptimizationProfile const& self)
+{
+    return reinterpret_cast<size_t>(self.getProfileStream());
+}
+
+//! Set an optimization profile's CUDA stream from a Python stream handle.
+void optProfileSetProfileStream(IOptimizationProfile& self, size_t streamHandle)
+{
+    self.setProfileStream(reinterpret_cast<cudaStream_t>(streamHandle));
+}
+
+} // namespace
 
 // For IExecutionContext
 
@@ -179,6 +197,7 @@ static auto const runtime_set_dla_workspace_allocation_strategy
 static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
     return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
 };
+
 
 
 // For ICudaEngine
@@ -1058,6 +1077,7 @@ void bindCore(py::module& m)
             IOptimizationProfileDoc::get_shape_input)
         .def_property("extra_memory_target", &IOptimizationProfile::getExtraMemoryTarget,
             &IOptimizationProfile::setExtraMemoryTarget)
+        .def_property("profile_stream", lambdas::optProfileGetProfileStream, lambdas::optProfileSetProfileStream)
         .def("__nonzero__", &IOptimizationProfile::isValid)
         .def("__bool__", &IOptimizationProfile::isValid);
 
@@ -1375,8 +1395,10 @@ void bindCore(py::module& m)
             IExecutionContextDoc::set_all_tensors_debug_state)
         .def_property("unfused_tensors_debug_state", &IExecutionContext::getUnfusedTensorsDebugState,
             &IExecutionContext::setUnfusedTensorsDebugState)
+        // setCommunicator blocks in ncclCommSplit, a collective every rank must reach. Holding the GIL
+        // across it deadlocks any single-process multi-rank program.
         .def("set_communicator", &IExecutionContext::setCommunicator, "communicator"_a,
-            IExecutionContextDoc::set_communicator)
+            IExecutionContextDoc::set_communicator, py::call_guard<py::gil_scoped_release>{})
         .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config,
             py::keep_alive<1, 0>{}, py::call_guard<py::gil_scoped_release>{})
         ;
@@ -1420,6 +1442,7 @@ void bindCore(py::module& m)
     py::enum_<TensorLocation>(m, "TensorLocation", TensorLocationDoc::descr, py::module_local())
         .value("DEVICE", TensorLocation::kDEVICE, TensorLocationDoc::DEVICE)
         .value("HOST", TensorLocation::kHOST, TensorLocationDoc::HOST); // TensorLocation
+
 
     py::enum_<TensorIOMode>(m, "TensorIOMode", TensorIOModeDoc::descr, py::module_local())
         .value("NONE", TensorIOMode::kNONE, TensorIOModeDoc::NONE)
@@ -1916,6 +1939,8 @@ void bindCore(py::module& m)
         .def_property("weights_validation", &IRefitter::getWeightsValidation, &IRefitter::setWeightsValidation)
         .def("refit_cuda_engine_async", lambdas::refitter_refit_cuda_engine_async, "stream_handle"_a,
             RefitterDoc::refit_cuda_engine_async, py::call_guard<py::gil_scoped_release>{})
+        .def("release_refit_resources", &IRefitter::releaseRefitResources, RefitterDoc::release_refit_resources,
+            py::call_guard<py::gil_scoped_release>{})
         .def("get_weights_prototype", &IRefitter::getWeightsPrototype, "weights_name"_a,
             RefitterDoc::get_weights_prototype)
         .def("__del__", &utils::doNothingDel<IRefitter>);

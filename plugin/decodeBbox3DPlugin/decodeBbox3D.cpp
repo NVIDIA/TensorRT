@@ -53,7 +53,7 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float
     mAnchorBottomHeight = anchorBottomHeight;
     mAnchors = anchors;
     mNumClasses = static_cast<int32_t>(mAnchorBottomHeight.size());
-    PLUGIN_VALIDATE(static_cast<size_t>(mNumClasses) * 2 * 4 == mAnchors.size());
+    PLUGIN_VALIDATE(mNumClasses * 2 * 4 == std::ssize(mAnchors));
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax,
@@ -75,7 +75,7 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float
     mAnchorBottomHeight = anchorBottomHeight;
     mAnchors = anchors;
     mNumClasses = static_cast<int32_t>(mAnchorBottomHeight.size());
-    PLUGIN_VALIDATE(static_cast<size_t>(mNumClasses) * 2 * 4 == mAnchors.size());
+    PLUGIN_VALIDATE(mNumClasses * 2 * 4 == std::ssize(mAnchors));
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(void const* data, size_t length)

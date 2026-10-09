@@ -21,7 +21,7 @@ ARG CUDA_VERSION=13.4.1
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION=11.3.0.99
+ENV TRT_VERSION=11.4.0.106
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -43,7 +43,7 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/
 
 # Install requried libraries
 RUN apt-get update && apt-get install -y software-properties-common
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends --allow-change-held-packages \
     libcurl4-openssl-dev \
     wget \
     git \

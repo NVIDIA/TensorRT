@@ -3029,11 +3029,17 @@ constexpr char const* add_normalization_v2 = R"trtdoc(
 )trtdoc";
 
 constexpr char const* add_squeeze = R"trtdoc(
-    Adds a Squeeze layer to the network.
+    Adds a Squeeze layer with an optional axes input to the network.
     See :class:`ISqueezeLayer` for more information.
 
+    With axes, removes the specified unit dimensions. Without axes, removes every dimension of the
+    input whose size is statically 1 in the network definition. Each dynamic dimension is
+    retained and must not be 1 at runtime, because removing it would change the output rank,
+    which is fixed at definition time. Zero-sized dimensions are retained, so empty tensors are supported.
+
     :arg input: The input tensor to the layer.
-    :arg axes: The tensor containing axes to remove. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+    :arg axes: The tensor containing axes to remove, or :class:`None` to remove all unit
+        dimensions. Must be resolvable to a constant Int32 or Int64 1D shape tensor if provided.
 
     :returns: the new Squeeze layer, or :class:`None` if it could not be created.
 )trtdoc";

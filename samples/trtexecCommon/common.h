@@ -1,0 +1,1065 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef TENSORRT_COMMON_H
+#define TENSORRT_COMMON_H
+#include "NvInfer.h"
+#if !TRT_WINML
+#include "NvInferPlugin.h"
+#endif
+#include "logger.h"
+#include "sampleEntrypoints.h"
+#include "utils/cacheUtils.h"
+#include <algorithm>
+#include <cassert>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#include <fstream>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <new>
+#include <numeric>
+#include <optional>
+#include <ratio>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#ifdef _MSC_VER
+// For loadLibrary
+// Needed so that the max/min definitions in windows.h do not conflict with std::max/min.
+#define NOMINMAX
+#include <windows.h>
+#undef NOMINMAX
+#else
+#include <dlfcn.h>
+#endif
+
+#ifdef _MSC_VER
+#define FN_NAME __FUNCTION__
+#else
+#define FN_NAME __func__
+#endif
+
+#if defined(__aarch64__) || defined(__QNX__)
+#define ENABLE_DLA_API 1
+#endif
+
+using namespace nvinfer1;
+
+#define CHECK_RETURN_W_MSG(status, val, errMsg)                                                                        \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(status))                                                                                                 \
+        {                                                                                                              \
+            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line "         \
+                              << __LINE__ << std::endl;                                                                \
+            return val;                                                                                                \
+        }                                                                                                              \
+    } while (0)
+
+#undef ASSERT
+#define ASSERT(condition)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            sample::gLogError << "Assertion failure: " << #condition << std::endl;                                     \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
+    } while (0)
+
+#define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
+
+#undef CHECK_WITH_STREAM
+#define CHECK_WITH_STREAM(status, stream)                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if ((status) != cudaSuccess)                                                                                   \
+        {                                                                                                              \
+            stream << "Cuda failure at " << __FILE__ << ":" << __LINE__ << ": " << cudaGetErrorString(status)          \
+                   << std::endl;                                                                                       \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
+    } while (0)
+
+#undef CHECK
+#define CHECK(status) CHECK_WITH_STREAM(status, std::cerr)
+
+constexpr long double operator"" _GiB(long double val)
+{
+    return val * (1 << 30);
+}
+constexpr long double operator"" _MiB(long double val)
+{
+    return val * (1 << 20);
+}
+constexpr long double operator"" _KiB(long double val)
+{
+    return val * (1 << 10);
+}
+
+struct SimpleProfiler : public nvinfer1::IProfiler
+{
+    struct Record
+    {
+        float time{0};
+        int count{0};
+    };
+
+    void reportLayerTime(char const* layerName, float ms) noexcept override
+    {
+        mProfile[layerName].count++;
+        mProfile[layerName].time += ms;
+        if (std::find(mLayerNames.begin(), mLayerNames.end(), layerName) == mLayerNames.end())
+        {
+            mLayerNames.push_back(layerName);
+        }
+    }
+
+    SimpleProfiler(char const* name, std::vector<SimpleProfiler> const& srcProfilers = std::vector<SimpleProfiler>())
+        : mName(name)
+    {
+        for (auto const& srcProfiler : srcProfilers)
+        {
+            for (auto const& rec : srcProfiler.mProfile)
+            {
+                auto it = mProfile.find(rec.first);
+                if (it == mProfile.end())
+                {
+                    mProfile.insert(rec);
+                }
+                else
+                {
+                    it->second.time += rec.second.time;
+                    it->second.count += rec.second.count;
+                }
+            }
+        }
+    }
+
+    friend std::ostream& operator<<(std::ostream& out, SimpleProfiler const& value)
+    {
+        out << "========== " << value.mName << " profile ==========" << std::endl;
+        float totalTime = 0;
+        std::string layerNameStr = "TensorRT layer name";
+        int maxLayerNameLength = std::max(static_cast<int>(layerNameStr.size()), 70);
+        for (auto const& elem : value.mProfile)
+        {
+            totalTime += elem.second.time;
+            maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int>(elem.first.size()));
+        }
+
+        auto old_settings = out.flags();
+        auto old_precision = out.precision();
+        // Output header
+        {
+            out << std::setfill(' ') << std::setw(maxLayerNameLength) << layerNameStr << " ";
+            out << std::setw(12) << "Runtime, "
+                << "%"
+                << " ";
+            out << std::setw(12) << "Invocations"
+                << " ";
+            out << std::setw(12) << "Runtime, ms" << std::endl;
+        }
+        for (size_t i = 0; i < value.mLayerNames.size(); i++)
+        {
+            const std::string layerName = value.mLayerNames[i];
+            auto elem = value.mProfile.at(layerName);
+            out << std::setw(maxLayerNameLength) << layerName << " ";
+            out << std::setw(12) << std::fixed << std::setprecision(1) << (elem.time * 100.0F / totalTime) << "%"
+                << " ";
+            out << std::setw(12) << elem.count << " ";
+            out << std::setw(12) << std::fixed << std::setprecision(2) << elem.time << std::endl;
+        }
+        out.flags(old_settings);
+        out.precision(old_precision);
+        out << "========== " << value.mName << " total runtime = " << totalTime << " ms ==========" << std::endl;
+
+        return out;
+    }
+
+private:
+    std::string mName;
+    std::vector<std::string> mLayerNames;
+    std::map<std::string, Record> mProfile;
+};
+
+namespace samplesCommon
+{
+using nvinfer1::utils::loadCacheFile;
+using nvinfer1::utils::buildTimingCacheFromFile;
+using nvinfer1::utils::saveCacheFile;
+using nvinfer1::utils::updateTimingCacheFile;
+
+//! \brief Swaps endianness of an integral type.
+template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+[[nodiscard]] T swapEndianness(T value)
+{
+    uint8_t bytes[sizeof(T)];
+    std::memcpy(bytes, &value, sizeof(T));
+    std::reverse(std::begin(bytes), std::end(bytes));
+    std::memcpy(&value, bytes, sizeof(T));
+    return value;
+}
+
+class HostMemory
+{
+public:
+    HostMemory() = delete;
+    virtual void* data() const noexcept
+    {
+        return mData;
+    }
+    virtual std::size_t size() const noexcept
+    {
+        return mSize;
+    }
+    virtual nvinfer1::DataType type() const noexcept
+    {
+        return mType;
+    }
+    virtual ~HostMemory() {}
+
+protected:
+    HostMemory(std::size_t size, nvinfer1::DataType type)
+        : mData{nullptr}
+        , mSize(size)
+        , mType(type)
+    {
+    }
+    void* mData;
+    std::size_t mSize;
+    nvinfer1::DataType mType;
+};
+
+template <typename ElemType, nvinfer1::DataType dataType>
+class TypedHostMemory : public HostMemory
+{
+public:
+    explicit TypedHostMemory(std::size_t size)
+        : HostMemory(size, dataType)
+    {
+        mData = new ElemType[size];
+    }
+    ~TypedHostMemory() noexcept override
+    {
+        delete[](ElemType*) mData;
+    }
+    ElemType* raw() noexcept
+    {
+        return static_cast<ElemType*>(data());
+    }
+};
+
+using FloatMemory = TypedHostMemory<float, nvinfer1::DataType::kFLOAT>;
+using HalfMemory = TypedHostMemory<uint16_t, nvinfer1::DataType::kHALF>;
+using ByteMemory = TypedHostMemory<uint8_t, nvinfer1::DataType::kINT8>;
+
+inline void* safeCudaMalloc(size_t memSize)
+{
+    void* deviceMem;
+    CHECK(cudaMalloc(&deviceMem, memSize));
+    if (deviceMem == nullptr)
+    {
+        std::cerr << "Out of memory" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    return deviceMem;
+}
+
+inline bool isDebug()
+{
+    return std::getenv("TENSORRT_DEBUG") != nullptr;
+}
+
+static auto StreamDeleter = [](cudaStream_t* pStream) {
+    if (pStream)
+    {
+        static_cast<void>(cudaStreamDestroy(*pStream));
+        delete pStream;
+    }
+};
+
+inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
+{
+    std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> pStream(new cudaStream_t, StreamDeleter);
+    if (cudaStreamCreateWithFlags(pStream.get(), cudaStreamNonBlocking) != cudaSuccess)
+    {
+        pStream.reset(nullptr);
+    }
+
+    return pStream;
+}
+
+//! Return vector of indices that puts magnitudes of sequence in descending order.
+template <class Iter>
+std::vector<size_t> argMagnitudeSort(Iter begin, Iter end)
+{
+    std::vector<size_t> indices(end - begin);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::ranges::sort(indices, std::greater<>{}, [&begin](size_t i) { return std::abs(begin[i]); });
+    return indices;
+}
+
+inline bool readReferenceFile(std::string const& fileName, std::vector<std::string>& refVector)
+{
+    std::ifstream infile(fileName);
+    if (!infile.is_open())
+    {
+        std::cout << "ERROR: readReferenceFile: Attempting to read from a file that is not open." << std::endl;
+        return false;
+    }
+    std::string line;
+    while (std::getline(infile, line))
+    {
+        if (line.empty())
+            continue;
+        refVector.push_back(line);
+    }
+    infile.close();
+    return true;
+}
+
+template <typename T>
+std::vector<std::string> classify(
+    std::vector<std::string> const& refVector, std::vector<T> const& output, const size_t topK)
+{
+    auto const inds = samplesCommon::argMagnitudeSort(output.cbegin(), output.cend());
+    std::vector<std::string> result;
+    result.reserve(topK);
+    for (size_t k = 0; k < topK; ++k)
+    {
+        result.push_back(refVector[inds[k]]);
+    }
+    return result;
+}
+
+// Returns indices of highest K magnitudes in v.
+template <typename T>
+std::vector<size_t> topKMagnitudes(std::vector<T> const& v, const size_t k)
+{
+    std::vector<size_t> indices = samplesCommon::argMagnitudeSort(v.cbegin(), v.cend());
+    indices.resize(k);
+    return indices;
+}
+
+template <typename T>
+bool readASCIIFile(std::string const& fileName, const size_t size, std::vector<T>& out)
+{
+    std::ifstream infile(fileName);
+    if (!infile.is_open())
+    {
+        std::cout << "ERROR readASCIIFile: Attempting to read from a file that is not open." << std::endl;
+        return false;
+    }
+    out.clear();
+    out.reserve(size);
+    out.assign(std::istream_iterator<T>(infile), std::istream_iterator<T>());
+    infile.close();
+    return true;
+}
+
+template <typename T>
+bool writeASCIIFile(std::string const& fileName, std::vector<T> const& in)
+{
+    std::ofstream outfile(fileName);
+    if (!outfile.is_open())
+    {
+        std::cout << "ERROR: writeASCIIFile: Attempting to write to a file that is not open." << std::endl;
+        return false;
+    }
+    for (auto fn : in)
+    {
+        outfile << fn << "\n";
+    }
+    outfile.close();
+    return true;
+}
+
+inline void print_version()
+{
+    std::cout << "  TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "." << NV_TENSORRT_PATCH
+              << "." << NV_TENSORRT_BUILD << std::endl;
+}
+
+inline std::string getFileType(std::string const& filepath)
+{
+    return filepath.substr(filepath.find_last_of(".") + 1);
+}
+
+inline std::string toLower(std::string const& inp)
+{
+    std::string out = inp;
+    std::transform(out.begin(), out.end(), out.begin(), ::tolower);
+    return out;
+}
+
+inline float getMaxValue(float const* buffer, int64_t size)
+{
+    assert(buffer != nullptr);
+    assert(size > 0);
+    return *std::max_element(buffer, buffer + size);
+}
+
+#if !TRT_WINML && ENABLE_FEATURE_WEAK_TYPING
+inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inRange = 2.0F, float outRange = 4.0F)
+{
+    for (int i = 0; i < network->getNbLayers(); i++)
+    {
+        auto layer = network->getLayer(i);
+        for (int j = 0; j < layer->getNbInputs(); j++)
+        {
+            nvinfer1::ITensor* input{layer->getInput(j)};
+            if (input != nullptr && !input->dynamicRangeIsSet())
+            {
+                ASSERT(input->setDynamicRange(-inRange, inRange));
+            }
+        }
+    }
+
+    for (int i = 0; i < network->getNbLayers(); i++)
+    {
+        auto layer = network->getLayer(i);
+        for (int j = 0; j < layer->getNbOutputs(); j++)
+        {
+            nvinfer1::ITensor* output{layer->getOutput(j)};
+            if (output != nullptr && !output->dynamicRangeIsSet())
+            {
+                if (layer->getType() == nvinfer1::LayerType::kPOOLING)
+                {
+                    ASSERT(output->setDynamicRange(-inRange, inRange));
+                }
+                else
+                {
+                    ASSERT(output->setDynamicRange(-outRange, outRange));
+                }
+            }
+        }
+    }
+}
+
+inline void setDummyInt8DynamicRanges(nvinfer1::IBuilderConfig const* c, nvinfer1::INetworkDefinition* n)
+{
+    if (c->getFlag(nvinfer1::BuilderFlag::kINT8))
+    {
+        sample::gLogWarning << "No per-tensor dynamic range provided. Generating dummy values. Int8 accuracy "
+                               "is not guaranteed."
+                            << std::endl;
+        setAllDynamicRanges(n);
+    }
+}
+#endif // !TRT_WINML && ENABLE_FEATURE_WEAK_TYPING
+
+inline void enableDLA(
+    nvinfer1::IBuilder* builder, nvinfer1::IBuilderConfig* config, int useDLACore, bool allowGPUFallback = true)
+{
+    if (useDLACore >= 0)
+    {
+        if (builder->getNbDLACores() == 0)
+        {
+            std::cerr << "Trying to use DLA core " << useDLACore << " on a platform that doesn't have any DLA cores"
+                      << std::endl;
+            assert("Error: use DLA core on a platfrom that doesn't have any DLA cores" && false);
+        }
+        if (allowGPUFallback)
+        {
+            config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
+        }
+#if ENABLE_FEATURE_WEAK_TYPING
+        if (!config->getFlag(nvinfer1::BuilderFlag::kINT8))
+        {
+            config->setFlag(nvinfer1::BuilderFlag::kFP16);
+        }
+#endif // ENABLE_FEATURE_WEAK_TYPING
+        config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
+        config->setDLACore(useDLACore);
+    }
+}
+
+//! \brief Matches a flag prefix in an argument, ignoring leading spaces.
+//! \param arg The command-line argument to check.
+//! \param flag The flag prefix to match (e.g., "--loadEngine=").
+//! \return A string_view of the remainder after \p flag, or nullopt if \p flag isn't found.
+[[nodiscard]] std::optional<std::string_view> matchFlag(std::string_view arg, std::string_view flag);
+
+//! \overload std::optional<std::string_view> matchFlag(std::string_view arg, std::string_view flag) to prevent
+//! accidental use of `std::string&&` arguments which would produce a dangling view, but allow e.g., `char const*`.
+template <typename StringViewable>
+[[nodiscard]] std::optional<std::string_view> matchFlag(StringViewable&& arg, std::string_view flag)
+{
+    static_assert(!std::is_rvalue_reference_v<decltype(arg)>,
+        "You don't want the above matchFlag with `std::string&&` arguments which would produce a dangling view.");
+    return matchFlag(std::string_view{arg}, flag);
+}
+
+int32_t parseDLA(int32_t argc, char** argv);
+
+inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
+{
+    switch (t)
+    {
+    case nvinfer1::DataType::kINT64: return 8 * vol;
+    case nvinfer1::DataType::kINT32:
+    case nvinfer1::DataType::kFLOAT: return 4 * vol;
+    case nvinfer1::DataType::kBF16:
+    case nvinfer1::DataType::kHALF: return 2 * vol;
+    case nvinfer1::DataType::kBOOL:
+    case nvinfer1::DataType::kUINT8:
+    case nvinfer1::DataType::kINT8: return vol;
+    case nvinfer1::DataType::kFP8:
+#if CUDA_VERSION < 11060
+        ASSERT(false && "FP8 is not supported");
+#else
+        return vol;
+#endif
+    case nvinfer1::DataType::kE8M0:
+#if CUDA_VERSION < 12080
+        ASSERT(false && "E8M0 is not supported");
+#else
+        return vol;
+#endif // CUDA_VERSION < 12080
+    case nvinfer1::DataType::kINT4:
+    case nvinfer1::DataType::kFP4: return (vol + 1) / 2;
+    }
+    ASSERT(false && "Unknown element type");
+}
+
+// Return least integer no less than exact value of m/n.
+template <typename A, typename B>
+inline auto divUp(A m, B n) -> std::enable_if_t<std::is_integral<A>::value && std::is_integral<B>::value, A>
+{
+    ASSERT(n > 0);
+    return (m + n - 1) / n;
+}
+
+inline int64_t volume(nvinfer1::Dims const& d)
+{
+    return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
+}
+
+inline int64_t volume(nvinfer1::Dims const& dims, int32_t start, int32_t stop)
+{
+    ASSERT(start >= 0);
+    ASSERT(start <= stop);
+    ASSERT(stop <= dims.nbDims);
+    ASSERT(std::all_of(dims.d + start, dims.d + stop, [](int32_t x) { return x >= 0; }));
+    return std::accumulate(dims.d + start, dims.d + stop, int64_t{1}, std::multiplies<int64_t>{});
+}
+
+//! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
+//! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
+inline std::string locateFile(
+    std::string const& filepathSuffix, std::vector<std::string> const& directories, bool reportError = true)
+{
+    int const MAX_DEPTH{10};
+    bool found{false};
+    std::string filepath;
+
+    for (auto& dir : directories)
+    {
+        if (!dir.empty() && dir.back() != '/')
+        {
+#ifdef _MSC_VER
+            filepath = dir + "\\" + filepathSuffix;
+#else
+            filepath = dir + "/" + filepathSuffix;
+#endif
+        }
+        else
+        {
+            filepath = dir + filepathSuffix;
+        }
+
+        for (int i = 0; i < MAX_DEPTH && !found; i++)
+        {
+            const std::ifstream checkFile(filepath);
+            found = checkFile.is_open();
+            if (found)
+            {
+                break;
+            }
+
+            filepath = "../" + filepath; // Try again in parent dir
+        }
+
+        if (found)
+        {
+            break;
+        }
+
+        filepath.clear();
+    }
+
+    // Could not find the file
+    if (filepath.empty())
+    {
+        const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
+            [](std::string const& a, std::string const& b) { return a + "\n\t" + b; });
+        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
+
+        if (reportError)
+        {
+            std::cout << "&&&& FAILED" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return filepath;
+}
+
+inline void readPGMFile(std::string const& fileName, uint8_t* buffer, int32_t inH, int32_t inW)
+{
+    std::ifstream infile(fileName, std::ifstream::binary);
+    ASSERT(infile.is_open() && "Attempting to read from a file that is not open.");
+    std::string magic, w, h, max;
+    infile >> magic >> w >> h >> max;
+    infile.seekg(1, infile.cur);
+    infile.read(reinterpret_cast<char*>(buffer), inH * inW);
+}
+template <int C, int H, int W>
+struct PPM
+{
+    std::string magic, fileName;
+    int h, w, max;
+    uint8_t buffer[C * H * W];
+};
+
+// New vPPM(variable sized PPM) class with variable dimensions.
+struct vPPM
+{
+    std::string magic, fileName;
+    int h, w, max;
+    std::vector<uint8_t> buffer;
+};
+
+struct BBox
+{
+    float x1, y1, x2, y2;
+};
+
+template <int C, int H, int W>
+void readPPMFile(std::string const& filename, samplesCommon::PPM<C, H, W>& ppm)
+{
+    ppm.fileName = filename;
+    std::ifstream infile(filename, std::ifstream::binary);
+    assert(infile.is_open() && "Attempting to read from a file that is not open.");
+    infile >> ppm.magic >> ppm.w >> ppm.h >> ppm.max;
+    infile.seekg(1, infile.cur);
+    infile.read(reinterpret_cast<char*>(ppm.buffer), ppm.w * ppm.h * 3);
+}
+
+inline void readPPMFile(std::string const& filename, vPPM& ppm, std::vector<std::string>& input_dir)
+{
+    ppm.fileName = filename;
+    std::ifstream infile(locateFile(filename, input_dir), std::ifstream::binary);
+    infile >> ppm.magic >> ppm.w >> ppm.h >> ppm.max;
+    infile.seekg(1, infile.cur);
+
+    for (int i = 0; i < ppm.w * ppm.h * 3; ++i)
+    {
+        ppm.buffer.push_back(0);
+    }
+
+    infile.read(reinterpret_cast<char*>(&ppm.buffer[0]), ppm.w * ppm.h * 3);
+}
+
+template <int C, int H, int W>
+void writePPMFileWithBBox(std::string const& filename, PPM<C, H, W>& ppm, BBox const& bbox)
+{
+    std::ofstream outfile("./" + filename, std::ofstream::binary);
+    assert(!outfile.fail());
+    outfile << "P6"
+            << "\n"
+            << ppm.w << " " << ppm.h << "\n"
+            << ppm.max << "\n";
+
+    auto round = [](float x) -> int { return int(std::floor(x + 0.5F)); };
+    int const x1 = std::min(std::max(0, round(int(bbox.x1))), W - 1);
+    int const x2 = std::min(std::max(0, round(int(bbox.x2))), W - 1);
+    int const y1 = std::min(std::max(0, round(int(bbox.y1))), H - 1);
+    int const y2 = std::min(std::max(0, round(int(bbox.y2))), H - 1);
+
+    for (int x = x1; x <= x2; ++x)
+    {
+        // bbox top border
+        ppm.buffer[(y1 * ppm.w + x) * 3] = 255;
+        ppm.buffer[(y1 * ppm.w + x) * 3 + 1] = 0;
+        ppm.buffer[(y1 * ppm.w + x) * 3 + 2] = 0;
+        // bbox bottom border
+        ppm.buffer[(y2 * ppm.w + x) * 3] = 255;
+        ppm.buffer[(y2 * ppm.w + x) * 3 + 1] = 0;
+        ppm.buffer[(y2 * ppm.w + x) * 3 + 2] = 0;
+    }
+
+    for (int y = y1; y <= y2; ++y)
+    {
+        // bbox left border
+        ppm.buffer[(y * ppm.w + x1) * 3] = 255;
+        ppm.buffer[(y * ppm.w + x1) * 3 + 1] = 0;
+        ppm.buffer[(y * ppm.w + x1) * 3 + 2] = 0;
+        // bbox right border
+        ppm.buffer[(y * ppm.w + x2) * 3] = 255;
+        ppm.buffer[(y * ppm.w + x2) * 3 + 1] = 0;
+        ppm.buffer[(y * ppm.w + x2) * 3 + 2] = 0;
+    }
+
+    outfile.write(reinterpret_cast<char*>(ppm.buffer), ppm.w * ppm.h * 3);
+}
+
+inline void writePPMFileWithBBox(std::string const& filename, vPPM ppm, std::vector<BBox>& dets)
+{
+    std::ofstream outfile("./" + filename, std::ofstream::binary);
+    assert(!outfile.fail());
+    outfile << "P6"
+            << "\n"
+            << ppm.w << " " << ppm.h << "\n"
+            << ppm.max << "\n";
+    auto round = [](float x) -> int { return int(std::floor(x + 0.5F)); };
+
+    for (auto bbox : dets)
+    {
+        for (int x = int(bbox.x1); x < int(bbox.x2); ++x)
+        {
+            // bbox top border
+            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3] = 255;
+            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 1] = 0;
+            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 2] = 0;
+            // bbox bottom border
+            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3] = 255;
+            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 1] = 0;
+            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 2] = 0;
+        }
+
+        for (int y = int(bbox.y1); y < int(bbox.y2); ++y)
+        {
+            // bbox left border
+            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3] = 255;
+            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 1] = 0;
+            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 2] = 0;
+            // bbox right border
+            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3] = 255;
+            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 1] = 0;
+            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 2] = 0;
+        }
+    }
+
+    outfile.write(reinterpret_cast<char*>(&ppm.buffer[0]), ppm.w * ppm.h * 3);
+}
+
+class TimerBase
+{
+public:
+    virtual void start() {}
+    virtual void stop() {}
+    float microseconds() const noexcept
+    {
+        return mMs * 1000.F;
+    }
+    float milliseconds() const noexcept
+    {
+        return mMs;
+    }
+    float seconds() const noexcept
+    {
+        return mMs / 1000.F;
+    }
+    void reset() noexcept
+    {
+        mMs = 0.F;
+    }
+
+protected:
+    float mMs{0.0F};
+};
+
+class GpuTimer : public TimerBase
+{
+public:
+    explicit GpuTimer(cudaStream_t stream)
+        : mStream(stream)
+    {
+        CHECK(cudaEventCreate(&mStart));
+        CHECK(cudaEventCreate(&mStop));
+    }
+    ~GpuTimer()
+    {
+        CHECK(cudaEventDestroy(mStart));
+        CHECK(cudaEventDestroy(mStop));
+    }
+    void start() override
+    {
+        CHECK(cudaEventRecord(mStart, mStream));
+    }
+    void stop() override
+    {
+        CHECK(cudaEventRecord(mStop, mStream));
+        float ms{0.0F};
+        CHECK(cudaEventSynchronize(mStop));
+        CHECK(cudaEventElapsedTime(&ms, mStart, mStop));
+        mMs += ms;
+    }
+
+private:
+    cudaEvent_t mStart, mStop;
+    cudaStream_t mStream;
+}; // class GpuTimer
+
+template <typename Clock>
+class CpuTimer : public TimerBase
+{
+public:
+    using clock_type = Clock;
+
+    void start() override
+    {
+        mStart = Clock::now();
+    }
+    void stop() override
+    {
+        mStop = Clock::now();
+        mMs += std::chrono::duration<float, std::milli>{mStop - mStart}.count();
+    }
+
+private:
+    std::chrono::time_point<Clock> mStart, mStop;
+}; // class CpuTimer
+
+using PreciseCpuTimer = CpuTimer<std::chrono::high_resolution_clock>;
+
+inline std::vector<std::string> splitString(std::string str, char delimiter = ',')
+{
+    std::vector<std::string> splitVect;
+    std::stringstream ss(str);
+    std::string substr;
+
+    while (ss.good())
+    {
+        getline(ss, substr, delimiter);
+        splitVect.emplace_back(std::move(substr));
+    }
+    return splitVect;
+}
+
+inline int getC(nvinfer1::Dims const& d)
+{
+    return d.nbDims >= 3 ? d.d[d.nbDims - 3] : 1;
+}
+
+inline int getH(nvinfer1::Dims const& d)
+{
+    return d.nbDims >= 2 ? d.d[d.nbDims - 2] : 1;
+}
+
+inline int getW(nvinfer1::Dims const& d)
+{
+    return d.nbDims >= 1 ? d.d[d.nbDims - 1] : 1;
+}
+
+//! Platform-agnostic wrapper around dynamic libraries.
+class DynamicLibrary
+{
+public:
+    explicit DynamicLibrary(std::string name)
+        : mLibName{std::move(name)}
+    {
+#if defined(_WIN32)
+        mHandle = LoadLibraryA(mLibName.c_str());
+#else // defined(_WIN32)
+        int32_t flags{RTLD_LAZY};
+#if ENABLE_ASAN
+        // https://github.com/google/sanitizers/issues/89
+        // asan doesn't handle module unloading correctly and there are no plans on doing
+        // so. In order to get proper stack traces, don't delete the shared library on
+        // close so that asan can resolve the symbols correctly.
+        flags |= RTLD_NODELETE;
+#endif // ENABLE_ASAN
+
+        mHandle = dlopen(mLibName.c_str(), flags);
+#endif // defined(_WIN32)
+
+        if (mHandle == nullptr)
+        {
+            std::string errorStr{};
+#if !defined(_WIN32)
+            errorStr = std::string{" due to "} + std::string{dlerror()};
+#endif
+            throw std::runtime_error("Unable to open library: " + mLibName + errorStr);
+        }
+    }
+
+    DynamicLibrary(DynamicLibrary const&) = delete;
+    DynamicLibrary(DynamicLibrary const&&) = delete;
+
+    //! \return a pointer to a symbol from the DynamicLibrary with the given function signature.
+    //!
+    //! \throw std::invalid_argument if loading the symbol failed.
+    //!
+    //! \note Type checking is not possible, so if `Signature` is incorrect, the behavior is undefined.
+
+    template <typename Signature>
+    [[nodiscard]] Signature& symbolAddress(char const* name) const
+    {
+        static_assert(std::is_function_v<Signature>, "Signature must be a function type.");
+        if (mHandle == nullptr)
+        {
+            throw std::runtime_error("Handle to library is nullptr.");
+        }
+        void* const ret =
+#if defined(_MSC_VER)
+            static_cast<void*>(GetProcAddress(static_cast<HMODULE>(mHandle), name));
+#else
+            dlsym(mHandle, name);
+#endif
+        if (ret == nullptr)
+        {
+            throw std::invalid_argument(mLibName + ": error loading symbol: " + std::string(name));
+        }
+        return *reinterpret_cast<Signature*>(ret);
+    }
+
+    ~DynamicLibrary()
+    {
+        try
+        {
+#if defined(_WIN32)
+            ASSERT(static_cast<bool>(FreeLibrary(static_cast<HMODULE>(mHandle))));
+#else
+            ASSERT(dlclose(mHandle) == 0);
+#endif
+        }
+        catch (...)
+        {
+            sample::gLogError << "Unable to close library: " << mLibName << std::endl;
+        }
+    }
+
+private:
+    std::string mLibName{}; //!< Name of the DynamicLibrary
+    void* mHandle{};        //!< Handle to the DynamicLibrary
+};
+
+[[nodiscard]] inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string name)
+{
+    return std::make_unique<DynamicLibrary>(std::move(name));
+}
+
+//! Represents the compute capability of a device.
+//! This pertains to virtual architectures represented by the intermediate PTX format.
+//! This is distinct from the SM version.
+//! See https://forums.developer.nvidia.com/t/how-should-i-use-correctly-the-sm-xx-and-compute-xx/219160
+struct ComputeCapability
+{
+    int32_t major{};
+    int32_t minor{};
+
+    //! \return the compute capability of the CUDA device with the given \p deviceIndex.
+    [[nodiscard]] static ComputeCapability forDevice(int32_t deviceIndex)
+    {
+        int32_t major{0};
+        int32_t minor{0};
+        CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+        CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+        // Redirect 12.1 to 12.0 to since dependencies do not support 12.1 yet and 12.1 can reuse 12.0 cubins to save
+        // lib size/compile time..
+        if (major == 12 && minor == 1)
+        {
+            minor = 0;
+        }
+        return {major, minor};
+    }
+};
+
+inline int32_t getSmVersion()
+{
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+
+    auto const cc = ComputeCapability::forDevice(deviceIndex);
+    return ((cc.major << 8) | cc.minor);
+}
+
+inline bool isSmSafe()
+{
+    int32_t const smVersion = getSmVersion();
+    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
+        || smVersion == 0x0A00 || smVersion == 0x0B00;
+}
+
+inline int32_t getMaxPersistentCacheSize()
+{
+    int32_t deviceIndex{};
+    CHECK(cudaGetDevice(&deviceIndex));
+
+    int32_t maxPersistentL2CacheSize{};
+#if CUDART_VERSION >= 11030 && !TRT_WINML
+    CHECK(cudaDeviceGetAttribute(&maxPersistentL2CacheSize, cudaDevAttrMaxPersistingL2CacheSize, deviceIndex));
+#endif
+
+    return maxPersistentL2CacheSize;
+}
+
+} // namespace samplesCommon
+
+inline std::ostream& operator<<(std::ostream& os, nvinfer1::Dims const& dims)
+{
+    os << "(";
+    for (int i = 0; i < dims.nbDims; ++i)
+    {
+        os << (i ? ", " : "") << dims.d[i];
+    }
+    return os << ")";
+}
+
+[[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
+{
+    std::string_view const kALLOWED{"._-,"};
+    constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
+    constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
+
+    auto processChar = [&kALLOWED](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
+    };
+
+    std::string res;
+    if (s.length() <= kMAX_FILENAME_LENGTH)
+    {
+        res.reserve(s.size());
+        std::transform(s.begin(), s.end(), std::back_inserter(res), processChar);
+        return res;
+    }
+
+    res.reserve(kMAX_FILENAME_LENGTH);
+    size_t const halfLength = (kMAX_FILENAME_LENGTH - kELLIPSIS_LENGTH) / 2;
+
+    std::transform(s.begin(), s.begin() + halfLength, std::back_inserter(res), processChar);
+    res += "...";
+    std::transform(s.end() - halfLength, s.end(), std::back_inserter(res), processChar);
+
+    return res;
+}
+
+#endif // TENSORRT_COMMON_H

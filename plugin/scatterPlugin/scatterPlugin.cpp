@@ -111,9 +111,9 @@ void ScatterND::calculateTransformCoeff(
         nIndx *= dataTensorDims.d[i];
     }
 
-    std::reverse(pitches.begin(), pitches.end()); // last dimension pitch is always one (assuming linear mem)
+    std::ranges::reverse(pitches); // last dimension pitch is always one (assuming linear mem)
 
-    std::copy(pitches.begin(), pitches.end(), transformCoeff);
+    std::ranges::copy(pitches, transformCoeff);
 }
 
 int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept

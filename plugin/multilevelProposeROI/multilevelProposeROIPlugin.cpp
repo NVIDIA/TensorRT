@@ -350,7 +350,7 @@ void MultilevelProposeROI::check_valid_inputs(nvinfer1::Dims const* inputs, int3
 size_t MultilevelProposeROI::getWorkspaceSize(int32_t batch_size) const noexcept
 {
     size_t total_size = 0;
-    PLUGIN_ASSERT(mAnchorsCnt.size() == static_cast<size_t>(mFeatureCnt));
+    PLUGIN_ASSERT(std::ssize(mAnchorsCnt) == mFeatureCnt);
 
     // workspace for propose on each feature map
     for (int32_t i = 0; i < mFeatureCnt; i++)
@@ -419,7 +419,7 @@ void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageS
         anchors.push_back(s_anchors);
     }
 
-    PLUGIN_VALIDATE(anchors.size() == static_cast<size_t>(max_level - min_level + 1));
+    PLUGIN_VALIDATE(std::ssize(anchors) == max_level - min_level + 1);
 }
 
 int32_t MultilevelProposeROI::enqueue(

@@ -23,14 +23,13 @@
 #include "safeErrorRecorder.h"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <unistd.h>
 #include <fstream>
 #include <future>
 #include <iostream>
-#include <limits>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -61,15 +60,14 @@ class SafeExecArgs
 {
 public:
     std::string engineFile{"sample.engine"};
-    std::string companionSoFile;
     int32_t iterations{10};
     int32_t avgRuns{10};
     int32_t warmUp{1};
     int32_t device{0};
     int32_t streams{1};
-    float idle{0.F};
-    float duration{3.F};
-    float sleep{2.F};
+    std::chrono::duration<float, std::milli> idle{0.F};
+    std::chrono::duration<float> duration{3.F};
+    std::chrono::duration<float, std::milli> sleep{2.F};
     float percentile{99.F};
     bool spin{false};
     bool verbose{false};
@@ -103,9 +101,6 @@ namespace
 
 //! Default alignment for memory allocations
 constexpr uint64_t kDEFAULT_ALIGNMENT{256U};
-
-//! Maximum number of bytes requested by one engine file read.
-constexpr size_t kFILE_READ_CHUNK_BYTES{64U * 1024U * 1024U};
 
 //!
 //! \brief RAII wrapper for SafeMemAllocator to ensure automatic cleanup.
@@ -269,9 +264,9 @@ SafePerformanceResult getSafePerformanceResult(TimingMetrics const& times, int32
     SafePerformanceResult result;
     result.min = newTimes[0][metricIndex];
     result.max = newTimes[newTimes.size() - 1][metricIndex];
-    result.mean = std::accumulate(newTimes.begin(), newTimes.end(), 0.F,
-                      [metricIndex](float acc, TimingMetric& a) { return acc + a[metricIndex]; })
-        / newTimes.size();
+    result.mean = std::accumulate(newTimes.begin(), newTimes.end(), 0.F, [metricIndex](float acc, TimingMetric& a) {
+        return acc + a[metricIndex];
+    }) / newTimes.size();
     size_t const medianIndex = newTimes.size() / 2ULL;
     result.median = newTimes.size() % 2ULL
         ? newTimes[medianIndex][metricIndex]
@@ -501,7 +496,7 @@ bool parseSafetyPluginLibrary(
 }
 
 // Use template to allow volume for either nvinfer1::Dims or nvinfer2::safe::PhysicalDims
-template<typename TDims>
+template <typename TDims>
 int64_t volume(TDims const& dims, TDims const& strides, uint64_t bytesPerComponent)
 {
     if (dims.nbDims == 0 || strides.nbDims == 0)
@@ -535,11 +530,6 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
     for (int32_t i = 1; i < argc; ++i)
     {
         std::string const arg = argv[i];
-        if (auto value = loggedParseString(arg, "loadEngineSo"))
-        {
-            args.companionSoFile = std::move(*value);
-            continue;
-        }
         if (auto value = loggedParseString(arg, "loadEngine"))
         {
             args.engineFile = std::move(*value);
@@ -570,15 +560,15 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         }
         else if (auto const value = loggedParseString(arg, "idleTime"))
         {
-            args.idle = stof(*value);
+            args.idle = std::chrono::duration<float, std::milli>(stof(*value));
         }
         else if (auto const value = loggedParseString(arg, "duration"))
         {
-            args.duration = stof(*value);
+            args.duration = std::chrono::duration<float>(stof(*value));
         }
         else if (auto const value = loggedParseString(arg, "sleepTime"))
         {
-            args.sleep = stof(*value);
+            args.sleep = std::chrono::duration<float, std::milli>(stof(*value));
         }
         else if (loggedParseBool(arg, "spin"))
         {
@@ -599,8 +589,8 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         else if (loggedParseBool(arg, "useCudaGraph"))
         {
             // Deprecated: CUDA graph is now enabled by default.
-            safeLogWarning(*gSafeRecorder,
-                "--useCudaGraph is deprecated (now enabled by default). Use --noCudaGraph to disable.");
+            safeLogWarning(
+                *gSafeRecorder, "--useCudaGraph is deprecated (now enabled by default). Use --noCudaGraph to disable.");
         }
         else if (loggedParseBool(arg, "noCudaGraph"))
         {
@@ -664,9 +654,6 @@ void printHelpInfo()
     std::cout << R"(Usage: trtexec_safe --loadEngine=<file> [options]
 Required params:
   --loadEngine=FILE  Load the serialized engine from FILE.
-  --loadEngineSo=FILE
-                     Load the engine's companion library from FILE. Without it, <loadEngine>.so is
-                     used when that file exists.
 
 General optional params:
   --help or -h       Display help information
@@ -697,16 +684,16 @@ Perf measurement params:
   --warmUp=N         Run N iterations before actual perf measurement (default = )"
               << defArgs.warmUp << R"()
   --idleTime=F       Sleep F milliseconds between two continuous iterations (default = )"
-              << defArgs.idle << R"()
+              << defArgs.idle.count() << R"()
   --percentile=P     For each iteration, report the percentile time at P percentage
                      (0<=P<=100, with 0 representing min, and 100 representing max; default = )"
               << defArgs.percentile << R"(%)
   --noCudaGraph      Disable CUDA graph capture and launch (default = CUDA graph enabled)
   --useCudaGraph     [Deprecated] CUDA graph is now enabled by default. This flag is a no-op.
   --duration=F       Run performance measurements for at least F seconds of wallclock time (default = )"
-              << defArgs.duration << R"(s)
+              << defArgs.duration.count() << R"(s)
   --sleepTime=F      Delay inference start with a gap of F msec between launch and compute (default = )"
-              << defArgs.sleep << R"()
+              << defArgs.sleep.count() << R"()
   --separateProfileRun
                      [Deprecated] Separate profile run is now always enabled. This flag is a no-op.
 
@@ -778,52 +765,24 @@ void registerSafetyPlugins(nvinfer2::safe::ISafeRecorder& recorder, SafetyPlugin
 }
 
 //!
-//! \brief Load a prebuilt TensorRT safe engine using bounded read requests.
-//! \param engineFile Path to the serialized engine.
-//! \return Buffer containing the complete serialized engine.
-//! \throws std::runtime_error if the file size is invalid or any read is incomplete.
+//! \brief Load a prebuilt TensorRT safe engine.
+//!
 std::vector<char> loadEngine(std::string const& engineFile)
 {
-    std::ifstream file(engineFile, std::ios::binary | std::ios::ate);
-    if (!file)
+    std::string const& filename = engineFile;
+    std::vector<char> modelBuffer;
+    std::ifstream file(filename, std::ios::binary);
+    if (!file.good())
     {
-        throw std::runtime_error("Failed to open engine file: " + engineFile);
+        safeLogError(*gSafeRecorder, "Could not open input engine file or file is empty. File name: " + filename);
+        return modelBuffer;
     }
-
-    std::streamoff const fileSize{file.tellg()};
-    if (fileSize <= 0)
-    {
-        throw std::runtime_error("Engine file is empty or has an invalid size: " + engineFile);
-    }
-    if (static_cast<uint64_t>(fileSize) > std::numeric_limits<size_t>::max())
-    {
-        throw std::runtime_error("Engine file is too large to load into memory: " + engineFile);
-    }
-
-    file.seekg(0, std::ios::beg);
-    if (!file)
-    {
-        throw std::runtime_error("Failed to seek to the beginning of engine file: " + engineFile);
-    }
-
-    size_t const size{static_cast<size_t>(fileSize)};
-    std::vector<char> modelBuffer(size);
-    size_t offset{0U};
-    while (offset < size)
-    {
-        size_t const bytesToRead{std::min(kFILE_READ_CHUNK_BYTES, size - offset)};
-        file.read(modelBuffer.data() + offset, static_cast<std::streamsize>(bytesToRead));
-        std::streamsize const bytesRead{file.gcount()};
-        if (bytesRead != static_cast<std::streamsize>(bytesToRead) || file.fail() || file.bad())
-        {
-            std::ostringstream message;
-            message << "Failed to read complete engine file: " << engineFile << " at offset " << offset << ". Expected "
-                    << bytesToRead << " bytes, read " << bytesRead << " (eof=" << file.eof() << ", fail=" << file.fail()
-                    << ", bad=" << file.bad() << ")";
-            throw std::runtime_error(message.str());
-        }
-        offset += bytesToRead;
-    }
+    file.seekg(0, std::ifstream::end);
+    auto size = file.tellg();
+    file.seekg(0, std::ifstream::beg);
+    modelBuffer.resize(size);
+    file.read(modelBuffer.data(), size);
+    file.close();
     return modelBuffer;
 }
 
@@ -1077,7 +1036,7 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
     // GPU, host and enqueue times
     TimingMetrics totalTimes;
     using floatDurationMS = std::chrono::duration<float, std::milli>;
-    floatDurationMS const maxDurationMs = floatDurationMS(args.duration * 1000);
+    floatDurationMS const maxDurationMs = args.duration;
     floatDurationMS durationMs{0};
 
     for (int32_t i = 0; i < nbIterations || durationMs.count() < maxDurationMs.count(); i++)
@@ -1160,7 +1119,7 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
             totalEnqueueTime += enqueueTime;
 
             // Mimic waiting for user input data (default = 0)
-            std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(args.idle));
+            std::this_thread::sleep_for(args.idle);
         }
 
         if (isProfileRun)
@@ -1292,10 +1251,8 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(numThreads);
     std::vector<void*> scratchs(numThreads);
-    auto const companionSoPath = samplesSafeCommon::resolveCompanionSoPath(args.engineFile, args.companionSoFile);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], blob.data(), blob.size(),
-                      companionSoPath ? companionSoPath->c_str() : nullptr, *recorders[0], !args.useScratchMemory,
-                      &nvinfer2::safe::getSafeMemAllocator()),
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraphWithSo(graphs[0], blob.data(), blob.size(), nullptr, *recorders[0],
+                      !args.useScratchMemory, &nvinfer2::safe::getSafeMemAllocator()),
         *recorders[0]);
     SAFE_API_CALL(graphs[0]->setIOProfile(args.ioProfile), *recorders[0]);
 
