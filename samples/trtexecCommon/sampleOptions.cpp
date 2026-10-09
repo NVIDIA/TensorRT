@@ -17,9 +17,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <limits>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
@@ -253,7 +256,8 @@ IOFormat stringToValue<IOFormat>(std::string const& option)
 template <>
 SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
 {
-    std::unordered_map<std::string, SparsityFlag> const table{
+    std::unordered_map<std::string, SparsityFlag> const table
+    {
         {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE},
 #if !TRT_WINML
         {
@@ -791,6 +795,157 @@ void processShapes(BuildOptions::ShapeProfile& shapes, bool minShapes, bool optS
     shapes = newShapes;
 }
 
+//! Throw a consistently formatted error for an invalid green context specification.
+[[noreturn]] void throwInvalidGreenContext(std::string const& spec, std::string const& reason)
+{
+    throw std::invalid_argument("Invalid --greenContext specification '" + spec + "': " + reason);
+}
+
+//! Parse a positive SM count from a green context specification.
+[[nodiscard]] int32_t parseGreenContextCount(
+    std::string_view const value, std::string const& name, std::string const& spec)
+{
+    uint32_t count{};
+    char const* const end = value.data() + value.size();
+    auto const [ptr, error] = std::from_chars(value.data(), end, count);
+    if (error == std::errc::result_out_of_range || count > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()))
+    {
+        throwInvalidGreenContext(
+            spec, name + " must not exceed " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    }
+    if (error != std::errc{} || ptr != end)
+    {
+        throwInvalidGreenContext(spec, name + " must be a positive decimal integer.");
+    }
+    if (count == 0)
+    {
+        throwInvalidGreenContext(spec, name + " must be greater than zero.");
+    }
+    return static_cast<int32_t>(count);
+}
+
+//! Parse the command-line grammar for one green context.
+[[nodiscard]] GreenContextSpec parseGreenContextSpec(std::string const& value)
+{
+    GreenContextSpec spec{};
+    if (value.find(':') == std::string::npos)
+    {
+        spec.smCount = parseGreenContextCount(value, "SM count", value);
+        return spec;
+    }
+
+    bool foundSmCount{false};
+    bool foundCoscheduledSmCount{false};
+    for (std::string const& fieldString : splitToStringVec(value, ','))
+    {
+        std::string_view const field{fieldString};
+        size_t const colon = field.find(':');
+        if (field.empty() || colon == std::string_view::npos || colon == 0 || colon + 1 == field.size()
+            || field.find(':', colon + 1) != std::string_view::npos)
+        {
+            throwInvalidGreenContext(value, "expected sm:<N>[,cosched:<M>] or a bare SM count.");
+        }
+
+        std::string_view const key = field.substr(0, colon);
+        std::string_view const count = field.substr(colon + 1);
+        if (key == "sm")
+        {
+            if (foundSmCount)
+            {
+                throwInvalidGreenContext(value, "sm may be specified only once.");
+            }
+            spec.smCount = parseGreenContextCount(count, "SM count", value);
+            foundSmCount = true;
+        }
+        else if (key == "cosched")
+        {
+            if (!foundSmCount)
+            {
+                throwInvalidGreenContext(value, "cosched must follow sm.");
+            }
+            if (foundCoscheduledSmCount)
+            {
+                throwInvalidGreenContext(value, "cosched may be specified only once.");
+            }
+            spec.coscheduledSmCount = parseGreenContextCount(count, "co-scheduled SM count", value);
+            foundCoscheduledSmCount = true;
+        }
+        else
+        {
+            throwInvalidGreenContext(value, "unknown key '" + std::string(key) + "'.");
+        }
+    }
+
+    if (!foundSmCount)
+    {
+        throwInvalidGreenContext(value, "sm is required.");
+    }
+    return spec;
+}
+
+//! Assign each green context to the nearest preceding optimization profile, or to the engine if none precedes it.
+void getGreenContexts(Arguments const& arguments, std::optional<GreenContextSpec>& greenContext,
+    std::vector<std::optional<GreenContextSpec>>& profileGreenContexts)
+{
+    auto const greenContextRange = arguments.equal_range("--greenContext");
+    if (greenContextRange.first == greenContextRange.second)
+    {
+        return;
+    }
+
+    struct PositionedProfile
+    {
+        int32_t position;
+        size_t index;
+    };
+    struct PositionedGreenContext
+    {
+        int32_t position;
+        GreenContextSpec spec;
+    };
+
+    std::vector<PositionedProfile> profiles;
+    auto const profileRange = arguments.equal_range("--profile");
+    std::transform(profileRange.first, profileRange.second, std::back_inserter(profiles), [](auto const& entry) {
+        return PositionedProfile{entry.second.second, stringToValue<size_t>(entry.second.first)};
+    });
+    std::ranges::sort(profiles, {}, &PositionedProfile::position);
+
+    std::vector<PositionedGreenContext> contexts;
+    std::transform(
+        greenContextRange.first, greenContextRange.second, std::back_inserter(contexts), [](auto const& entry) {
+            return PositionedGreenContext{entry.second.second, parseGreenContextSpec(entry.second.first)};
+        });
+    std::ranges::sort(contexts, {}, &PositionedGreenContext::position);
+
+    for (auto const& context : contexts)
+    {
+        auto const nextProfile = std::ranges::upper_bound(profiles, context.position, {}, &PositionedProfile::position);
+        if (nextProfile == profiles.begin())
+        {
+            if (greenContext)
+            {
+                throw std::invalid_argument(
+                    "--greenContext can be specified at most once outside an optimization profile block.");
+            }
+            greenContext = context.spec;
+            continue;
+        }
+
+        size_t const profileIndex = std::prev(nextProfile)->index;
+        if (profileIndex >= profileGreenContexts.size())
+        {
+            profileGreenContexts.resize(profileIndex + 1);
+        }
+        if (profileGreenContexts[profileIndex])
+        {
+            throw std::invalid_argument("--greenContext can be specified at most once for optimization profile "
+                + std::to_string(profileIndex) + ".");
+        }
+        profileGreenContexts[profileIndex] = context.spec;
+    }
+}
+
 bool getOptimizationProfiles(
     Arguments& arguments, std::vector<BuildOptions::ShapeProfile>& optProfiles, char const* argument)
 {
@@ -813,8 +968,9 @@ bool getOptimizationProfiles(
     while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
     {
         BuildOptions::ShapeProfile optProfile{};
-        bool minShapes{false}, maxShapes{false}, optShapes{false};
-        for (int32_t i = 0; i < nvinfer1::EnumMax<nvinfer1::OptProfileSelector>(); i++, pos++)
+        bool minShapes{false}, maxShapes{false}, optShapes{false}, greenContext{false};
+        constexpr int32_t kMAX_PROFILE_OPTIONS{nvinfer1::EnumMax<nvinfer1::OptProfileSelector>() + 1};
+        for (int32_t i = 0; i < kMAX_PROFILE_OPTIONS; i++, pos++)
         {
             std::string value;
 
@@ -832,6 +988,10 @@ bool getOptimizationProfiles(
             {
                 optShapes = true;
                 getShapes(optProfile, value, nvinfer1::OptProfileSelector::kOPT);
+            }
+            else if (!greenContext && getAndDelOptionBehind(arguments, "--greenContext", pos, value))
+            {
+                greenContext = true;
             }
             else
             {
@@ -1021,8 +1181,7 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
 
 std::ostream& printTempfileControls(std::ostream& os, TempfileControlFlags const tempfileControls)
 {
-    auto getFlag = [&](TempfileControlFlag f) -> char const*
-    {
+    auto getFlag = [&](TempfileControlFlag f) -> char const* {
         bool allowed = !!(tempfileControls & (1U << static_cast<int64_t>(f)));
         return allowed ? "allow" : "deny";
     };
@@ -1059,8 +1218,7 @@ std::ostream& printSparsity(std::ostream& os, BuildOptions const& options)
 
 std::ostream& printMemoryPools(std::ostream& os, BuildOptions const& options)
 {
-    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB")
-    {
+    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB") {
         if (val >= 0)
         {
             os << val << " " << unit;
@@ -1248,6 +1406,7 @@ void BuildOptions::parse(Arguments& arguments)
     getFormats(inputFormats, "--inputIOFormats");
     getFormats(outputFormats, "--outputIOFormats");
 #endif // TRT_WINML
+    getGreenContexts(arguments, greenContext, profileGreenContexts);
     if (!getOptimizationProfiles(arguments, optProfiles, "--profile"))
     {
         ShapeProfile shapes;
@@ -1268,6 +1427,8 @@ void BuildOptions::parse(Arguments& arguments)
         processShapes(shapes, minShapes, optShapes, maxShapes);
         optProfiles.emplace_back(shapes);
     }
+    arguments.erase("--greenContext");
+    profileGreenContexts.resize(optProfiles.size());
     BuildOptions::ShapeProfile dummyShapes;
 
     bool remainingMinShapes = getShapesBuild(arguments, dummyShapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
@@ -1394,15 +1555,6 @@ void BuildOptions::parse(Arguments& arguments)
     {
         throw std::invalid_argument("--dumpCheckerBlob requires --safe to be enabled.");
     }
-
-#if ENABLE_UNIFIED_BUILDER
-    getAndDelOption(arguments, "--saveEngineSo", saveEngineSo);
-    getAndDelOption(arguments, "--loadEngineSo", loadEngineSo);
-    if ((!saveEngineSo.empty() || !loadEngineSo.empty()) && !safe)
-    {
-        throw std::invalid_argument("--saveEngineSo and --loadEngineSo require --safe to be enabled.");
-    }
-#endif // ENABLE_UNIFIED_BUILDER
     getAndDelOption(arguments, "--buildDLAStandalone", buildDLAStandalone);
     getAndDelOption(arguments, "--allowGPUFallback", allowGPUFallback);
     getAndDelOption(arguments, "--consistency", consistency);
@@ -2641,6 +2793,16 @@ std::ostream& operator<<(std::ostream& os, IOFormat const& format)
     return os;
 }
 
+std::ostream& operator<<(std::ostream& os, GreenContextSpec const& spec)
+{
+    os << "sm:" << spec.smCount;
+    if (spec.coscheduledSmCount != 0)
+    {
+        os << ",cosched:" << spec.coscheduledSmCount;
+    }
+    return os;
+}
+
 std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
 {
     switch (devType)
@@ -2855,11 +3017,26 @@ std::ostream& operator<<(std::ostream& os, BuildOptions const& options)
         }
     };
 
+    os << "Green Context: ";
+    if (options.greenContext)
+    {
+        os << *options.greenContext;
+    }
+    else
+    {
+        os << "Disabled";
+    }
+    os << std::endl;
+
     printIOFormats(os, "Input(s)", options.inputFormats);
     printIOFormats(os, "Output(s)", options.outputFormats);
     for (size_t i = 0; i < options.optProfiles.size(); i++)
     {
         printShapes(os, "build", options.optProfiles[i], i);
+        if (i < options.profileGreenContexts.size() && options.profileGreenContexts[i])
+        {
+            os << "Optimization Profile " << i << " Green Context: " << *options.profileGreenContexts[i] << std::endl;
+        }
     }
     return os;
 }
@@ -3250,12 +3427,6 @@ void BuildOptions::help(std::ostream& os)
           "                                     sources the kernel checker analyses and the metadata that the"                                 "\n"
           "                                     reference checker replays."                                                                          "\n"
           "                                     --dumpKernelText is accepted as an alias."                                                           "\n"
-#if ENABLE_UNIFIED_BUILDER
-          "  --saveEngineSo=<file>              Save the safe engine's companion library to file, defaulting to"                                   "\n"
-          "                                     <saveEngine>.so. Ignored when the build produces no companion library."                             "\n"
-          "  --loadEngineSo=<file>              Load the safe engine's companion library from file. Without it,"                                    "\n"
-          "                                     <loadEngine>.so is used when that file exists."                                                     "\n"
-#endif // ENABLE_UNIFIED_BUILDER
           "  --buildDLAStandalone               Enable build DLA standalone loadable which can be loaded by cuDLA, when this option is enabled, "   "\n"
           "                                     --allowGPUFallback is disallowed and --skipInference is enabled by default. Additionally, "         "\n"
 #if ENABLE_FEATURE_WEAK_TYPING
@@ -3341,6 +3512,20 @@ void BuildOptions::help(std::ostream& os)
           "  --profile                          Build with dynamic shapes using a profile with the min/max/opt shapes provided. Can be specified"   "\n"
           "                                         multiple times to create multiple profiles with contiguous index."                              "\n"
           "                                     (ex: --profile=0 --minShapes=<spec> --optShapes=<spec> --maxShapes=<spec> --profile=1 ...)"         "\n"
+#if !TRT_WINML
+          "  --greenContext=spec                Build and run under a CUDA green context that trtexec creates."                                   "\n"
+          "                                     Requires CUDA Toolkit and driver 13.0 or newer. CUDA 13.1 or newer guarantees exact resource"     "\n"
+          "                                     configuration; CUDA 13.0 accepts only requests that its default resource alignment can satisfy"  "\n"
+          "                                     exactly."                                                                                       "\n"
+          "                                     Green Context: spec ::= sm:<N>[,cosched:<M>] | <N>"                                               "\n"
+          "                                         sm: Number of SMs in the partition (required)."                                               "\n"
+          "                                         cosched: Co-scheduled SM count (optional). Defaults to the architecture alignment:"            "\n"
+          "                                             2 on compute capability 7.x/8.x and Tegra; 8 on compute capability 9.0+."                  "\n"
+          "                                     Without a preceding --profile, the setting applies to the whole engine."                          "\n"
+          "                                     When placed after --profile=N, the setting applies to optimization profile N."                    "\n"
+          "                                     A profile-specific setting overrides the global setting. Profiles without one inherit the"        "\n"
+          "                                     global setting, or use standard device behavior when no global setting exists."                   "\n"
+#endif // !TRT_WINML
 #if !TRT_WINML
           "  --allowWeightStreaming             Enable a weight streaming engine. TensorRT will disable"    "\n"
 #else // !TRT_WINML

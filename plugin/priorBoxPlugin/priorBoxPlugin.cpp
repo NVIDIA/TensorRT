@@ -224,7 +224,7 @@ void PriorBox::serialize(void* buffer) const noexcept
     auto writeArray = [&d](int32_t const size, float const* srcPtr, std::vector<float> const& srcVec) {
         // srcVec is only used here to check that the size and srcPtr are correct.
         PLUGIN_VALIDATE(srcVec.data() == srcPtr);
-        PLUGIN_VALIDATE(srcVec.size() == static_cast<size_t>(size));
+        PLUGIN_VALIDATE(std::ssize(srcVec) == size);
         for (int32_t i = 0; i < size; i++)
         {
             write(d, srcPtr[i]);

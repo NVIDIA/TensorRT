@@ -196,6 +196,14 @@ struct IOFormat
     nvinfer1::TensorFormats formats{};
 };
 
+//! A CUDA green context resource specification.
+struct GreenContextSpec
+{
+    int32_t smCount{};
+    //! Zero means unspecified; CUDA selects the architecture-specific co-scheduling alignment.
+    int32_t coscheduledSmCount{};
+};
+
 using ShapeRange = std::array<std::vector<int64_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
 
 #if ENABLE_FEATURE_WEAK_TYPING
@@ -299,12 +307,6 @@ public:
     bool reference{false};
     bool dumpCheckerBlob{false};
     std::string checkerBlob;
-#if ENABLE_UNIFIED_BUILDER
-    //! Where to write, or read, the safe engine's companion library. Empty means the default beside the
-    //! engine, which only applies where companion libraries are enabled.
-    std::string saveEngineSo;
-    std::string loadEngineSo;
-#endif // ENABLE_UNIFIED_BUILDER
     bool buildDLAStandalone{false};
     bool allowGPUFallback{false};
     bool skipInference{false};
@@ -339,6 +341,8 @@ public:
     std::string engine;
     using ShapeProfile = std::unordered_map<std::string, ShapeRange>;
     std::vector<ShapeProfile> optProfiles;
+    std::optional<GreenContextSpec> greenContext;
+    std::vector<std::optional<GreenContextSpec>> profileGreenContexts;
     std::vector<IOFormat> inputFormats;
     std::vector<IOFormat> outputFormats;
     nvinfer1::TacticSources enabledTactics{0};
@@ -525,20 +529,20 @@ class TuningOptions : public Options
 {
 public:
     std::string tuningCacheFile{"best_config.json"};
-    std::string tuningExpr{};                                          //!< --tuneBuildRoutes
-    std::string tuningExprFile{};                                      //!< --tuneBuildRouteFile
+    std::string tuningExpr{};     //!< --tuneBuildRoutes
+    std::string tuningExprFile{}; //!< --tuneBuildRouteFile
     TuningSearchAlgorithm tuningSearchAlgorithm{TuningSearchAlgorithm::kFAST};
-    int64_t timeout{-1};                                               //!< --tuningTimeOut (s); -1 = no timeout
-    bool helpBuildRoute{false};                                        //!< --helpBuildRoute (short-circuit)
-    std::string helpBuildRouteKnob{};                                  //!< --helpBuildRoute=<knob> filter
-    bool continueFromCache{false};                                     //!< --continue
-    bool dryRun{false};                                                //!< --dryRun (enumerate, don't build)
+    int64_t timeout{-1};              //!< --tuningTimeOut (s); -1 = no timeout
+    bool helpBuildRoute{false};       //!< --helpBuildRoute (short-circuit)
+    std::string helpBuildRouteKnob{}; //!< --helpBuildRoute=<knob> filter
+    bool continueFromCache{false};    //!< --continue
+    bool dryRun{false};               //!< --dryRun (enumerate, don't build)
     //! \brief Hidden parent->child IPC channel.
     //!
     //! When set, runOnceBuildAndInfer writes a small JSON to this path containing
     //! gpu_time_ms, accuracy_failed, and per-tensor accuracy_loss before returning.
     //! Injected into the child's argv by the tuning loop; never shown in --help.
-    std::string tuningResultFile{};                                    //!< --tuningResultFile=<path>
+    std::string tuningResultFile{}; //!< --tuningResultFile=<path>
 
     void parse(Arguments& arguments) override;
     static void help(std::ostream& out);
@@ -588,6 +592,8 @@ void helpHelp(std::ostream& out);
 std::ostream& operator<<(std::ostream& os, BaseModelOptions const& options);
 
 std::ostream& operator<<(std::ostream& os, IOFormat const& format);
+
+std::ostream& operator<<(std::ostream& os, GreenContextSpec const& spec);
 
 std::ostream& operator<<(std::ostream& os, ShapeRange const& dims);
 

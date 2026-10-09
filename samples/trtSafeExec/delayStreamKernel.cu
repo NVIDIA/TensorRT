@@ -17,33 +17,48 @@
 
 #include "delayStreamKernel.h"
 
-#include <tuple>
+#include <limits>
 
-#ifndef TRT_SAFETY_INFERENCE_ONLY
 namespace
 {
-__global__ void delayKernel(long long nanoSeconds)
+__device__ __forceinline__ uint64_t readGlobalTimer()
 {
-    // It is supported with compute capability 7.0 or higher.
-    __nanosleep(nanoSeconds);
+    uint64_t value;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(value));
+    return value;
+}
+
+__global__ void delayKernel(uint64_t nanoSeconds)
+{
+    uint64_t const start{readGlobalTimer()};
+    while (readGlobalTimer() - start < nanoSeconds)
+    {
+        // Busy-wait so that subsequent work can be submitted to the stream while this kernel is running.
+    }
 }
 } // namespace
-#endif // TRT_SAFETY_INFERENCE_ONLY
 
 namespace nvinfer1
 {
-cudaError_t delayStream(cudaStream_t stream, float timeInMsec) noexcept
+cudaError_t delayStream(cudaStream_t stream, std::chrono::duration<float, std::milli> duration) noexcept
 {
-#ifndef TRT_SAFETY_INFERENCE_ONLY
-    auto nanoSeconds = static_cast<long long>(1000000 * timeInMsec);
-    delayKernel<<<1, 1, 0, stream>>>(nanoSeconds);
+    using FloatMilliseconds = std::chrono::duration<float, std::milli>;
+    if (duration < FloatMilliseconds::zero())
+    {
+        return cudaErrorInvalidValue;
+    }
+    if (duration == FloatMilliseconds::zero())
+    {
+        return cudaSuccess;
+    }
+    constexpr double kNANOSECONDS_PER_MILLISECOND{1000000.0};
+    auto const nanoSeconds = kNANOSECONDS_PER_MILLISECOND * static_cast<double>(duration.count());
+    if (!(nanoSeconds < static_cast<double>(std::numeric_limits<uint64_t>::max())))
+    {
+        // This comparison also rejects NaN and infinity before the integer conversion.
+        return cudaErrorInvalidValue;
+    }
+    delayKernel<<<1, 1, 0, stream>>>(static_cast<uint64_t>(nanoSeconds));
     return cudaGetLastError();
-#else
-    // QNX SafeCUDA does not support PTX JIT or __cudaLaunchKernel; the delay is
-    // optional timing-measurement padding and has no effect on inference correctness.
-    std::ignore = stream;
-    std::ignore = timeInMsec;
-    return cudaSuccess;
-#endif // TRT_SAFETY_INFERENCE_ONLY
 }
 } // namespace nvinfer1

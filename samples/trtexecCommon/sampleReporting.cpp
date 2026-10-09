@@ -108,7 +108,7 @@ float findCoeffOfVariance(std::vector<InferenceTime> const& timings, T const& to
     return std::sqrt(variance) / mean * 100.F;
 }
 
-inline InferenceTime traceToTiming(const InferenceTrace& a)
+inline InferenceTime traceToTiming(InferenceTrace const& a)
 {
     return InferenceTime(
         (a.enqEnd - a.enqStart), (a.h2dEnd - a.h2dStart), (a.computeEnd - a.computeStart), (a.d2hEnd - a.d2hStart));
@@ -247,7 +247,7 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     auto const getD2h = [](InferenceTime const& t) { return t.d2h; };
     auto const d2hResult = getPerformanceResult(timings, getD2h, percentiles);
 
-    auto const toPerfString = [&](const PerformanceResult& r) {
+    auto const toPerfString = [&](PerformanceResult const& r) {
         std::stringstream s;
         s << "min = " << r.min << " ms, max = " << r.max << " ms, mean = " << r.mean << " ms, "
           << "median = " << r.median << " ms";
@@ -325,7 +325,7 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingO
 {
     int32_t batchSize = infOpts.batch;
     float const warmupMs = infOpts.warmup;
-    auto const isNotWarmup = [&warmupMs](const InferenceTrace& a) { return a.computeStart >= warmupMs; };
+    auto const isNotWarmup = [&warmupMs](InferenceTrace const& a) { return a.computeStart >= warmupMs; };
     auto const noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
     int32_t const warmups = noWarmup - trace.begin();
     float const benchTime = trace.back().d2hEnd - noWarmup->h2dStart;
@@ -663,26 +663,26 @@ void printOutput(ReportingOptions const& reporting, InferenceEnvironmentBase con
     if (iEnv.safe)
     {
 #if ENABLE_UNIFIED_BUILDER
-        auto const& binding = static_cast<const InferenceEnvironmentSafe&>(iEnv).bindings.at(0);
+        auto const& binding = static_cast<InferenceEnvironmentSafe const&>(iEnv).bindings.at(0);
         if (!binding)
         {
             sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
             return;
         }
-        auto const& graph = static_cast<const InferenceEnvironmentSafe&>(iEnv).mClonedGraphs.at(0);
+        auto const& graph = static_cast<InferenceEnvironmentSafe const&>(iEnv).mClonedGraphs.at(0);
         details::safeDump(graph, binding, reporting, batch);
 #else
         sample::gLogWarning << "Safe mode is not supported! Skip printing outputs." << std::endl;
 #endif
         return;
     }
-    auto const& binding = static_cast<const InferenceEnvironmentStd&>(iEnv).bindings.at(0);
+    auto const& binding = static_cast<InferenceEnvironmentStd const&>(iEnv).bindings.at(0);
     if (!binding)
     {
         sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
         return;
     }
-    auto const& context = static_cast<const InferenceEnvironmentStd&>(iEnv).contexts.at(0);
+    auto const& context = static_cast<InferenceEnvironmentStd const&>(iEnv).contexts.at(0);
     details::dump(context, binding, reporting, batch);
 }
 

@@ -181,6 +181,7 @@ constexpr char const* descr = R"trtdoc(
     :class:`IOptimizationProfile` implements :func:`__nonzero__` and :func:`__bool__` such that evaluating a profile as a :class:`bool` (e.g. ``if profile:``) will check whether the optimization profile can be passed to an IBuilderConfig object. This will perform partial validation, by e.g. checking that the maximum dimensions are at least as large as the optimum dimensions, and that the optimum dimensions are always as least as large as the minimum dimensions. Some validation steps require knowledge of the network definition and are deferred to engine build time.
 
     :ivar extra_memory_target: Additional memory that the builder should aim to maximally allocate for this profile, as a fraction of the memory it would use if the user did not impose any constraints on memory. This unconstrained case is the default; it corresponds to ``extra_memory_target`` == 1.0. If ``extra_memory_target`` == 0.0, the builder aims to create the new optimization profile without allocating any additional weight memory. Valid inputs lie between 0.0 and 1.0. This parameter is only a hint, and TensorRT does not guarantee that the ``extra_memory_target`` will be reached. This parameter is ignored for the first (default) optimization profile that is defined.
+    :ivar profile_stream: :class:`int` The handle for the CUDA stream used to profile this optimization profile. A nonzero value overrides :attr:`IBuilderConfig.profile_stream` for this profile. Setting it to 0 clears the override, so the profile uses the builder configuration's stream. If the stream belongs to a CUDA green context, TensorRT queries its SM/CGA limits, constrains and profiles this optimization profile for that partition, and stores a profile-specific execution-resource contract in the engine. CUDA green context use requires both a TensorRT build based on CUDA Toolkit 13.0 or newer and a CUDA driver compatible with CUDA 13.0 or newer. Keep the stream and its CUDA green context alive until engine building completes.
 )trtdoc";
 
 constexpr char const* set_shape = R"trtdoc(
@@ -557,6 +558,10 @@ constexpr char const* execute_async_v3 = R"trtdoc(
     Input tensors can be released after the :func:`set_input_consumed_event` whereas output tensors require stream synchronization.
 
     :arg stream_handle: The cuda stream on which the inference kernels will be enqueued. Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by TensorRT to ensure correct synchronizations. Please use non-default stream instead.
+
+    When the stream belongs to a CUDA green context, TensorRT compares its resources with the active optimization profile's stored execution contract. TensorRT emits a warning if the stream has fewer SMs or a smaller CGA size, or if the profile was built without CUDA green context constraints, and continues execution. This configuration may cause enqueue crashes or other undefined behavior. CUDA green context execution requires both a TensorRT runtime built with CUDA Toolkit 13.0 or newer and a CUDA driver compatible with CUDA 13.0 or newer.
+
+    When capturing this call in a CUDA graph, capture on a stream in the target CUDA green context and execute the graph in that same context. Keep the green context alive until each captured graph and every graph executable instantiated from it has been destroyed; another context with identical resources is not interchangeable. A graph captured on an ordinary stream does not acquire resource isolation when launched on a CUDA green context stream.
 )trtdoc";
 
 constexpr char const* set_aux_streams = R"trtdoc(
@@ -569,6 +574,13 @@ constexpr char const* set_aux_streams = R"trtdoc(
      - At the end of the execute_async_v3() call, TensorRT will make sure that the main stream wait on the activities on all the auxiliary streams.
 
     The provided auxiliary streams must not be the default stream and must all be different to avoid deadlocks.
+
+    If any provided auxiliary stream used by TensorRT or the main stream passed to :func:`execute_async_v3` is associated with a CUDA green context, all provided auxiliary streams used by TensorRT and the main stream must belong to the same CUDA green context. Otherwise, :func:`execute_async_v3` reports an invalid-argument error and returns ``False``. When the main stream belongs to a CUDA green context, TensorRT creates any remaining auxiliary streams in that same context.
+
+    CUDA green context use requires both a TensorRT runtime built with CUDA Toolkit 13.0 or newer and a CUDA driver compatible with CUDA 13.0 or newer. Ordinary auxiliary streams remain supported with older CUDA Toolkit and driver versions supported by TensorRT.
+
+    .. warning::
+        TensorRT does not take ownership of the provided auxiliary streams. Keep each provided auxiliary stream used by TensorRT, and any CUDA green context to which it belongs, alive while the stream is configured for use by :func:`execute_async_v3` and until all work enqueued on it has completed. If TensorRT creates auxiliary streams in a CUDA green context, keep that CUDA green context alive while the execution context retains those streams and until all work enqueued on them has completed.
 
     :arg aux_streams: A list of cuda streams. If the length of the list is greater than engine.num_aux_streams, then only the first "engine.num_aux_streams" streams will be used. If the length is less than engine.num_aux_streams, such as an empty list, then TensorRT will use the provided streams for the first few auxiliary streams, and will create additional streams internally for the rest of the auxiliary streams.
 )trtdoc";
@@ -622,6 +634,8 @@ constexpr char const* set_communicator = R"trtdoc(
 
     The communicator must be uniform across all multi-device instances or undefined
     behavior occurs.
+
+    This is a collective call: it blocks until every rank sharing the communicator has called it.
 
     :returns: True if the communicator was set successfully, False otherwise.
 )trtdoc";
@@ -742,6 +756,7 @@ constexpr char const* TOTAL_WEIGHTS_SIZE = R"trtdoc(The total weights size in by
 constexpr char const* STRIPPED_WEIGHTS_SIZE
     = R"trtdoc(The stripped weight size in bytes for engines built with BuilderFlag::kSTRIP_PLAN.)trtdoc";
 } // namespace EngineStatDoc
+
 
 namespace ICudaEngineDoc
 {
@@ -923,6 +938,7 @@ constexpr char const* get_device_memory_size_for_profile_v2 = R"trtdoc(
 constexpr char const* create_serialization_config = R"trtdoc(
     Create a serialization configuration object.
 )trtdoc";
+
 
 constexpr char const* serialize_with_config = R"trtdoc(
     Serialize the network to a stream.
@@ -1209,16 +1225,19 @@ constexpr char const* DLA_MANAGED_SRAM = R"trtdoc(
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 1 MiB.
     Orin has capacity of 1 MiB per core.
+    Each loadable is given the whole pool.
 )trtdoc";
 constexpr char const* DLA_LOCAL_DRAM = R"trtdoc(
     DLA_LOCAL_DRAM is host RAM used by DLA to share intermediate tensor data across operations.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 1 GiB.
+    Note: the compiled loadable may require less than this amount; at runtime, TensorRT will allocate only as much as is required.
 )trtdoc";
 constexpr char const* DLA_GLOBAL_DRAM = R"trtdoc(
     DLA_GLOBAL_DRAM is host RAM used by DLA to store weights and metadata for execution.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 512 MiB.
+    Note: the compiled loadable may require less than this amount; at runtime, TensorRT will allocate only as much as is required.
 )trtdoc";
 constexpr char const* TACTIC_DRAM = R"trtdoc(
     TACTIC_DRAM is the host DRAM used by the optimizer to
@@ -1538,7 +1557,7 @@ constexpr char const* descr = R"trtdoc(
 
         :ivar avg_timing_iterations: :class:`int` The number of averaging iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in averaging. By default the number of averaging iterations is 1.
         :ivar flags: :class:`int` The build mode flags to turn on builder options for this network. The flags are listed in the BuilderFlags enum. The flags set configuration options to build the network. This should be in integer consisting of one or more :class:`BuilderFlag` s, combined via binary OR. For example, ``1 << BuilderFlag.FP16 | 1 << BuilderFlag.DEBUG``.
-        :ivar profile_stream: :class:`int` The handle for the CUDA stream that is used to profile this network.
+        :ivar profile_stream: :class:`int` The handle for the default engine-level CUDA stream used to profile this network. An optimization profile's ``profile_stream`` overrides this stream. If an effective profile stream belongs to a CUDA green context, that profile is built with the queried SM/CGA contract. At runtime, TensorRT warns if a CUDA green context stream does not satisfy the active profile's contract, or if an unconstrained profile is enqueued on a CUDA green context stream, and continues execution. This configuration may cause enqueue crashes or other undefined behavior. CUDA green context use requires both a TensorRT build based on CUDA Toolkit 13.0 or newer and a CUDA driver compatible with CUDA 13.0 or newer. Ordinary profile streams remain supported with older CUDA Toolkit and driver versions supported by TensorRT. Keep the stream and its CUDA green context alive until engine building completes.
         :ivar num_optimization_profiles: :class:`int` The number of optimization profiles.
         :ivar default_device_type: :class:`tensorrt.DeviceType` The default DeviceType to be used by the Builder.
         :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
@@ -2183,6 +2202,16 @@ constexpr char const* refit_cuda_engine_async = R"trtdoc(
     :arg stream: The stream to enqueue the weights updating task.
 
     :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
+)trtdoc";
+
+constexpr char const* release_refit_resources = R"trtdoc(
+    Release resources cached for the engine associated with this refitter.
+
+    A later refit recreates the resources as needed. The application must ensure that all previously enqueued
+    asynchronous refit work from every refitter sharing the same engine has completed and that no such refitter
+    executes a refit operation concurrently with this call.
+
+    :returns: ``True`` on success, ``False`` otherwise.
 )trtdoc";
 
 constexpr char const* get_missing = R"trtdoc(

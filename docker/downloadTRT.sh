@@ -2,7 +2,7 @@
 
 set -e
 
-TRT_VERSION="11.3.0.99"
+TRT_VERSION="11.4.0.106"
 
 usage() {
     echo "Usage: $0 [--x86 | --aarch64] [--cuda 13.4 | --cuda 12.9]"
@@ -44,7 +44,7 @@ case "$CUDA_VERSION" in
         ;;
 esac
 
-URL="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.3.0/tars/TensorRT-Enterprise-11.3.0.99-Linux-${ARCH}-cuda-${CUDA_VERSION}-Release-external.tar.zst"
+URL="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/tars/TensorRT-Enterprise-11.4.0.106-Linux-${ARCH}-cuda-${CUDA_VERSION}-Release-external.tar.zst"
 
 echo "Downloading TensorRT package from: $URL"
 cd /opt

@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <cuda_runtime.h>
 
@@ -84,9 +85,15 @@ namespace nvinfer2::safe::consistency
 class MaxPoolPluginChecker : public IPluginChecker
 {
 public:
+#if defined(NV_INFER_PLUGIN_CHECKER_POINTER_COUNT_API)
     bool validate(nvinfer2::safe::TensorDescriptor const* /*inputs*/, int32_t /*nbInputs*/,
         nvinfer2::safe::TensorDescriptor const* /*outputs*/, int32_t /*nbOutputs*/,
         nvinfer1::PluginFieldCollection* /*fc*/) noexcept override
+#else
+    bool validate(std::vector<nvinfer2::safe::TensorDescriptor> const& /*inputs*/,
+        std::vector<nvinfer2::safe::TensorDescriptor> const& /*outputs*/,
+        nvinfer1::PluginFieldCollection* /*fc*/) noexcept override
+#endif
     {
         // Always return true
         return true;

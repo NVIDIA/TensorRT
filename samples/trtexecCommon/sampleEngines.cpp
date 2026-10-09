@@ -18,6 +18,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#include <cudaTypedefs.h>
+#endif
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -41,10 +46,6 @@
 #include "sampleEntrypoints.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
-
-#if ENABLE_UNIFIED_BUILDER
-#include "safeCommon.h"
-#endif
 
 #if ENABLE_UNIFIED_BUILDER
 #include "NvInferConsistency.h"
@@ -91,7 +92,440 @@ public:
     }
 };
 
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+bool checkCudaDriver(CUresult result, char const* operation, std::ostream& err)
+{
+    if (result == CUDA_SUCCESS)
+    {
+        return true;
+    }
+
+    err << operation << " failed with CUDA driver error " << static_cast<int32_t>(result) << "." << std::endl;
+    return false;
+}
+
+template <typename Function>
+bool loadCudaDriverEntryPoint(char const* symbol, Function& function, uint32_t requestedVersion, std::ostream& err)
+{
+    void* entryPoint{nullptr};
+    cudaDriverEntryPointQueryResult queryResult{};
+    cudaError_t const result
+        = cudaGetDriverEntryPointByVersion(symbol, &entryPoint, requestedVersion, cudaEnableDefault, &queryResult);
+    if (result != cudaSuccess || queryResult != cudaDriverEntryPointSuccess || entryPoint == nullptr)
+    {
+        err << "CUDA driver entry point " << symbol << " is unavailable";
+        if (result != cudaSuccess)
+        {
+            err << ": " << cudaGetErrorString(result);
+        }
+        err << "." << std::endl;
+        return false;
+    }
+    function = reinterpret_cast<Function>(entryPoint);
+    return true;
+}
+
+struct GreenContextDriverApi
+{
+    [[nodiscard]] bool load(int32_t driverVersion, std::ostream& err)
+    {
+        bool const loaded = loadCudaDriverEntryPoint("cuDeviceGetDevResource", deviceGetDevResource, 12040U, err)
+            && loadCudaDriverEntryPoint("cuDeviceGet", deviceGet, 2000U, err)
+            && loadCudaDriverEntryPoint("cuDevResourceGenerateDesc", devResourceGenerateDesc, 12040U, err)
+            && loadCudaDriverEntryPoint("cuGreenCtxCreate", greenCtxCreate, 12040U, err)
+            && loadCudaDriverEntryPoint("cuGreenCtxDestroy", greenCtxDestroy, 12040U, err)
+            && loadCudaDriverEntryPoint("cuGreenCtxGetDevResource", greenCtxGetDevResource, 12040U, err)
+            && loadCudaDriverEntryPoint("cuGreenCtxStreamCreate", greenCtxStreamCreate, 12050U, err)
+            && loadCudaDriverEntryPoint("cuStreamDestroy", streamDestroy, 4000U, err);
+        if (!loaded)
+        {
+            return false;
+        }
+#if CUDA_VERSION >= 13010
+        if (driverVersion >= 13010)
+        {
+            return loadCudaDriverEntryPoint("cuDevSmResourceSplit", devSmResourceSplit, 13010U, err);
+        }
+#else
+        static_cast<void>(driverVersion);
+#endif
+        return loadCudaDriverEntryPoint("cuDevSmResourceSplitByCount", devSmResourceSplitByCount, 12040U, err);
+    }
+
+    PFN_cuDeviceGetDevResource_v12040 deviceGetDevResource{};
+    PFN_cuDeviceGet_v2000 deviceGet{};
+    PFN_cuDevSmResourceSplitByCount_v12040 devSmResourceSplitByCount{};
+#if CUDA_VERSION >= 13010
+    PFN_cuDevSmResourceSplit_v13010 devSmResourceSplit{};
+#endif
+    PFN_cuDevResourceGenerateDesc_v12040 devResourceGenerateDesc{};
+    PFN_cuGreenCtxCreate_v12040 greenCtxCreate{};
+    PFN_cuGreenCtxDestroy_v12040 greenCtxDestroy{};
+    PFN_cuGreenCtxGetDevResource_v12040 greenCtxGetDevResource{};
+    PFN_cuGreenCtxStreamCreate_v12050 greenCtxStreamCreate{};
+    PFN_cuStreamDestroy_v4000 streamDestroy{};
+};
+#endif
+
 } // namespace
+
+struct GreenContextManager::Impl
+{
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    struct Context
+    {
+        explicit Context(GreenContextDriverApi const& api)
+            : driverApi(&api)
+        {
+        }
+        Context(Context const&) = delete;
+        Context& operator=(Context const&) = delete;
+
+        ~Context()
+        {
+            clearInferenceStreams();
+            if (buildStream != nullptr)
+            {
+                static_cast<void>(driverApi->streamDestroy(buildStream));
+            }
+            if (greenContext != nullptr)
+            {
+                static_cast<void>(driverApi->greenCtxDestroy(greenContext));
+            }
+        }
+
+        void clearInferenceStreams() noexcept
+        {
+            for (CUstream stream : inferenceStreams)
+            {
+                static_cast<void>(driverApi->streamDestroy(stream));
+            }
+            inferenceStreams.clear();
+        }
+
+        [[nodiscard]] bool createInferenceStreams(int32_t streamCount, std::ostream& err)
+        {
+            inferenceStreams.reserve(static_cast<size_t>(streamCount));
+            for (int32_t index = 0; index < streamCount; ++index)
+            {
+                CUstream stream{nullptr};
+                if (!checkCudaDriver(driverApi->greenCtxStreamCreate(&stream, greenContext, CU_STREAM_NON_BLOCKING, 0),
+                        "Creating a CUDA green context inference stream", err))
+                {
+                    clearInferenceStreams();
+                    return false;
+                }
+                inferenceStreams.push_back(stream);
+            }
+            return true;
+        }
+
+        GreenContextDriverApi const* driverApi;
+        CUgreenCtx greenContext{nullptr};
+        CUstream buildStream{nullptr};
+        std::vector<CUstream> inferenceStreams;
+        uint32_t smCount{};
+        uint32_t coscheduledSmCount{};
+    };
+
+    [[nodiscard]] static std::unique_ptr<Context> createContext(
+        GreenContextSpec const& spec, CUdevice device, GreenContextDriverApi const& driverApi, std::ostream& err)
+    {
+        if (spec.smCount <= 0 || spec.coscheduledSmCount < 0)
+        {
+            err << "Invalid CUDA green context resource specification." << std::endl;
+            return nullptr;
+        }
+
+        CUdevResource deviceSms{};
+        if (!checkCudaDriver(driverApi.deviceGetDevResource(device, &deviceSms, CU_DEV_RESOURCE_TYPE_SM),
+                "Querying CUDA SM resources", err))
+        {
+            return nullptr;
+        }
+        if (static_cast<uint32_t>(spec.smCount) > deviceSms.sm.smCount)
+        {
+            err << "CUDA green context requests " << spec.smCount << " SMs, but device " << device << " has only "
+                << deviceSms.sm.smCount << " SMs." << std::endl;
+            return nullptr;
+        }
+
+        CUdevResource group{};
+#if CUDA_VERSION >= 13010
+        if (driverApi.devSmResourceSplit != nullptr)
+        {
+            CU_DEV_SM_RESOURCE_GROUP_PARAMS params{};
+            params.smCount = static_cast<uint32_t>(spec.smCount);
+            params.coscheduledSmCount = static_cast<uint32_t>(spec.coscheduledSmCount);
+            if (!checkCudaDriver(driverApi.devSmResourceSplit(&group, 1U, &deviceSms, nullptr, 0U, &params),
+                    "Partitioning CUDA SM resources", err))
+            {
+                return nullptr;
+            }
+        }
+        else
+#endif
+        {
+            uint32_t groupCount{1U};
+            if (!checkCudaDriver(driverApi.devSmResourceSplitByCount(
+                                     &group, &groupCount, &deviceSms, nullptr, 0U, static_cast<uint32_t>(spec.smCount)),
+                    "Partitioning CUDA SM resources", err))
+            {
+                return nullptr;
+            }
+            if (groupCount != 1U)
+            {
+                err << "CUDA created " << groupCount << " SM resource groups instead of one." << std::endl;
+                return nullptr;
+            }
+        }
+
+        CUdevResourceDesc descriptor{};
+        if (!checkCudaDriver(
+                driverApi.devResourceGenerateDesc(&descriptor, &group, 1U), "Creating a CUDA resource descriptor", err))
+        {
+            return nullptr;
+        }
+
+        auto context = std::make_unique<Context>(driverApi);
+        if (!checkCudaDriver(
+                driverApi.greenCtxCreate(&context->greenContext, descriptor, device, CU_GREEN_CTX_DEFAULT_STREAM),
+                "Creating a CUDA green context", err))
+        {
+            return nullptr;
+        }
+        CUdevResource contextSms{};
+        if (!checkCudaDriver(
+                driverApi.greenCtxGetDevResource(context->greenContext, &contextSms, CU_DEV_RESOURCE_TYPE_SM),
+                "Querying CUDA green context resources", err))
+        {
+            return nullptr;
+        }
+        context->smCount = contextSms.sm.smCount;
+        context->coscheduledSmCount = contextSms.sm.smCoscheduledAlignment;
+        bool const smCountMatches = context->smCount == static_cast<uint32_t>(spec.smCount);
+        bool const coscheduledSmCountMatches = spec.coscheduledSmCount == 0
+            || context->coscheduledSmCount == static_cast<uint32_t>(spec.coscheduledSmCount);
+        if (!smCountMatches || !coscheduledSmCountMatches)
+        {
+            err << "CUDA created a green context with SMs=" << context->smCount
+                << " and co-scheduled SMs=" << context->coscheduledSmCount
+                << ", which does not match the requested SMs=" << spec.smCount;
+            if (spec.coscheduledSmCount != 0)
+            {
+                err << " and co-scheduled SMs=" << spec.coscheduledSmCount;
+            }
+            err << ". Use trtexec built with CUDA Toolkit 13.1 or newer and CUDA driver 13.1 or newer for exact "
+                   "resource configuration."
+                << std::endl;
+            return nullptr;
+        }
+        if (!checkCudaDriver(
+                driverApi.greenCtxStreamCreate(&context->buildStream, context->greenContext, CU_STREAM_NON_BLOCKING, 0),
+                "Creating a CUDA green context build stream", err))
+        {
+            return nullptr;
+        }
+        return context;
+    }
+
+    void clearInferenceStreams() noexcept
+    {
+        if (globalContext != nullptr)
+        {
+            globalContext->clearInferenceStreams();
+        }
+        for (auto& context : profileContexts)
+        {
+            if (context != nullptr)
+            {
+                context->clearInferenceStreams();
+            }
+        }
+        inferenceContext = nullptr;
+    }
+
+    GreenContextDriverApi driverApi;
+    std::unique_ptr<Context> globalContext;
+    std::vector<std::unique_ptr<Context>> profileContexts;
+    Context* inferenceContext{nullptr};
+#endif
+};
+
+GreenContextManager::GreenContextManager()
+    : mImpl(std::make_unique<Impl>())
+{
+}
+
+GreenContextManager::~GreenContextManager() = default;
+
+GreenContextManager::GreenContextManager(GreenContextManager&& other) noexcept = default;
+
+bool GreenContextManager::initialize(BuildOptions const& build, int32_t device, std::ostream& err)
+{
+    bool const requested = build.greenContext.has_value()
+        || std::any_of(build.profileGreenContexts.begin(), build.profileGreenContexts.end(),
+            [](auto const& context) { return context.has_value(); });
+    if (!requested)
+    {
+        return true;
+    }
+
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    if (build.cpuOnly)
+    {
+        err << "CUDA green contexts cannot be used with --cpuOnly." << std::endl;
+        return false;
+    }
+    if (build.safe)
+    {
+        err << "CUDA green contexts are not supported with --safe." << std::endl;
+        return false;
+    }
+
+    cudaError_t const runtimeResult = cudaFree(nullptr);
+    if (runtimeResult != cudaSuccess)
+    {
+        err << "Initializing CUDA for green context creation failed: " << cudaGetErrorString(runtimeResult)
+            << std::endl;
+        return false;
+    }
+
+    int32_t driverVersion{};
+    cudaError_t const driverVersionResult = cudaDriverGetVersion(&driverVersion);
+    if (driverVersionResult != cudaSuccess)
+    {
+        err << "Querying the CUDA driver version failed: " << cudaGetErrorString(driverVersionResult) << std::endl;
+        return false;
+    }
+    if (driverVersion < 13000)
+    {
+        err << "--greenContext requires CUDA driver 13.0 or newer." << std::endl;
+        return false;
+    }
+
+    if (!mImpl->driverApi.load(driverVersion, err))
+    {
+        return false;
+    }
+    CUdevice cudaDevice{};
+    if (!checkCudaDriver(mImpl->driverApi.deviceGet(&cudaDevice, device), "Getting the CUDA device", err))
+    {
+        return false;
+    }
+
+    if (build.greenContext.has_value())
+    {
+        mImpl->globalContext = Impl::createContext(*build.greenContext, cudaDevice, mImpl->driverApi, err);
+        if (mImpl->globalContext == nullptr)
+        {
+            return false;
+        }
+        sample::gLogInfo << "Created global CUDA green context: SMs=" << mImpl->globalContext->smCount
+                         << ", co-scheduled SMs=" << mImpl->globalContext->coscheduledSmCount << std::endl;
+    }
+
+    mImpl->profileContexts.resize(build.profileGreenContexts.size());
+    for (size_t profileIndex = 0; profileIndex < build.profileGreenContexts.size(); ++profileIndex)
+    {
+        if (!build.profileGreenContexts[profileIndex].has_value())
+        {
+            continue;
+        }
+        mImpl->profileContexts[profileIndex]
+            = Impl::createContext(*build.profileGreenContexts[profileIndex], cudaDevice, mImpl->driverApi, err);
+        if (mImpl->profileContexts[profileIndex] == nullptr)
+        {
+            return false;
+        }
+        auto const& context = mImpl->profileContexts[profileIndex];
+        sample::gLogInfo << "Created CUDA green context for optimization profile " << profileIndex
+                         << ": SMs=" << context->smCount << ", co-scheduled SMs=" << context->coscheduledSmCount
+                         << std::endl;
+    }
+    return true;
+#else
+    static_cast<void>(device);
+    err << "--greenContext requires CUDA Toolkit 13.0 or newer and is unavailable on this platform." << std::endl;
+    return false;
+#endif
+}
+
+cudaStream_t GreenContextManager::globalBuildStream() const noexcept
+{
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    return mImpl != nullptr && mImpl->globalContext != nullptr ? mImpl->globalContext->buildStream : nullptr;
+#else
+    return nullptr;
+#endif
+}
+
+cudaStream_t GreenContextManager::profileBuildStream(size_t profileIndex) const noexcept
+{
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    if (mImpl == nullptr || profileIndex >= mImpl->profileContexts.size()
+        || mImpl->profileContexts[profileIndex] == nullptr)
+    {
+        return nullptr;
+    }
+    return mImpl->profileContexts[profileIndex]->buildStream;
+#else
+    static_cast<void>(profileIndex);
+    return nullptr;
+#endif
+}
+
+bool GreenContextManager::prepareInferenceStreams(size_t profileIndex, int32_t streamCount, std::ostream& err)
+{
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    if (mImpl == nullptr || streamCount < 0)
+    {
+        err << "Invalid CUDA green context inference stream count." << std::endl;
+        return false;
+    }
+
+    mImpl->clearInferenceStreams();
+    Impl::Context* context{nullptr};
+    if (profileIndex < mImpl->profileContexts.size() && mImpl->profileContexts[profileIndex] != nullptr)
+    {
+        context = mImpl->profileContexts[profileIndex].get();
+    }
+    else if (mImpl->globalContext != nullptr)
+    {
+        context = mImpl->globalContext.get();
+    }
+    if (context == nullptr)
+    {
+        return true;
+    }
+    if (!context->createInferenceStreams(streamCount, err))
+    {
+        return false;
+    }
+    mImpl->inferenceContext = context;
+    return true;
+#else
+    static_cast<void>(profileIndex);
+    static_cast<void>(streamCount);
+    static_cast<void>(err);
+    return true;
+#endif
+}
+
+cudaStream_t GreenContextManager::inferenceStream(size_t streamIndex) const noexcept
+{
+#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+    if (mImpl == nullptr || mImpl->inferenceContext == nullptr
+        || streamIndex >= mImpl->inferenceContext->inferenceStreams.size())
+    {
+        return nullptr;
+    }
+    return mImpl->inferenceContext->inferenceStreams[streamIndex];
+#else
+    static_cast<void>(streamIndex);
+    return nullptr;
+#endif
+}
 
 nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 {
@@ -617,17 +1051,30 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
     return true;
 }
 
+//! Creates optimization profiles and assigns profile-specific CUDA green context streams.
+//!
+//! \return The optimization profiles created by \p builder.
+[[nodiscard]] std::vector<IOptimizationProfile*> createOptimizationProfiles(
+    BuildOptions const& build, IBuilder& builder, GreenContextManager const& greenContexts)
+{
+    std::vector<IOptimizationProfile*> profiles(build.optProfiles.size());
+    for (size_t profileIndex = 0; profileIndex < profiles.size(); ++profileIndex)
+    {
+        profiles[profileIndex] = builder.createOptimizationProfile();
+        if (auto const stream = greenContexts.profileBuildStream(profileIndex); stream != nullptr)
+        {
+            profiles[profileIndex]->setProfileStream(stream);
+        }
+    }
+    return profiles;
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size)
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
     INetworkDefinition& network, IBuilderConfig& config, std::ostream& err,
-    std::vector<std::vector<int8_t>>& sparseWeights)
+    std::vector<std::vector<int8_t>>& sparseWeights, GreenContextManager const& greenContexts)
 {
-    std::vector<IOptimizationProfile*> profiles{};
-    profiles.resize(build.optProfiles.size());
-    for (auto& profile : profiles)
-    {
-        profile = builder.createOptimizationProfile();
-    }
+    auto const profiles = createOptimizationProfiles(build, builder, greenContexts);
 
     bool hasDynamicShapes{false};
 
@@ -1142,52 +1589,13 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
     INetworkDefinition& network, IBuilderConfig& config, BuildEnvironment& env, std::ostream& err)
 {
     std::unique_ptr<IHostMemory> serializedEngine;
-#if ENABLE_UNIFIED_BUILDER
-    //! Engine bytes copied out of the safe artifacts, which free their own memory when they go out of scope.
-    std::vector<uint8_t> safeEngineBytes;
-#endif // ENABLE_UNIFIED_BUILDER
 #if !TRT_WINML
-#if ENABLE_UNIFIED_BUILDER
-    if (build.safe)
-    {
-        // A safe engine may need a companion library, and only this entry point returns the two together.
-        // The others reject EngineCapability::kSAFETY once companion libraries are required, so safe builds
-        // go through here whether or not one is produced.
-        auto const artifacts = std::unique_ptr<ISafeSerializedNetworkArtifacts>{
-            builder.buildSerializedSafeNetwork(network, config, build.dumpCheckerBlob)};
-        SMP_RETVAL_IF_FALSE(artifacts != nullptr, "Engine could not be created from network", false, err);
-
-        // Every getter hands back memory owned by the artifacts, so each one is copied before they die.
-        auto const copyOut = [](IHostMemory const* src) {
-            auto const* const bytes = static_cast<uint8_t const*>(src->data());
-            return std::vector<uint8_t>(bytes, bytes + src->size());
-        };
-
-        safeEngineBytes = copyOut(artifacts->getSerializedNetwork());
-
-        if (auto const* const companionSo = artifacts->getCompanionSo())
-        {
-            sample::gLogInfo << "Created companion library with size: " << (companionSo->size() / 1.0_MiB) << " MiB"
-                             << std::endl;
-            env.companionSo.setBlob(copyOut(companionSo));
-        }
-
-        if (build.dumpCheckerBlob)
-        {
-            auto const* const checkerBlob = artifacts->getCheckerBlob();
-            SMP_RETVAL_IF_FALSE(checkerBlob != nullptr, "Failed to create the checker blob.", false, err);
-            sample::gLogInfo << "Created checker blob with size: " << (checkerBlob->size() / 1.0_MiB) << " MiB"
-                             << std::endl;
-            env.checkerBlob.setBlob(copyOut(checkerBlob));
-        }
-    }
-    else
-#endif // ENABLE_UNIFIED_BUILDER
     if (build.safe && build.save && build.dumpCheckerBlob)
     {
-        IHostMemory* kernelTextPtr{nullptr};
-        serializedEngine = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config, kernelTextPtr)};
-        auto checkerBlob = std::unique_ptr<IHostMemory>{kernelTextPtr};
+        IHostMemory* checkerBlobPtr{nullptr};
+        serializedEngine
+            = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config, checkerBlobPtr)};
+        auto checkerBlob = std::unique_ptr<IHostMemory>{checkerBlobPtr};
         if (checkerBlob != nullptr)
         {
             auto const checkerBlobSize = checkerBlob->size();
@@ -1202,10 +1610,9 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
                 sample::gLogInfo << "Created empty checker blob." << std::endl;
             }
         }
-        else
+        else if (serializedEngine != nullptr)
         {
-            sample::gLogError << "Failed to create the checker blob." << std::endl;
-            return false;
+            sample::gLogWarning << "No checker blob was produced: the engine has no checkable kernels." << std::endl;
         }
     }
     else
@@ -1213,44 +1620,23 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
     {
         serializedEngine = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config)};
     }
-    void const* engineData{nullptr};
-    int64_t engineSize{0};
-#if ENABLE_UNIFIED_BUILDER
-    if (!safeEngineBytes.empty())
-    {
-        engineData = safeEngineBytes.data();
-        engineSize = static_cast<int64_t>(safeEngineBytes.size());
-    }
-    else
-#endif // ENABLE_UNIFIED_BUILDER
-    {
-        SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
-        engineData = serializedEngine->data();
-        engineSize = static_cast<int64_t>(serializedEngine->size());
-    }
-    sample::gLogInfo << "Created engine with size: " << (engineSize / 1.0_MiB) << " MiB" << std::endl;
+    SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
+    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
 
     if (build.safe && build.consistency)
     {
-        std::vector<char const*> pluginBuildLibPaths;
+        std::vector<std::string> pluginBuildLibPaths;
 #if ENABLE_UNIFIED_BUILDER
         pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
         std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
-            [](auto const& sp) { return sp.libraryName.c_str(); });
+            [](auto const& sp) { return sp.libraryName; });
 #endif
-        if (!checkSafeEngine(engineData, engineSize, pluginBuildLibPaths.data(),
-                static_cast<int64_t>(pluginBuildLibPaths.size())))
+        if (!checkSafeEngine(
+                serializedEngine->data(), static_cast<int64_t>(serializedEngine->size()), pluginBuildLibPaths))
         {
             return false;
         }
     }
-#if ENABLE_UNIFIED_BUILDER
-    if (!safeEngineBytes.empty())
-    {
-        env.engine.setBlob(std::move(safeEngineBytes));
-        return true;
-    }
-#endif // ENABLE_UNIFIED_BUILDER
     env.engine.setBlob(std::move(serializedEngine));
     return true;
 }
@@ -1260,14 +1646,15 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
 //!
 //! \return Whether the engine creation succeeds or fails.
 //!
-bool networkToSerializedEngine(
-    BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
+bool networkToSerializedEngine(BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env,
+    std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     IBuilder& builder = *env.builder;
     IBuilderConfig& config = *env.builderConfig;
     INetworkDefinition& network = *env.network;
     std::vector<std::vector<int8_t>> sparseWeights;
-    SMP_RETVAL_IF_FALSE(setupNetworkAndConfig(build, sys, builder, network, config, err, sparseWeights),
+    SMP_RETVAL_IF_FALSE(
+        setupNetworkAndConfig(build, sys, builder, network, config, err, sparseWeights, env.greenContexts),
         "Network And Config setup failed", false, err);
 
     if (postConfigHook)
@@ -1284,13 +1671,15 @@ bool networkToSerializedEngine(
 
     // CUDA stream used for profiling by the builder.
 #if !TRT_WINML
-    auto profileStream = build.cpuOnly
+    auto const greenProfileStream = env.greenContexts.globalBuildStream();
+    auto profileStream = build.cpuOnly || greenProfileStream != nullptr
         ? std::unique_ptr<cudaStream_t, decltype(samplesCommon::StreamDeleter)>{nullptr, samplesCommon::StreamDeleter}
         : samplesCommon::makeCudaStream();
     if (!build.cpuOnly)
     {
-        SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
-        config.setProfileStream(*profileStream);
+        SMP_RETVAL_IF_FALSE(
+            greenProfileStream != nullptr || profileStream != nullptr, "Cuda stream creation failed", false, err);
+        config.setProfileStream(greenProfileStream != nullptr ? greenProfileStream : *profileStream);
     }
 #endif
     auto const tBegin = std::chrono::high_resolution_clock::now();
@@ -1332,8 +1721,8 @@ bool networkToSerializedEngine(
 //!
 //! \brief Parse a given model, create a network and an engine.
 //!
-bool modelToBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
+bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env,
+    std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     env.builder.reset(createBuilder());
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
@@ -1375,8 +1764,8 @@ bool modelToBuildEnv(
 
     std::vector<std::string> vcPluginLibrariesUsed;
     SMP_RETVAL_IF_FALSE(env.network != nullptr, "Network creation failed", false, err);
-    env.parser
-        = modelToNetwork(model, build, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr, *env.builderConfig);
+    env.parser = modelToNetwork(model, build, *env.network, err,
+        build.versionCompatible ? &vcPluginLibrariesUsed : nullptr, *env.builderConfig);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
 
 #if !TRT_WINML
@@ -1509,10 +1898,13 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     std::ifstream engineFile(filepath, std::ios::binary);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << filepath);
     engineFile.seekg(0, std::ifstream::end);
-    int64_t fsize = engineFile.tellg();
+    // tellg() returns -1 on stream failure; cast-to-size_t would otherwise produce a huge allocation.
+    std::streamoff const fsizeRaw = engineFile.tellg();
+    SMP_RETVAL_IF_FALSE(fsizeRaw > 0, "", false, err << "Error determining engine file size: " << filepath);
+    int64_t const fsize = static_cast<int64_t>(fsizeRaw);
     engineFile.seekg(0, std::ifstream::beg);
 
-    std::vector<uint8_t> engineBlob(fsize);
+    std::vector<uint8_t> engineBlob(static_cast<size_t>(fsize));
     engineFile.read(reinterpret_cast<char*>(engineBlob.data()), fsize);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << filepath);
     auto const tEnd = std::chrono::high_resolution_clock::now();
@@ -1522,14 +1914,13 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
 
     if (enableConsistency)
     {
-        std::vector<char const*> pluginBuildLibPaths;
+        std::vector<std::string> pluginBuildLibPaths;
 #if ENABLE_UNIFIED_BUILDER
         pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
         std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
-            [](auto const& sp) { return sp.libraryName.c_str(); });
+            [](auto const& sp) { return sp.libraryName; });
 #endif
-        if (!checkSafeEngine(engineBlob.data(), static_cast<int64_t>(fsize), pluginBuildLibPaths.data(),
-                static_cast<int64_t>(pluginBuildLibPaths.size())))
+        if (!checkSafeEngine(engineBlob.data(), fsize, pluginBuildLibPaths))
         {
             sample::gLogError << "Consistency validation is not enabled." << std::endl;
             return false;
@@ -1598,9 +1989,9 @@ bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
     case 0U:
     {
         // Blob index to store the plan version may depend on the serialization version.
-        sample::gLogInfo << "Plan was created with TensorRT version " << static_cast<int32_t>(blob[24])
-        << "." << static_cast<int32_t>(blob[25]) << "." << static_cast<int32_t>(blob[26])
-        << "." << static_cast<int32_t>(blob[27]) << std::endl;
+        sample::gLogInfo << "Plan was created with TensorRT version " << static_cast<int32_t>(blob[24]) << "."
+                         << static_cast<int32_t>(blob[25]) << "." << static_cast<int32_t>(blob[26]) << "."
+                         << static_cast<int32_t>(blob[27]) << std::endl;
         return true;
     }
     }
@@ -1664,8 +2055,8 @@ bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ost
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-bool getEngineBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
+bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env,
+    std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     bool createEngineSuccess{false};
 
@@ -1674,19 +2065,6 @@ bool getEngineBuildEnv(
         if (build.safe)
         {
             createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, sys, build.safe && build.consistency);
-#if ENABLE_UNIFIED_BUILDER
-            // An explicit path is taken as given, so naming a library that is not there is an error.
-            // Otherwise the default beside the engine is used when it exists; an engine built without a
-            // companion library has none to pair with and loads on its own.
-            env.companionSoPath = samplesSafeCommon::resolveCompanionSoPath(build.engine, build.loadEngineSo);
-            if (env.companionSoPath)
-            {
-                std::ifstream companionSoFile(*env.companionSoPath, std::ios::binary);
-                SMP_RETVAL_IF_FALSE(companionSoFile.good(),
-                    ("Companion library not found: " + *env.companionSoPath).c_str(), false, err);
-                sample::gLogInfo << "Using companion library " << *env.companionSoPath << std::endl;
-            }
-#endif // ENABLE_UNIFIED_BUILDER
         }
         else
         {
@@ -1787,26 +2165,6 @@ bool getEngineBuildEnv(
                                     << std::endl;
             }
         }
-#if ENABLE_UNIFIED_BUILDER
-        // The runtime cannot load the engine without its companion library, so it is saved whenever the
-        // build produced one rather than behind a flag of its own.
-        if (build.safe && !env.companionSo.hasBlob() && !build.saveEngineSo.empty())
-        {
-            sample::gLogWarning << "Ignoring --saveEngineSo: the build produced no companion library." << std::endl;
-        }
-        if (build.safe && env.companionSo.hasBlob())
-        {
-            auto const companionSoFileName
-                = build.saveEngineSo.empty() ? build.engine + ".so" : build.saveEngineSo;
-            auto const companionSoBlob = env.companionSo.getBlobOrEmpty();
-            std::ofstream companionSoFile(companionSoFileName, std::ios::binary);
-            companionSoFile.write(static_cast<char const*>(companionSoBlob.data), companionSoBlob.size);
-            SMP_RETVAL_IF_FALSE(!companionSoFile.fail(), "Saving companion library to file failed.", false, err);
-            companionSoFile.close();
-            env.companionSoPath = companionSoFileName;
-            sample::gLogInfo << "Saved companion library to " << companionSoFileName << std::endl;
-        }
-#endif // ENABLE_UNIFIED_BUILDER
     }
 
     return true;
@@ -2097,12 +2455,22 @@ static constexpr auto kREFERENCE_CHECKER_LIBRARY = nullptr;
 
 #if ENABLE_UNIFIED_BUILDER
 
+//! \brief Create a consistency checker for a serialized safe engine.
+//!
+//! \param recorder Error recorder the checker reports through.
+//! \param serializedEngine Serialized engine to validate. Must not be null.
+//! \param engineSize Size of \p serializedEngine in bytes. Must be positive and representable as size_t.
+//! \param pluginBuildLibs Plugin libraries the engine was built against, loaded by the checker.
+//!
+//! \return The checker, or nullptr if the arguments are invalid or the checker library is unavailable.
 std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsistencyChecker(
     nvinfer2::safe::ISafeRecorder& recorder, void const* serializedEngine, int64_t const engineSize,
-    char const* const* pluginBuildLibs, int64_t const nbPluginBuildLibs) noexcept
+    std::vector<std::string> const& pluginBuildLibs) noexcept
 {
-
-    if (serializedEngine == nullptr || engineSize <= 0)
+    // The checker takes a size_t, which is narrower than int64_t on 32-bit targets. Round-tripping the cast
+    // rejects sizes that would truncate, which would otherwise validate only part of the engine.
+    if (serializedEngine == nullptr || engineSize <= 0
+        || static_cast<int64_t>(static_cast<size_t>(engineSize)) != engineSize)
     {
         return nullptr;
     }
@@ -2110,16 +2478,14 @@ std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsiste
 #if !defined(_WIN32)
     if (hasSafeRuntime())
     {
-        using CreateCheckerFn = nvinfer2::safe::ErrorCode (*)(
-            nvinfer2::safe::consistency::IConsistencyChecker*& checker, nvinfer2::safe::ISafeRecorder& recorder,
-            void const* data, int64_t size, char const* const* pluginBuildLibs, int64_t nbPluginBuildLibs) noexcept;
+        // Derive the signature from the header so an ABI change in the checker library is a compile error
+        // rather than a segfault at the call.
+        using CreateCheckerFn = decltype(&nvinfer2::safe::consistency::createConsistencyChecker);
         if (auto const createFn
             = reinterpret_cast<CreateCheckerFn>(dlsym(kCONSISTENCY_CHECKER_LIBRARY.get(), "createConsistencyChecker")))
         {
-            nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
-            auto const result
-                = createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibs, nbPluginBuildLibs);
-            if (result == nvinfer2::safe::ErrorCode::kSUCCESS)
+            if (nvinfer2::safe::consistency::IConsistencyChecker * checker{nullptr}; nvinfer2::safe::ErrorCode::kSUCCESS
+                == createFn(checker, recorder, serializedEngine, static_cast<size_t>(engineSize), pluginBuildLibs))
             {
                 return std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>{checker};
             }
@@ -2151,8 +2517,7 @@ std::unique_ptr<nvinfer2::safe::reference::IReferenceChecker> createReferenceChe
         if (auto const createFn
             = reinterpret_cast<CreateCheckerFn>(dlsym(kREFERENCE_CHECKER_LIBRARY.get(), symbolName)))
         {
-            if (nvinfer2::safe::reference::IReferenceChecker * checker{nullptr};
-                ErrorCode::kSUCCESS
+            if (nvinfer2::safe::reference::IReferenceChecker * checker{nullptr}; ErrorCode::kSUCCESS
                 == createFn(checker, recorder, serializedEngine, engineSize, checkerBlob.data, checkerBlob.size,
                     remoteConfig.c_str()))
             {
@@ -2175,13 +2540,13 @@ bool hasConsistencyChecker()
     return kCONSISTENCY_CHECKER_LIBRARY != nullptr;
 }
 
-bool hasReferenceChecker()
+[[nodiscard]] bool hasReferenceChecker()
 {
     return kREFERENCE_CHECKER_LIBRARY != nullptr;
 }
 
-bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize, char const* const* pluginBuildLibs,
-    int64_t const nbPluginBuildLibs)
+bool checkSafeEngine(
+    void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibs)
 {
 #if !ENABLE_UNIFIED_BUILDER
     return false;
@@ -2194,7 +2559,7 @@ bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize, cha
 
     sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
     std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> checker
-        = createConsistencyChecker(recorder, serializedEngine, engineSize, pluginBuildLibs, nbPluginBuildLibs);
+        = createConsistencyChecker(recorder, serializedEngine, engineSize, pluginBuildLibs);
     if (checker == nullptr)
     {
         sample::gLogError << "Failed to create consistency checker." << std::endl;

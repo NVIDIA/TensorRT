@@ -40,11 +40,6 @@
 
 #include "common.h"
 #include "logger.h"
-#include "sampleDevice.h"
-#include "sampleEngines.h"
-#include "sampleInference.h"
-#include "sampleOptions.h"
-#include "sampleReporting.h"
 
 using namespace nvinfer1;
 using namespace sample;
@@ -123,10 +118,6 @@ std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxRefitterInternal{};
 
-//! Track runtime used for the execution of trtexec.
-//! Must be tracked as a global variable due to how library init functions APIs are organized.
-RuntimeMode gUseRuntime = RuntimeMode::kFULL;
-
 #if !TRT_STATIC
 template <typename FetchPtrs>
 bool initLibrary(LibraryPtr& libPtr, std::string const& libName, FetchPtrs fetchFunc)
@@ -173,12 +164,9 @@ bool initNvinfer()
             sample::gLogWarning << "Could not load function createInferRefitter_INTERNAL : " << e.what() << std::endl;
         }
 
-        if (gUseRuntime == RuntimeMode::kFULL)
-        {
-            pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
-        }
+        pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
     };
-    return initLibrary(libnvinferPtr, sample::getRuntimeLibraryName(gUseRuntime), fetchPtrs);
+    return initLibrary(libnvinferPtr, kNVINFER_LIBNAME, fetchPtrs);
 #else
     pCreateInferRuntimeInternal = createInferRuntime_INTERNAL;
     pCreateInferRefitterInternal = createInferRefitter_INTERNAL;

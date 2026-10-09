@@ -78,14 +78,14 @@ FlattenConcat::FlattenConcat(void const* data, size_t length)
 
     ensureAvailable(static_cast<uint64_t>(mNumInputs) * sizeof(int32_t));
     mInputConcatAxis.resize(mNumInputs);
-    std::for_each(mInputConcatAxis.begin(), mInputConcatAxis.end(), [&](int32_t& inp) { inp = read<int32_t>(d); });
+    std::ranges::for_each(mInputConcatAxis, [&](int32_t& inp) { inp = read<int32_t>(d); });
 
     ensureAvailable(sizeof(nvinfer1::Dims3));
     mCHW = read<nvinfer1::Dims3>(d);
 
     ensureAvailable(static_cast<uint64_t>(mNumInputs) * sizeof(size_t));
     mCopySize.resize(mNumInputs);
-    std::for_each(mCopySize.begin(), mCopySize.end(), [&](size_t& inp) { inp = read<size_t>(d); });
+    std::ranges::for_each(mCopySize, [&](size_t& inp) { inp = read<size_t>(d); });
 
     PLUGIN_VALIDATE(d == a + length);
 }

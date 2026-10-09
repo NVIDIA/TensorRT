@@ -15,53 +15,22 @@
 # limitations under the License.
 #
 
-if(NOT NLOHMANN_JSON_INCLUDE_DIRS)
-    include(FetchNlohmannJson)
-endif()
-
 add_library(trt_samples_common STATIC
     argsParser.h
-    BatchStream.h
-    bfloat16.cpp
-    bfloat16.h
-    bigInt.cpp
-    bigInt.h
     buffers.h
-    common.cpp
     common.h
-    debugTensorWriter.cpp
-    debugTensorWriter.h
     ErrorRecorder.h
-    getOptions.cpp
-    getOptions.h
     getoptWin.h
-    globalTimerKernel.cu
-    globalTimerKernel.h
     half.h
     logger.cpp
     logger.h
     logging.h
     parserOnnxConfig.h
-    sampleConfig.h
-    sampleDevice.cpp
-    sampleDevice.h
-    sampleEngines.cpp
-    sampleEngines.h
     sampleEntrypoints.h
-    sampleInference.cpp
-    sampleInference.h
-    sampleOptions.cpp
-    sampleOptions.h
-    sampleReporting.cpp
-    sampleReporting.h
-    sampleTuning.cpp
-    sampleTuning.h
     sampleUtils.cpp
     sampleUtils.h
     safeCommon.h
-    safeCudaAllocator.h
     safeErrorRecorder.h
-    streamReader.h
 )
 
 if(MSVC)
@@ -76,10 +45,7 @@ if (${TRT_BUILD_TESTING})
     enable_testing()
 
     add_executable(trt_samples_common_test
-        bfloat16.test.cpp
-        getOptions.test.cpp
         half.test.cpp
-        sampleOptions.test.cpp
         sampleUtils.test.cpp
     )
 
@@ -99,7 +65,6 @@ endif() # TRT_BUILD_TESTING
 
 target_include_directories(trt_samples_common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
-    ${NLOHMANN_JSON_INCLUDE_DIRS}
 )
 
 target_link_libraries(trt_samples_common PUBLIC
@@ -120,8 +85,6 @@ endif()
 if(NOT WIN32 AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "QNX")
     target_link_libraries(trt_samples_common PUBLIC dl)
 endif()
-
-target_link_libraries(trt_samples_common PUBLIC $<COMPILE_ONLY:CUDA::cupti>)
 
 # For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
 if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})

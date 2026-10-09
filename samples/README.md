@@ -19,7 +19,6 @@
 | [sampleNonZeroPlugin](sampleNonZeroPlugin) | C++ | INetwork | Adding plugin with data-dependent output shapes |
 | [sampleIOFormats](sampleIOFormats) | C++ | ONNX | Specifying TensorRT I/O Formats |
 | [sampleProgressMonitor](sampleProgressMonitor) | C++ | ONNX | Progress Monitor API usage |
-| [trtexec](trtexec) | C++ | All | TensorRT Command-Line Wrapper: trtexec |
 | [engine_refit_onnx_bidaf](python/engine_refit_onnx_bidaf) | Python | ONNX | refitting an engine built from an ONNX model via parsers. |
 | [introductory_parser_samples](python/introductory_parser_samples) | Python | ONNX | Introduction To Importing Models Using TensorRT Parsers |
 | [onnx_packnet](python/onnx_packnet) | Python | ONNX | TensorRT Inference Of ONNX Models With Custom Layers |
@@ -35,7 +34,6 @@
 |---|---|---|---|
 | [sampleSafeMNIST](sampleSafeMNIST) | C++ | ONNX | Build a Safety Engine for MNIST |
 | [sampleSafePluginV3](sampleSafePluginV3) | C++ | ONNX | Use Safety-Supported Plugins With Safety Engines |
-| [trtSafeExec](trtSafeExec) | C++ | ONNX | TensorRT Command-Line Wrapper With Safety Options |
 
 ## Preparing sample data
 

@@ -27,7 +27,6 @@
 // Define TRT entrypoints used in common code
 #define DEFINE_TRT_ENTRYPOINTS 1
 
-#include "BatchStream.h"
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"

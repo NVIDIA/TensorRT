@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,25 +23,48 @@
 
 #include "TensorInfo.cuh"
 #include "common/dimsHelpers.h"
+#include "common/kernels/reducedMathPlugin.h"
 #include "reducer.cuh"
 #include "scatterElementsPluginKernel.h"
 #include <thrust/device_vector.h>
+#include <type_traits>
 
 namespace nvinfer1
 {
 namespace plugin
 {
 
-#define THREADS 256
-#define BLOCKS(N) (N + THREADS - 1) / THREADS
+namespace
+{
+constexpr int64_t kTHREADS = 256;
+
+//! Output dimensions and divisors for decoding update coordinates.
+struct ScatterElementsOutputLayout
+{
+    Dims outputDims;
+    ReducedDivisor indexDivisors[Dims::MAX_DIMS];
+};
+
+//! Keep divisor parameters out of the flattened kernel specialization.
+template <bool UseOutputLayout>
+using ScatterElementsLayout = std::conditional_t<UseOutputLayout, ScatterElementsOutputLayout, Dims>;
+
+[[nodiscard]] constexpr int64_t calcBlocks(int64_t n)
+{
+    return (n + kTHREADS - 1) / kTHREADS;
+}
+} // namespace
 
 using detail::TensorInfo;
 using detail::getTensorInfo;
 using nvinfer1::pluginInternal::volume;
 
-template <typename TScalar, ReductionType tReduce>
-__global__ void scatterElements_kernel(const TScalar* updatesData, const TensorInfo<int64_t, int32_t> indexInfo,
-    TScalar* outData, int32_t nE, int32_t nK, int32_t nN, int32_t nbElements)
+//! Reduce updates at scatter indices using the output tensor's layout.
+//! Specialize address generation to keep the coordinate loop's stack usage out of the flattened path.
+template <typename TScalar, ReductionType tReduce, bool UseOutputLayout>
+__global__ void scatterElements_kernel(TScalar const* updatesData, TensorInfo<int64_t, int32_t> const indexInfo,
+    ScatterElementsLayout<UseOutputLayout> const outputLayout, TScalar* outData, int32_t nE, int32_t nK, int32_t nN,
+    int32_t axis, int32_t nbElements)
 {
 
     int32_t thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,7 +77,38 @@ __global__ void scatterElements_kernel(const TScalar* updatesData, const TensorI
         int32_t offset = detail::IndexToOffset<int64_t, int32_t, -1>::get(thread_idx, indexInfo);
         int64_t idx = indexInfo.data[offset];
 
-        Reducer<TScalar, tReduce>::atomic_write(outData + b * nN * nK + idx * nK + k, updatesData[thread_idx]);
+        if (idx < -nN || idx >= nN)
+        {
+            return;
+        }
+        if (idx < 0)
+        {
+            idx += nN;
+        }
+
+        int64_t outputOffset{};
+        if constexpr (!UseOutputLayout)
+        {
+            outputOffset = static_cast<int64_t>(b) * nN * nK + idx * nK + k;
+        }
+        else
+        {
+            // Non-axis dimensions can be smaller for updates, so output strides must be computed separately.
+            int32_t linearIndex = thread_idx;
+            int64_t outputStride{1};
+            for (int32_t dim = indexInfo.dims - 1; dim >= 0; --dim)
+            {
+                int32_t coordinate{};
+                int32_t quotient{};
+                outputLayout.indexDivisors[dim].divmod(linearIndex, quotient, coordinate);
+                linearIndex = quotient;
+                int64_t const outputCoordinate = dim == axis ? idx : coordinate;
+                outputOffset += outputCoordinate * outputStride;
+                outputStride *= outputLayout.outputDims.d[dim];
+            }
+        }
+
+        Reducer<TScalar, tReduce>::atomic_write(outData + outputOffset, updatesData[thread_idx]);
     }
 }
 
@@ -105,13 +159,36 @@ void dispatchScatterElementsKernel(void* outDataPtr, void const* dataDataPtr, vo
     auto nN = outDesc.dims.d[axis];
 
     auto indexInfo = getTensorInfo<int64_t, int32_t>(indicesDataPtr, indicesDesc);
+    bool sameNonAxisShape{true};
+    for (int32_t dim = 0; dim < outDesc.dims.nbDims; ++dim)
+    {
+        if (dim != axis && updatesDesc.dims.d[dim] != outDesc.dims.d[dim])
+        {
+            sameNonAxisShape = false;
+            break;
+        }
+    }
 
     auto updatesData = (TScalar*) updatesDataPtr;
     auto outData = (TScalar*) outDataPtr;
 
     AT_DISPATCH_REDUCTION_TYPES(reduction, [&] {
-        scatterElements_kernel<TScalar, REDUCE>
-            <<<BLOCKS(updatesNumEl), THREADS, 0, stream>>>(updatesData, indexInfo, outData, nE, nK, nN, updatesNumEl);
+        if (sameNonAxisShape)
+        {
+            scatterElements_kernel<TScalar, REDUCE, false><<<calcBlocks(updatesNumEl), kTHREADS, 0, stream>>>(
+                updatesData, indexInfo, outDesc.dims, outData, nE, nK, nN, axis, updatesNumEl);
+        }
+        else
+        {
+            ScatterElementsOutputLayout outputLayout{outDesc.dims, {}};
+            for (int32_t dim = 0; dim < indexInfo.dims; ++dim)
+            {
+                outputLayout.indexDivisors[dim] = ReducedDivisor(indexInfo.sizes[dim]);
+            }
+            scatterElements_kernel<TScalar, REDUCE, true><<<calcBlocks(updatesNumEl), kTHREADS, 0, stream>>>(
+                updatesData, indexInfo, outputLayout, outData, nE, nK, nN, axis, updatesNumEl);
+        }
+        PLUGIN_CUASSERT(cudaGetLastError());
     });
 }
 
@@ -125,6 +202,12 @@ void runScatterElementsKernel(void* outDataPtr, void const* dataDataPtr, void co
     cudaStream_t stream)
 
 {
+    for (int32_t dim = 0; dim < outDesc.dims.nbDims; ++dim)
+    {
+        PLUGIN_VALIDATE(dim == axis || updatesDesc.dims.d[dim] <= outDesc.dims.d[dim],
+            "ScatterElements updates dimensions must not exceed output dimensions outside the axis");
+    }
+
     auto updatesNumEl = volume(updatesDesc.dims);
     auto outNumEl = volume(outDesc.dims);
 

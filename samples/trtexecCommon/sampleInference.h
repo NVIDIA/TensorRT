@@ -28,11 +28,12 @@
 #include <iostream>
 #include <list>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
 #if ENABLE_UNIFIED_BUILDER
+// Also pulls in safeErrorRecorder.h, whose `using namespace nvinfer2::safe` is what lets the
+// declarations below name ISafeRecorder, ISafeMemAllocator and ITRTGraph unqualified.
 #include "safeCudaAllocator.h"
 #endif
 namespace sample
@@ -136,7 +137,6 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings);
 //! \param graph: Pointer to the safe TRT graph to be created
 //! \param blob: Pointer to the serialized engine data
 //! \param size: Size of the serialized engine data
-//! \param companionSoPath: Path to the engine's companion library, or nullptr when it needs none
 //! \param recorder: Reference to the safe recorder
 //! \param useManaged: Flag indicating whether to use managed memory
 //! \param allocator: Pointer to the safe memory allocator
@@ -144,8 +144,7 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings);
 //! \return Error code indicating the success or failure of the operation
 //!
 nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    nvinfer2::safe::AsciiChar const* companionSoPath, ISafeRecorder& recorder, bool useManaged,
-    ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings);
+    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings);
 
 //!
 //! \brief Destroy a safe TRT graph and release resources
@@ -181,17 +180,15 @@ struct InferenceEnvironmentBase
     InferenceEnvironmentBase(InferenceEnvironmentBase const& other) = delete;
     InferenceEnvironmentBase(InferenceEnvironmentBase&& other) = delete;
     InferenceEnvironmentBase(BuildEnvironment& bEnv)
-        : engine(std::move(bEnv.engine))
-        , companionSoPath(bEnv.companionSoPath)
+        : greenContexts(std::move(bEnv.greenContexts))
+        , engine(std::move(bEnv.engine))
         , safe(bEnv.engine.isSafe())
         , cmdline(bEnv.cmdline)
     {
     }
 
+    GreenContextManager greenContexts;
     LazilyDeserializedEngine engine;
-
-    //! Path to the engine's companion library, std::nullopt when the engine needs none.
-    std::optional<std::string> companionSoPath;
     std::unique_ptr<Profiler> profiler;
     std::vector<TrtDeviceBuffer>
         deviceMemory; //< Device memory used for inference when the allocation strategy is not static.
@@ -567,8 +564,7 @@ public:
 struct TaskInferenceEnvironment
 {
     TaskInferenceEnvironment(std::string engineFile, InferenceOptions const& inference,
-        ReportingOptions const& reporting, int32_t deviceId = 0,
-        int32_t DLACore = -1, int32_t bs = batchNotProvided);
+        ReportingOptions const& reporting, int32_t deviceId = 0, int32_t DLACore = -1, int32_t bs = batchNotProvided);
     InferenceOptions iOptions{};
     ReportingOptions rOptions{};
     int32_t device{defaultDevice};

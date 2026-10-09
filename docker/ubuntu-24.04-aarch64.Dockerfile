@@ -20,7 +20,7 @@ ARG CUDA_VERSION=13.4.1
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION=11.3.0.99
+ENV TRT_VERSION=11.4.0.106
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-# Target which holds all enabled samples, including trtexec.
+# Target which holds all enabled samples.
 # If TRT_BUILD_SAMPLES is disabled, this target may not build many things.
 add_custom_target(tensorrt_samples)
 
@@ -27,18 +27,18 @@ macro(add_sample)
 endmacro()
 
 if(TRT_SAFETY_INFERENCE_ONLY)
-    add_sample(trtSafeExec)
     add_sample(sampleSafeMNIST)
     add_sample(sampleSafePluginV3)
+    add_sample(trtSafeExec)
 else()
-    # Require the ONNX parser to build samples or trtexec.
-    if((${TRT_BUILD_SAMPLES} OR ${TRT_BUILD_TRTEXEC}) AND NOT TARGET nvonnxparser)
-        message(FATAL_ERROR "Building trtexec (TRT_BUILD_TRTEXEC=${TRT_BUILD_TRTEXEC}) and/or the other samples (TRT_BUILD_SAMPLES=${TRT_BUILD_SAMPLES}) requires the nvonnxparser target")
+    # Require the ONNX parser to build samples.
+    if(${TRT_BUILD_SAMPLES} AND NOT TARGET nvonnxparser)
+        message(FATAL_ERROR "Building the samples (TRT_BUILD_SAMPLES=${TRT_BUILD_SAMPLES}) requires the nvonnxparser target")
     endif()
 
     # Setup aliases for ease of swapping between static/dynamic TRT.
     if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
-        add_library(TRT_SAMPLES::tensorrt INTERFACE IMPORTED GLOBAL)
+        add_library(TRT_SAMPLES::tensorrt INTERFACE IMPORTED)
         target_link_libraries(TRT_SAMPLES::tensorrt INTERFACE tensorrt_static)
 
         add_library(TRT_SAMPLES::onnxparser INTERFACE IMPORTED)
@@ -50,7 +50,7 @@ else()
         set_property(GLOBAL PROPERTY JOB_POOLS three_jobs=3)
         set(CMAKE_JOB_POOL_LINK three_jobs)
     else()
-        add_library(TRT_SAMPLES::tensorrt INTERFACE IMPORTED GLOBAL)
+        add_library(TRT_SAMPLES::tensorrt INTERFACE IMPORTED)
         target_link_libraries(TRT_SAMPLES::tensorrt INTERFACE tensorrt)
 
         add_library(TRT_SAMPLES::onnxparser INTERFACE IMPORTED)
@@ -59,16 +59,9 @@ else()
 
     # OSS samples need the ONNX parser path to be included when each sample is built
     add_subdirectory(common)
-
-    if(${TRT_BUILD_TRTEXEC})
-        add_sample(trtexec)
-    endif()
+    add_subdirectory(trtexecCommon)
 
     if(${TRT_BUILD_SAMPLES})
-        if (NOT ${TRT_BUILD_TRTEXEC})
-            message(WARNING "TRT_BUILD_SAMPLES is enabled but TRT_BUILD_TRTEXEC is not enabled. This may be unintended.")
-        endif()
-
         # Public (OSS) Samples
         add_sample(
             sampleEditableTimingCache
@@ -76,6 +69,7 @@ else()
             sampleNamedDimensions
             sampleOnnxMNIST
             sampleProgressMonitor
+            trtexec
         )
 
         if (NOT ${TRT_PRODUCT_IS_RTX})
@@ -108,14 +102,9 @@ else()
         endif()
     endif() # TRT_BUILD_SAMPLES
 
-    if(${TRT_BUILD_ENABLE_UNIFIED_BUILDER} AND ${TRT_BUILD_TRTEXEC})
-        add_sample(trtSafeExec)
+    if((${TRT_BUILD_ENABLE_UNIFIED_BUILDER} AND ${TRT_BUILD_SAMPLES}) OR BUILD_SAFE_SAMPLES)
         add_sample(sampleSafeMNIST)
         add_sample(sampleSafePluginV3)
-    elseif(BUILD_SAFE_SAMPLES)
-        add_sample(sampleSafeMNIST)
-        add_sample(sampleSafePluginV3)
-        add_sample(trtSafeExec)
     endif()
 endif()
 
@@ -126,3 +115,4 @@ endif()
 foreach(FOLDER IN LISTS trtSampleFolders)
     add_subdirectory(${FOLDER})
 endforeach()
+

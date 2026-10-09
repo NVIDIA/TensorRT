@@ -53,10 +53,6 @@ option(BUILD_PYTHON "Build TensorRT python bindings" OFF)
 option(TRT_SAFETY_INFERENCE_ONLY "Build only the safety inference components (no safety builders)" OFF)
 option(TRT_BUILD_TESTING "Build gtests for TensorRT components" OFF)
 option(TRT_BUILD_ALLOW_CCACHE "Allow ccache to be used for builds" ON)
-set(TRT_BUILD_PRODUCT "" CACHE STRING
-    "TensorRT product package to import: enterprise, automotive, or safe_inference. Empty preserves legacy selection.")
-set_property(CACHE TRT_BUILD_PRODUCT PROPERTY STRINGS
-    "" enterprise automotive safe_inference)
 
 if(TRT_SAFETY_INFERENCE_ONLY AND NOT BUILD_SAFE_SAMPLES)
     message(STATUS "TRT_SAFETY_INFERENCE_ONLY is ON, enabling BUILD_SAFE_SAMPLES")
@@ -106,45 +102,12 @@ message(STATUS "Generating CUDA code for SMs: ${CMAKE_CUDA_ARCHITECTURES}")
 # OSS vendors third-party headers under third_party/.
 set(TRT_EXTERNALS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 
-set(_TRT_OSS_SUPPORTED_PRODUCTS enterprise automotive safe_inference)
-if(NOT TRT_BUILD_PRODUCT STREQUAL "")
-    if(NOT "${TRT_BUILD_PRODUCT}" IN_LIST _TRT_OSS_SUPPORTED_PRODUCTS)
-        message(FATAL_ERROR
-            "Invalid TRT_BUILD_PRODUCT='${TRT_BUILD_PRODUCT}'. Expected one of: "
-            "enterprise, automotive, safe_inference.")
+if(BUILD_SAFE_SAMPLES)
+    if(TRT_SAFETY_INFERENCE_ONLY)
+        find_package(TensorRT-SafeInference CONFIG REQUIRED)
+    else()
+        find_package(TensorRT-Automotive CONFIG REQUIRED)
     endif()
-    set(_TRT_OSS_SELECTED_PRODUCT "${TRT_BUILD_PRODUCT}")
-elseif(TRT_SAFETY_INFERENCE_ONLY)
-    set(_TRT_OSS_SELECTED_PRODUCT safe_inference)
-elseif(BUILD_SAFE_SAMPLES)
-    set(_TRT_OSS_SELECTED_PRODUCT automotive)
-else()
-    set(_TRT_OSS_SELECTED_PRODUCT enterprise)
-endif()
-
-if(TRT_SAFETY_INFERENCE_ONLY
-    AND NOT _TRT_OSS_SELECTED_PRODUCT STREQUAL "safe_inference")
-    message(FATAL_ERROR
-        "TRT_SAFETY_INFERENCE_ONLY=ON requires "
-        "TRT_BUILD_PRODUCT=safe_inference.")
-endif()
-if(_TRT_OSS_SELECTED_PRODUCT STREQUAL "safe_inference"
-    AND NOT TRT_SAFETY_INFERENCE_ONLY)
-    message(FATAL_ERROR
-        "TRT_BUILD_PRODUCT=safe_inference requires "
-        "TRT_SAFETY_INFERENCE_ONLY=ON.")
-endif()
-if(BUILD_SAFE_SAMPLES AND _TRT_OSS_SELECTED_PRODUCT STREQUAL "enterprise")
-    message(FATAL_ERROR
-        "BUILD_SAFE_SAMPLES=ON is not supported with "
-        "TRT_BUILD_PRODUCT=enterprise.")
-endif()
-
-message(STATUS "Importing TensorRT product: ${_TRT_OSS_SELECTED_PRODUCT}")
-if(_TRT_OSS_SELECTED_PRODUCT STREQUAL "safe_inference")
-    find_package(TensorRT-SafeInference CONFIG REQUIRED)
-elseif(_TRT_OSS_SELECTED_PRODUCT STREQUAL "automotive")
-    find_package(TensorRT-Automotive CONFIG REQUIRED)
 else()
     find_package(TensorRT-Enterprise CONFIG REQUIRED)
 endif()
@@ -206,18 +169,6 @@ if(TRT_SAFETY_INFERENCE_ONLY)
         CUDA::cudart
         Threads::Threads
     )
-
-    # CUDA compiler identification receives these PDK dependencies through the
-    # QNX Safety toolchain. Add them here only for CXX-linked sample targets;
-    # CUDA-linked targets already inherit the toolchain flags.
-    if(CMAKE_SYSTEM_NAME STREQUAL "QNX" AND TRT_QNX_SAFE_PDK_LIBRARIES)
-        foreach(TRT_QNX_SAFE_PDK_LIBRARY IN LISTS TRT_QNX_SAFE_PDK_LIBRARIES)
-            target_link_libraries(trt_global_definitions INTERFACE
-                "$<$<LINK_LANGUAGE:CXX>:${TRT_QNX_SAFE_PDK_LIBRARY}>")
-        endforeach()
-        target_link_options(trt_global_definitions INTERFACE
-            "$<$<LINK_LANGUAGE:CXX>:-lslog2>")
-    endif()
 
     if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "QNX")
         target_link_libraries(trt_global_definitions INTERFACE dl rt)
@@ -314,7 +265,6 @@ if(BUILD_SAMPLES OR BUILD_SAFE_SAMPLES)
 
     # Map OSS option names to the internal names used by samples/CMakeLists.txt.
     set(TRT_BUILD_SAMPLES ${BUILD_SAMPLES})
-    set(TRT_BUILD_TRTEXEC ${BUILD_SAMPLES})
     # nvonnxparser is always available, either built from source or imported
     # from the TensorRT package.
     set(TRT_BUILD_ONNX_PARSER ON)
@@ -325,19 +275,10 @@ if(BUILD_SAMPLES OR BUILD_SAFE_SAMPLES)
     option(TRT_BUILD_ENABLE_DLA "Build TensorRT with DLA features enabled." OFF)
     option(TRT_BUILD_ENABLE_UNIFIED_BUILDER "Build TensorRT with unified builder (safety) features enabled." ${BUILD_SAFE_SAMPLES})
 
-    # The companion library a safety engine pairs with only exists in a TensorRT built with the unified
-    # builder, so the sample code that saves and loads one compiles only there. TensorRT forwards the same
-    # flag under the same name when it builds these samples itself.
-    target_compile_definitions(trt_global_definitions INTERFACE
-        ENABLE_UNIFIED_BUILDER=$<BOOL:${TRT_BUILD_ENABLE_UNIFIED_BUILDER}>
-    )
-
     option(TRT_BUILD_ENABLE_MULTIDEVICE "Build TensorRT with multi-device support." OFF)
     set(TRT_BUILD_SAMPLES_LINK_STATIC_TRT OFF CACHE INTERNAL "")
 
-    if(NOT (TRT_SAFETY_INFERENCE_ONLY AND CMAKE_SYSTEM_NAME STREQUAL "QNX"))
-        add_subdirectory(shared)
-    endif()
+    add_subdirectory(shared)
 
     include(InstallUtils)
 

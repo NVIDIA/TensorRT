@@ -29,7 +29,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
-#include <optional>
+#include <memory>
 #include <vector>
 
 namespace sample
@@ -37,8 +37,8 @@ namespace sample
 
 //! \brief Callback invoked after standard builder configuration, before engine build.
 //! Custom tools can use this to apply additional builder configuration on top of trtexec's.
-using PostConfigCallback = std::function<void(
-    nvinfer1::IBuilder&, nvinfer1::IBuilderConfig&, BuildOptions const&, SystemOptions const&)>;
+using PostConfigCallback
+    = std::function<void(nvinfer1::IBuilder&, nvinfer1::IBuilderConfig&, BuildOptions const&, SystemOptions const&)>;
 
 #if TRT_BUILD_ONNX_PARSER
 struct Parser
@@ -301,6 +301,47 @@ private:
     //!@}
 };
 
+//! \brief Owns CUDA green contexts and their streams for engine building and inference.
+class GreenContextManager
+{
+public:
+    //! Construct an empty CUDA green context manager.
+    GreenContextManager();
+
+    //! Destroy all owned streams and CUDA green contexts.
+    ~GreenContextManager();
+
+    GreenContextManager(GreenContextManager const&) = delete;
+    GreenContextManager& operator=(GreenContextManager const&) = delete;
+
+    //! Move the CUDA green context resources owned by \p other.
+    GreenContextManager(GreenContextManager&& other) noexcept;
+
+    //! \brief Creates the CUDA green contexts requested by \p build on \p device.
+    //!
+    //! \return True on success, including when no CUDA green context was requested.
+    bool initialize(BuildOptions const& build, int32_t device, std::ostream& err);
+
+    //! \return The builder-level CUDA green context stream, or nullptr when none was requested.
+    [[nodiscard]] cudaStream_t globalBuildStream() const noexcept;
+
+    //! \return The CUDA green context stream explicitly assigned to \p profileIndex, or nullptr.
+    [[nodiscard]] cudaStream_t profileBuildStream(size_t profileIndex) const noexcept;
+
+    //! \brief Creates \p streamCount inference streams in the effective CUDA green context for \p profileIndex.
+    //!
+    //! A profile-specific CUDA green context takes precedence over the global context.
+    //! \return True on success, including when the effective profile has no CUDA green context.
+    bool prepareInferenceStreams(size_t profileIndex, int32_t streamCount, std::ostream& err);
+
+    //! \return Inference stream \p streamIndex, or nullptr when ordinary CUDA streams should be used.
+    [[nodiscard]] cudaStream_t inferenceStream(size_t streamIndex) const noexcept;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> mImpl;
+};
+
 struct BuildEnvironment
 {
     BuildEnvironment() = delete;
@@ -311,12 +352,12 @@ struct BuildEnvironment
         std::string const& cmdline = "")
         : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
         , checkerBlob(false, false, -1, "", tempfileControls, "")
-#if ENABLE_UNIFIED_BUILDER
-        , companionSo(false, false, -1, "", tempfileControls, "")
-#endif // ENABLE_UNIFIED_BUILDER
         , cmdline(cmdline)
     {
     }
+
+    //! CUDA green contexts and streams used by the builder and runtime.
+    GreenContextManager greenContexts;
 
     //! \name Owned TensorRT objects
     //! Per TensorRT object lifetime requirements as outlined in the developer guide,
@@ -347,16 +388,6 @@ struct BuildEnvironment
     //! the reference checker replays.
     LazilyDeserializedEngine checkerBlob;
 
-#if ENABLE_UNIFIED_BUILDER
-    //! The companion library holding the safe engine's generated host code. Loading the engine needs it, so
-    //! it is saved beside the engine and handed back to the runtime at load.
-    LazilyDeserializedEngine companionSo;
-#endif // ENABLE_UNIFIED_BUILDER
-
-    //! Path to the engine's companion library on disk, std::nullopt when the engine needs none. The
-    //! runtime loads the library by path, so it has to exist as a file before inference.
-    std::optional<std::string> companionSoPath;
-
     //! The command line string.
     std::string cmdline;
     //!@}
@@ -386,15 +417,15 @@ bool saveEngine(nvinfer1::ICudaEngine const& engine, std::string const& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-bool getEngineBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook = nullptr);
+bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env,
+    std::ostream& err, PostConfigCallback const& postConfigHook = nullptr);
 
 //!
 //! \brief Create a serialized network
 //!
 //! \return Pointer to a host memory for a serialized network
 //!
-nvinfer1::IHostMemory* networkToSerialized(const BuildOptions& build, const SystemOptions& sys,
+nvinfer1::IHostMemory* networkToSerialized(BuildOptions const& build, SystemOptions const& sys,
     nvinfer1::IBuilder& builder, nvinfer1::INetworkDefinition& network, std::ostream& err);
 
 //!
@@ -403,7 +434,7 @@ nvinfer1::IHostMemory* networkToSerialized(const BuildOptions& build, const Syst
 //! \return Pointer to a host memory for a serialized network
 //!
 nvinfer1::IHostMemory* modelToSerialized(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+    ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys, std::ostream& err);
 
 //!
 //! \brief Serialize network and save it into a file
@@ -411,7 +442,7 @@ nvinfer1::IHostMemory* modelToSerialized(
 //! \return boolean Return true if the network was successfully serialized and saved
 //!
 bool serializeAndSave(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+    ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys, std::ostream& err);
 
 #if TRT_BUILD_ONNX_PARSER
 //!
@@ -432,13 +463,16 @@ bool timeRefit(nvinfer1::INetworkDefinition const& network, nvinfer1::ICudaEngin
 //! \brief Check if safe runtime is loaded.
 [[nodiscard]] bool hasSafeRuntime();
 
+//! \brief Run a consistency check on a serialized safe engine.
 //!
-//! \brief Run consistency check on serialized engine.
+//! \param serializedEngine Serialized engine to validate. Must not be null.
+//! \param engineSize Size of \p serializedEngine in bytes. Must be positive.
+//! \param pluginBuildLibs Plugin libraries the engine was built against, loaded by the checker.
 //!
-[[nodiscard]] bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize,
-    char const* const* pluginBuildLibs, int64_t const nbPluginBuildLibs);
+//! \return True if the engine passes the consistency check, false if it fails or if no checker is available.
+[[nodiscard]] bool checkSafeEngine(
+    void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibs);
 
-//!
 //! \brief Run the per-kernel reference check on a serialized safe engine.
 //!
 //! Confirms that the per-kernel metadata a reference check is derived from describes this engine, and
@@ -450,7 +484,8 @@ bool timeRefit(nvinfer1::INetworkDefinition const& network, nvinfer1::ICudaEngin
 //!        empty: an engine of nothing but static library kernels needs none, and the checker reports the
 //!        omission for any engine that does.
 //! \param remoteConfig The remote target connection token (from --remoteConfig).
-//!
+//! \return true when every kernel the checker examined matched its reference; false when any kernel
+//!         mismatched, or when the check could not be run at all.
 [[nodiscard]] bool referenceCheckEngine(void const* serializedEngine, int64_t const engineSize,
     EngineBlob const& checkerBlob, std::string const& remoteConfig);
 
@@ -467,7 +502,6 @@ bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& 
 bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err, SystemOptions const& sys,
     bool const enableConsistency);
 
-//!
 //! \brief Load the checker blob that carries the reference-check metadata into \p env.
 //!
 //! Reads the path given by --loadCheckerBlob. Omitting the flag is not an error: only the checker can
@@ -477,7 +511,6 @@ bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std:
 //! \param env   The environment to load into.
 //! \param err   Stream for diagnostics.
 //! \return false if --loadCheckerBlob names a file that could not be read.
-//!
 [[nodiscard]] bool loadCheckerBlobToBuildEnv(BuildOptions const& build, BuildEnvironment& env, std::ostream& err);
 } // namespace sample
 

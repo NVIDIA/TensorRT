@@ -58,13 +58,24 @@ class TrtCudaStream
 {
 public:
     TrtCudaStream()
+        : TrtCudaStream(nullptr)
     {
-        CHECK(cudaStreamCreate(&mStream));
     }
 
-    TrtCudaStream(const TrtCudaStream&) = delete;
+    //! \brief Uses \p stream without taking ownership, or creates an owned stream when it is nullptr.
+    explicit TrtCudaStream(cudaStream_t stream)
+        : mStream(stream)
+        , mOwnsStream(stream == nullptr)
+    {
+        if (mOwnsStream)
+        {
+            CHECK(cudaStreamCreate(&mStream));
+        }
+    }
 
-    TrtCudaStream& operator=(const TrtCudaStream&) = delete;
+    TrtCudaStream(TrtCudaStream const&) = delete;
+
+    TrtCudaStream& operator=(TrtCudaStream const&) = delete;
 
     TrtCudaStream(TrtCudaStream&&) = delete;
 
@@ -72,7 +83,10 @@ public:
 
     ~TrtCudaStream()
     {
-        CHECK(cudaStreamDestroy(mStream));
+        if (mOwnsStream)
+        {
+            CHECK(cudaStreamDestroy(mStream));
+        }
     }
 
     cudaStream_t get() const
@@ -94,6 +108,7 @@ public:
 
 private:
     cudaStream_t mStream{};
+    bool mOwnsStream;
 };
 
 //!
@@ -150,7 +165,7 @@ public:
     }
 
     // Returns time elapsed time in milliseconds
-    float operator-(const TrtCudaEvent& e) const
+    float operator-(TrtCudaEvent const& e) const
     {
         // Synchronize both events to ensure they have completed before calculating elapsed time
         synchronize();
@@ -195,9 +210,9 @@ class TrtCudaGraph
 public:
     explicit TrtCudaGraph() = default;
 
-    TrtCudaGraph(const TrtCudaGraph&) = delete;
+    TrtCudaGraph(TrtCudaGraph const&) = delete;
 
-    TrtCudaGraph& operator=(const TrtCudaGraph&) = delete;
+    TrtCudaGraph& operator=(TrtCudaGraph const&) = delete;
 
     TrtCudaGraph(TrtCudaGraph&&) = delete;
 
@@ -235,7 +250,7 @@ public:
         // (2) TRT reports a failure.
         // In case (1), the returning mGraph should be nullptr.
         // In case (2), the returning mGraph is not nullptr, but it should not be used.
-        const auto ret = cudaStreamEndCapture(stream.get(), &mGraph);
+        auto const ret = cudaStreamEndCapture(stream.get(), &mGraph);
         if (ret == cudaErrorStreamCaptureInvalidated)
         {
             assert(mGraph == nullptr);
@@ -267,9 +282,9 @@ class TrtCudaBuffer
 public:
     TrtCudaBuffer() = default;
 
-    TrtCudaBuffer(const TrtCudaBuffer&) = delete;
+    TrtCudaBuffer(TrtCudaBuffer const&) = delete;
 
-    TrtCudaBuffer& operator=(const TrtCudaBuffer&) = delete;
+    TrtCudaBuffer& operator=(TrtCudaBuffer const&) = delete;
 
     TrtCudaBuffer(TrtCudaBuffer&& rhs)
     {
@@ -580,8 +595,7 @@ public:
     void* reallocateOutput(
         char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
 #else
-    void* reallocateOutput(
-        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept
+    void* reallocateOutput(char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept
 #endif // !TRT_WINML
     {
         // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr

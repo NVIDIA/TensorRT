@@ -19,7 +19,6 @@
 #define TENSORRT_LOGGING_H
 
 #include "NvInferRuntime.h"
-#include "sampleOptions.h"
 #include <cassert>
 #include <ctime>
 #include <iomanip>
@@ -34,6 +33,26 @@ namespace sample
 {
 
 using Severity = nvinfer1::ILogger::Severity;
+
+inline std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
+{
+    switch (dtype)
+    {
+    case nvinfer1::DataType::kFLOAT: os << "fp32"; break;
+    case nvinfer1::DataType::kHALF: os << "fp16"; break;
+    case nvinfer1::DataType::kBF16: os << "bf16"; break;
+    case nvinfer1::DataType::kINT8: os << "int8"; break;
+    case nvinfer1::DataType::kINT32: os << "int32"; break;
+    case nvinfer1::DataType::kBOOL: os << "bool"; break;
+    case nvinfer1::DataType::kUINT8: os << "uint8"; break;
+    case nvinfer1::DataType::kFP8: os << "fp8"; break;
+    case nvinfer1::DataType::kINT64: os << "int64"; break;
+    case nvinfer1::DataType::kINT4: os << "int4"; break;
+    case nvinfer1::DataType::kFP4: os << "fp4"; break;
+    case nvinfer1::DataType::kE8M0: os << "e8m0"; break;
+    }
+    return os;
+}
 
 class LogStreamConsumerBuffer : public std::stringbuf
 {
@@ -301,10 +320,7 @@ public:
         kRUNNING,    //!< The test is running
         kPASSED,     //!< The test passed
         kFAILED,     //!< The test failed
-        kWAIVED,     //!< The test was waived
-        kTASK_BEGIN, //!< A sub-routine task has begun
-        kTASK_END,   //!< A sub-routine task completed successfully
-        kTASK_ABORT  //!< A sub-routine task was aborted (exception or validation failure)
+        kWAIVED      //!< The test was waived
     };
 
     //!
@@ -351,11 +367,6 @@ public:
     {
     public:
         TestAtom(TestAtom&&) = default;
-
-        std::string getCmdline() const
-        {
-            return mCmdline;
-        }
 
     private:
         friend class Logger;
@@ -449,76 +460,6 @@ public:
         return EXIT_FAILURE;
     }
 
-    static int32_t reportWaive(TestAtom const& testAtom)
-    {
-        reportTestEnd(testAtom, TestResult::kWAIVED);
-        return EXIT_SUCCESS;
-    }
-
-    //!
-    //! \brief Report that a sub-routine task has begun.
-    //!
-    //! Used by the tuning loop to mark the start of each iteration so external
-    //! tooling can detect iteration boundaries in the trtexec log stream.
-    //!
-    static void reportTaskBegin(TestAtom const& testAtom)
-    {
-        reportTestResult(testAtom, TestResult::kTASK_BEGIN);
-    }
-
-    //!
-    //! \brief Report that a sub-routine task has begun with iteration index and build route.
-    //! Prints a blank line before the banner for readability.
-    //!
-    //! Output example:
-    //!   &&&& TASK_BEGIN [iter=0] BuildRoute = '-match_ragged_mha=on -copy_ppg=off'
-    //!
-    static void reportTaskBegin(TestAtom const& /*testAtom*/, std::string const& index, std::string const& buildRoute)
-    {
-        reportTaskWithBuildRoute(
-            TestResult::kTASK_BEGIN, index, buildRoute, /*blankBefore=*/true, /*blankAfter=*/false);
-    }
-
-    //!
-    //! \brief Report that a sub-routine task completed successfully.
-    //!
-    static void reportTaskEnd(TestAtom const& testAtom)
-    {
-        reportTestResult(testAtom, TestResult::kTASK_END);
-    }
-
-    //!
-    //! \brief Report that a sub-routine task completed successfully, with iteration info.
-    //! Prints a blank line after the banner for readability.
-    //!
-    static void reportTaskEnd(TestAtom const& /*testAtom*/, std::string const& index, std::string const& buildRoute)
-    {
-        reportTaskWithBuildRoute(TestResult::kTASK_END, index, buildRoute, /*blankBefore=*/false, /*blankAfter=*/true);
-    }
-
-    //!
-    //! \brief Report that a sub-routine task was aborted (exception or validation failure).
-    //!
-    static void reportTaskAbort(TestAtom const& testAtom)
-    {
-        reportTestResult(testAtom, TestResult::kTASK_ABORT);
-    }
-
-    //!
-    //! \brief Report that a sub-routine task was aborted, with iteration info.
-    //! Prints a blank line after the banner for readability.
-    //!
-    static void reportTaskAbort(TestAtom const& /*testAtom*/, std::string const& index, std::string const& buildRoute)
-    {
-        reportTaskWithBuildRoute(
-            TestResult::kTASK_ABORT, index, buildRoute, /*blankBefore=*/false, /*blankAfter=*/true);
-    }
-
-    static int32_t reportTest(TestAtom const& testAtom, bool pass)
-    {
-        return pass ? reportPass(testAtom) : reportFail(testAtom);
-    }
-
     Severity getReportableSeverity() const
     {
         return mReportableSeverity;
@@ -552,32 +493,7 @@ private:
         case TestResult::kPASSED: return "PASSED";
         case TestResult::kFAILED: return "FAILED";
         case TestResult::kWAIVED: return "WAIVED";
-        case TestResult::kTASK_BEGIN: return "TASK_BEGIN";
-        case TestResult::kTASK_END: return "TASK_END";
-        case TestResult::kTASK_ABORT: return "TASK_ABORT";
         default: assert(0); return "";
-        }
-    }
-
-    //!
-    //! \brief Print a TASK_BEGIN/END/ABORT banner with iteration index and build route.
-    //!
-    //! Output format:
-    //!   &&&& TASK_BEGIN [iter=0] BuildRoute = '-match_ragged_mha=on -copy_ppg=off'
-    //!
-    static void reportTaskWithBuildRoute(
-        TestResult result, std::string const& index, std::string const& buildRoute, bool blankBefore, bool blankAfter)
-    {
-        auto& os = severityOstream(Severity::kINFO);
-        if (blankBefore)
-        {
-            os << std::endl;
-        }
-        os << "&&&& " << testResultString(result) << " [iter=" << index << "] BuildRoute = '" << buildRoute << "'"
-           << std::endl;
-        if (blankAfter)
-        {
-            os << std::endl;
         }
     }
 

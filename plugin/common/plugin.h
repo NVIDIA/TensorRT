@@ -121,6 +121,21 @@ OutType read(BufferType const*& buffer)
     return val;
 }
 
+//! Read a value of type OutType from the front of \p buffer and advance \p buffer past it. Unlike the
+//! pointer overload, this validates that \p buffer holds enough bytes and throws PluginError if it does
+//! not, so callers need no separate remaining-length check before each read.
+//! \return The value read from the front of \p buffer.
+template <typename OutType>
+OutType read(std::span<std::byte const>& buffer)
+{
+    static_assert(std::is_trivially_copyable_v<OutType>, "read<> requires a trivially copyable type.");
+    PLUGIN_VALIDATE(buffer.size() >= sizeof(OutType));
+    OutType val{};
+    std::memcpy(&val, buffer.data(), sizeof(OutType));
+    buffer = buffer.subspan(sizeof(OutType));
+    return val;
+}
+
 inline int32_t getTrtSmVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
     return majorVersion * 10 + minorVersion;
@@ -151,7 +166,9 @@ inline int32_t getSmVersion()
     int32_t device{-1};
     PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
     auto const cc = DeviceComputeCapability::forDevice(device);
-    return getTrtSmVersionDec(cc.major, cc.minor);
+    auto const smVersion = getTrtSmVersionDec(cc.major, cc.minor);
+    // SM88 reuses SM87 plugin cubins on T238.
+    return smVersion == 88 ? 87 : smVersion;
 }
 
 // Check that all required field names are present in the PluginFieldCollection.
