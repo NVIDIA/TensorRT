@@ -127,6 +127,28 @@ class TestFindCudaLibDirs:
         dirs = _find_cuda_lib_dirs()
         assert os.path.join(pkg_dir, "bin") in dirs
 
+    @pytest.mark.parametrize(
+        "platform_name,lib_subdir",
+        [("linux", "lib"), ("win32", os.path.join("bin", "x86_64"))],
+    )
+    def test_cuda13_runtime_wheel_dirs_included(
+        self, monkeypatch, tmp_path, platform_name, lib_subdir
+    ):
+        # CUDA 13+ runtime wheels install under `nvidia/cu<major>` instead of `nvidia/cuda_runtime`;
+        # other `nvidia/cu*` packages (e.g. cuBLAS) must not be picked up.
+        (tmp_path / "nvidia" / "cu13").mkdir(parents=True)
+        (tmp_path / "nvidia" / "cublas").mkdir()
+        monkeypatch.setattr("sys.platform", platform_name)
+        monkeypatch.setattr("sys.path", [str(tmp_path)])
+        monkeypatch.setattr("platform.machine", lambda: "AMD64")
+        monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(os, "environ", {})
+
+        dirs = _find_cuda_lib_dirs()
+
+        assert os.path.join(str(tmp_path), "nvidia", "cu13", lib_subdir) in dirs
+        assert not any("cublas" in d for d in dirs)
+
     def test_windows_deduplicates_preserving_order(self, monkeypatch):
         # CUDA_PATH and a versioned variable can point at the same root; the candidate list must
         # not contain duplicates, and first-seen order is preserved.
