@@ -1435,20 +1435,27 @@ class CosineSimilarityCompareFunc(_SingleMetricCompareFunc):
         array1_flat = util.array.ravel(comp_util.cast_up(out0))
         array2_flat = util.array.ravel(comp_util.cast_up(out1))
 
-        # Calculate dot product
-        dot_product = util.array.sum(util.array.multiply(array1_flat, array2_flat))
+        # Scale each vector before products to avoid overflow and underflow.
+        def normalize_scale(array):
+            if util.array.dtype(array).is_integral:
+                array = util.array.cast(array, DataType.FLOAT64)
+            scale = (
+                max(abs(util.array.min(array)), abs(util.array.max(array)))
+                if util.array.size(array)
+                else 0
+            )
+            return (array / scale if scale != 0 else array), scale
 
-        # Calculate magnitudes
+        array1_flat, scale1 = normalize_scale(array1_flat)
+        array2_flat, scale2 = normalize_scale(array2_flat)
+        if scale1 == 0 and scale2 == 0:
+            return 1.0
+        elif scale1 == 0 or scale2 == 0:
+            return 0.0
+
+        dot_product = util.array.sum(util.array.multiply(array1_flat, array2_flat))
         magnitude1 = util.array.sqrt(util.array.sum(util.array.power(array1_flat, 2)))
         magnitude2 = util.array.sqrt(util.array.sum(util.array.power(array2_flat, 2)))
-
-        # Avoid division by zero
-        if magnitude1 == 0 and magnitude2 == 0:
-            return (
-                1.0  # If both vectors are zero, they are identical (similarity = 1.0)
-            )
-        elif magnitude1 == 0 or magnitude2 == 0:
-            return 0.0  # If only one vector is zero, they are orthogonal (similarity = 0.0)
 
         # Cosine similarity is dot_product / (magnitude1 * magnitude2)
         cosine_similarity = float(dot_product / (magnitude1 * magnitude2))
