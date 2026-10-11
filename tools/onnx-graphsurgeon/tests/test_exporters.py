@@ -156,6 +156,111 @@ class TestOnnxExporter(object):
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FN
         assert tuple(onnx_tensor.dims) == shape
 
+    @pytest.mark.parametrize(
+        "dtype, expected_onnx_type",
+        [
+            (ml_dtypes.float8_e4m3fn, onnx.TensorProto.FLOAT8E4M3FN),
+            (ml_dtypes.float8_e4m3fnuz, onnx.TensorProto.FLOAT8E4M3FNUZ),
+            (ml_dtypes.float8_e5m2, onnx.TensorProto.FLOAT8E5M2),
+            (ml_dtypes.float8_e5m2fnuz, onnx.TensorProto.FLOAT8E5M2FNUZ),
+        ],
+    )
+    def test_should_export_constant_tensor_with_each_ml_float8_dtype(
+        self, dtype, expected_onnx_type
+    ) -> None:
+        """Test that every `ml_dtypes` float8 variant maps to its own ONNX data type.
+
+        `float8_e4m3fn` and `float8_e4m3fnuz` are distinct ONNX types that share
+        the same byte width, so mapping one to the other silently mislabels the
+        tensor while leaving `raw_data` byte-identical. This asserts the mapping
+        for each variant instead of relying on the bytes alone.
+        """
+        # Precondition.
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(dtype)
+
+        tensor = Constant(name=name, values=values)
+
+        # Under test.
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        # Postcondition.
+        assert onnx_tensor.name == name
+        assert onnx_tensor.data_type == expected_onnx_type
+        assert tuple(onnx_tensor.dims) == shape
+        # The bytes are passed through unchanged regardless of the label.
+        assert bytes(onnx_tensor.raw_data) == values.tobytes()
+
+    def test_should_distinguish_e4m3fn_from_e4m3fnuz(self) -> None:
+        """`float8_e4m3fn` and `float8_e4m3fnuz` must not collapse to the same ONNX type.
+
+        Regression test: the lookup table mapped `float8_e4m3fnuz` to
+        `FLOAT8E4M3FN`, so the two were indistinguishable on export.
+        """
+        shape = (3, 224, 224)
+        values_fn = np.random.random_sample(size=shape).astype(ml_dtypes.float8_e4m3fn)
+        values_fnuz = np.random.random_sample(size=shape).astype(
+            ml_dtypes.float8_e4m3fnuz
+        )
+
+        exported_fn = OnnxExporter.export_tensor_proto(
+            Constant(name="fn", values=values_fn)
+        )
+        exported_fnuz = OnnxExporter.export_tensor_proto(
+            Constant(name="fnuz", values=values_fnuz)
+        )
+
+        assert exported_fn.data_type == onnx.TensorProto.FLOAT8E4M3FN
+        assert exported_fnuz.data_type == onnx.TensorProto.FLOAT8E4M3FNUZ
+        assert exported_fn.data_type != exported_fnuz.data_type
+
+    def test_should_preserve_e4m3fnuz_across_import_and_export_round_trip(
+        self,
+    ) -> None:
+        """A FLOAT8E4M3FNUZ initializer must survive import -> export unchanged.
+
+        Import already handles `FLOAT8E4M3FNUZ` correctly, so a mismatch on
+        export makes the round trip asymmetric: reading `.values` and writing the
+        tensor back out relabels it as `FLOAT8E4M3FN`.
+        """
+        shape = (2, 4)
+        values = np.array(
+            [[0.0, 1.0, 2.0, -2.0], [0.5, 3.0, -3.0, 0.25]], dtype=np.float32
+        ).astype(ml_dtypes.float8_e4m3fnuz)
+
+        onnx_tensor = onnx.helper.make_tensor(
+            name="w",
+            data_type=onnx.TensorProto.FLOAT8E4M3FNUZ,
+            dims=list(shape),
+            vals=values.tobytes(),
+            raw=True,
+        )
+        model = onnx.helper.make_model(
+            onnx.helper.make_graph(
+                nodes=[onnx.helper.make_node("Identity", ["w"], ["y"])],
+                name="graph",
+                inputs=[],
+                outputs=[
+                    onnx.helper.make_tensor_value_info(
+                        "y", onnx.TensorProto.FLOAT8E4M3FNUZ, list(shape)
+                    )
+                ],
+                initializer=[onnx_tensor],
+            ),
+            opset_imports=[onnx.helper.make_opsetid("", 20)],
+        )
+
+        # Import, force LazyValues to load (as any weight-editing pass would),
+        # then export again.
+        graph = OnnxImporter.import_graph(model.graph)
+        tensor = graph.tensors()["w"]
+        _ = tensor.values
+
+        re_exported = OnnxExporter.export_tensor_proto(tensor)
+
+        assert re_exported.data_type == onnx.TensorProto.FLOAT8E4M3FNUZ
+
     def test_should_export_constant_tensor_with_ml_dtype_raise_error_when_onnx_dtype_not_supported(
         self,
     ) -> None:
