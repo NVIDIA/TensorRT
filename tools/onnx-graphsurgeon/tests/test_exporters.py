@@ -156,6 +156,27 @@ class TestOnnxExporter(object):
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FN
         assert tuple(onnx_tensor.dims) == shape
 
+    def test_should_export_constant_tensor_with_ml_dtype_fnuz(self) -> None:
+        """Test that `export_tensor_proto` exports a Constant with ml_dtypes.float8_e4m3fnuz values
+        using the correct ONNX data type."""
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(ml_dtypes.float8_e4m3fnuz)
+
+        tensor = Constant(name=name, values=values)
+
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        assert onnx_tensor.name == name
+        assert np.all(
+            self._bytes_to_np_array(
+                onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fnuz
+            )
+            == tensor.values
+        )
+        assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FNUZ
+        assert tuple(onnx_tensor.dims) == shape
+
     def test_should_export_constant_tensor_with_ml_dtype_raise_error_when_onnx_dtype_not_supported(
         self,
     ) -> None:
