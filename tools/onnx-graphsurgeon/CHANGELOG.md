@@ -9,6 +9,7 @@ Dates are in YYYY-MM-DD format.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+- Fixed a `RecursionError` in `Graph.toposort()` when sorting the functions of a graph that contains subgraphs (e.g. an `If` node). Functions are now also sorted correctly when they use other functions only from within a subgraph.
 
 ## v0.6.2 (2026-05-21)
 
