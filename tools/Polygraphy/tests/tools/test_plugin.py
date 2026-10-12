@@ -21,6 +21,10 @@ import yaml
 from tests.models.meta import ONNX_MODELS
 import onnx
 import tempfile
+import tensorrt as trt
+from polygraphy.tools.plugin.subtool.autotuner.optimization_strategy import (
+    OptimizationStrategy,
+)
 
 
 class TestMatch:
@@ -106,3 +110,16 @@ class TestMatch:
             assert model.graph.node[1].op_type == "CustomToyPlugin"
             assert model.graph.node[1].attribute[0].name == "ToyX"
             assert model.graph.node[1].attribute[0].i == 2
+
+
+class TestAutotune:
+    def test_create_network_from_onnx(self):
+        strategy = OptimizationStrategy()
+        strategy.set_components(
+            replacement_engine=None, builder=trt.Builder(trt.Logger(trt.Logger.WARNING))
+        )
+
+        network = strategy._create_network_from_onnx(ONNX_MODELS["identity"].path)
+
+        assert network.num_inputs == 1
+        assert network.num_outputs == 1

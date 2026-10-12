@@ -190,9 +190,7 @@ def build_tensorrt_engine_with_timing_cache(
 
         # Parse ONNX model
         G_LOGGER.verbose(f"Parsing ONNX model: {model_path}")
-        network = builder.create_network(
-            1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-        )
+        network = builder.create_network(0)
         parser = trt.OnnxParser(network, logger_obj)
 
         with open(model_path, "rb") as f:
