@@ -64,4 +64,6 @@ Baremetal or Container (if so, version):
 
 **Have you tried [the latest release](https://developer.nvidia.com/tensorrt)?**:
 
+**Attach the captured .json and .bin files from [TensorRT's API Capture tool](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/capture-replay.html) if you're on an x86_64 Unix system**
+
 **Can this model run on other frameworks?** For example run ONNX model with ONNXRuntime (`polygraphy run <model.onnx> --onnxrt`):
