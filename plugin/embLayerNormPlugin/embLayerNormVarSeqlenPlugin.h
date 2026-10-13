@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,6 +118,9 @@ protected:
     bert::WeightsWithOwnership mPosEmb;
     DataType mType{};
     DataType mMaskType{};
+    // int32_t storage for the kINT32 "output_fp16" field. It must be a member because TensorRT reads PluginField::data
+    // after getFieldsToSerialize() returns.
+    int32_t mOutputFp16{};
 
     // IPluginV3 serialization related
     std::vector<nvinfer1::PluginField> mDataToSerialize;
