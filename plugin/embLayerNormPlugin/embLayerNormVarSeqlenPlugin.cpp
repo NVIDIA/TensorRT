@@ -283,13 +283,13 @@ IPluginV3* EmbLayerNormVarSeqlenPluginMTron::clone() noexcept
 PluginFieldCollection const* EmbLayerNormVarSeqlenPluginBase::getFieldsToSerialize() noexcept
 {
     mDataToSerialize.clear();
-    bool output_fp16 = mType == DataType::kHALF;
-    mDataToSerialize.emplace_back("output_fp16", &output_fp16, PluginFieldType::kINT32, 1);
+    mOutputFp16 = mType == DataType::kHALF ? 1 : 0;
+    mDataToSerialize.emplace_back("output_fp16", &mOutputFp16, PluginFieldType::kINT32, 1);
     mDataToSerialize.emplace_back("bert_embeddings_layernorm_beta", static_cast<float const*>(mBeta.values),
         PluginFieldType::kFLOAT32, mBeta.count);
     mDataToSerialize.emplace_back("bert_embeddings_layernorm_gamma", static_cast<float const*>(mGamma.values),
         PluginFieldType::kFLOAT32, mGamma.count);
-    if (output_fp16)
+    if (mOutputFp16 != 0)
     {
         mDataToSerialize.emplace_back("bert_embeddings_word_embeddings", static_cast<half const*>(mWordEmb.values),
             PluginFieldType::kFLOAT16, mWordEmb.count);
