@@ -1669,6 +1669,52 @@ class TestFoldConstants(object):
             assert graph.outputs[0].inputs[0] == graph.nodes[-1]
         assert graph.outputs == [if_out]
 
+    def test_flatten_static_conditional_multiple_outputs(self):
+        cond = gs.Constant("cond", values=np.array(True))
+        X = gs.Variable("X", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+
+        # The first output also feeds the node that computes the second one.
+        then_graph = Graph(name="Then", ir_version=10)
+        relu_out = then_graph.relu(X)
+        then_graph.outputs = [relu_out, then_graph.add(relu_out, relu_out)]
+
+        else_graph = Graph(name="Else", ir_version=10)
+        else_graph.outputs = [else_graph.add(X, X), else_graph.relu(X)]
+
+        graph.outputs = graph.layer(
+            op="If",
+            inputs=[cond],
+            outputs=["if_out0", "if_out1"],
+            attrs={"then_branch": then_graph, "else_branch": else_graph},
+        )
+
+        graph.fold_constants().cleanup()
+
+        assert [node.op for node in graph.nodes] == ["Relu", "Add"]
+        assert graph.outputs[0].inputs[0] == graph.nodes[0]
+        assert graph.outputs[1].inputs[0] == graph.nodes[1]
+        assert graph.nodes[1].inputs == [graph.outputs[0], graph.outputs[0]]
+
+    def test_flatten_static_conditional_constant_output(self):
+        cond = gs.Constant("cond", values=np.array(True))
+        X = gs.Variable("X", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+
+        then_graph = Graph(name="Then", ir_version=10)
+        then_graph.outputs = [gs.Constant("C", values=np.ones((1,), dtype=np.float32))]
+
+        else_graph = Graph(name="Else", ir_version=10)
+        else_graph.outputs = [else_graph.relu(X)]
+
+        graph.outputs = [graph.if_op(cond, then_graph, else_graph)]
+
+        graph.fold_constants().cleanup()
+
+        assert not graph.nodes
+        assert isinstance(graph.outputs[0], Constant)
+        assert np.all(graph.outputs[0].values == 1)
+
     def test_const_inp_but_non_foldable_nested_graph(self):
         cond = gs.Constant("cond", values=np.array(True))
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
