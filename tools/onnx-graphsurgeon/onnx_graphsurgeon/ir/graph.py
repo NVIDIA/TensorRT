@@ -1025,6 +1025,19 @@ class Graph(object):
 
             return inp
 
+        def get_shape_dims(tensor):
+            """
+            Get the dimensions that a Shape node produces in the specified tensor, honoring the
+            node's start and end attributes, iff the tensor is the output of a Shape node.
+            """
+            shape_node = get_producer(tensor, "Shape")
+            inp = get_input(shape_node)
+            if inp is None or inp.shape is None:
+                return None
+            start = shape_node.attrs.get("start", 0)
+            end = shape_node.attrs.get("end", None)
+            return list(inp.shape)[start:end]
+
         def get_scalar_value(tensor):
             """
             Gets the scalar value of a constant tensor with a single item
@@ -1035,13 +1048,10 @@ class Graph(object):
                 return list(tensor.values)[0]
 
         def fold_shape(tensor):
-            inp = get_input(get_producer(tensor, "Shape"))
-            if inp is None:
+            dims = get_shape_dims(tensor)
+            if dims is None or misc.is_dynamic_shape(dims):
                 return None
-
-            if inp.shape is None or misc.is_dynamic_shape(inp.shape):
-                return None
-            return np.array(inp.shape, dtype=np.int64)
+            return np.array(dims, dtype=np.int64)
 
         def fold_shape_gather(tensor):
             gather = get_producer(tensor, "Gather")
@@ -1051,8 +1061,8 @@ class Graph(object):
             data = gather.inputs[0]
             indices_tensor = gather.inputs[1]
 
-            inp = get_input(get_producer(data, "Shape"))
-            if inp is None or inp.shape is None:
+            dims = get_shape_dims(data)
+            if dims is None:
                 return None
 
             if not isinstance(indices_tensor, Constant):
@@ -1060,11 +1070,11 @@ class Graph(object):
 
             indices = indices_tensor.values
             if not indices.shape:  # Scalar-case
-                shape = inp.shape[int(indices)]
+                shape = dims[int(indices)]
                 if misc.is_dynamic_dimension(shape):
                     return None
             else:
-                shape = [inp.shape[index] for index in indices]
+                shape = [dims[index] for index in indices]
                 if misc.is_dynamic_shape(shape):
                     return None
 
@@ -1087,8 +1097,8 @@ class Graph(object):
             else:
                 return None
 
-            inp = get_input(get_producer(data, "Shape"))
-            if inp is None or inp.shape is None:
+            dims = get_shape_dims(data)
+            if dims is None:
                 return None
 
             # For shape tensors, we can only slice on the 0th dimension.
@@ -1112,7 +1122,7 @@ class Graph(object):
             elif "steps" in slice.attrs:
                 steps = slice.attrs["steps"][0]
 
-            shape = inp.shape[starts:ends:steps]
+            shape = dims[starts:ends:steps]
             if misc.is_dynamic_shape(shape):
                 return None
 
