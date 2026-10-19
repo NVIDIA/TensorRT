@@ -74,8 +74,8 @@ class KernelHelper:
         cuda_call(cudart.cudaFree(0))
 
         major, minor = getComputeCapacity(devID)
-        _, nvrtc_minor = cuda_call(nvrtc.nvrtcVersion())
-        use_cubin = nvrtc_minor >= 1
+        nvrtc_major, nvrtc_minor = cuda_call(nvrtc.nvrtcVersion())
+        use_cubin = (nvrtc_major, nvrtc_minor) >= (11, 1)
         prefix = "sm" if use_cubin else "compute"
         arch_arg = bytes(f"--gpu-architecture={prefix}_{major}{minor}", "ascii")
 
