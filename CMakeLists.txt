@@ -23,9 +23,10 @@ set(CMAKE_LINK_LIBRARIES_ONLY_TARGETS ON)
 
 # Set CMAKE_CUDA_ARCHITECTURES before project() so CMake's CMP0104 policy does not
 # auto-detect and overwrite it with the host GPU's SM. CUDAToolkit_VERSION is not
-# available yet; SM 110 is conditionally appended after find_package(CUDAToolkit) below.
+# available yet; SM 100/120 (Blackwell) and SM 110 (Thor) are conditionally appended
+# after find_package(CUDAToolkit) below based on the discovered toolkit version.
 if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90 100 120)
+  set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90)
   set(_TRT_CUDA_ARCHS_DEFAULTED TRUE)
 endif()
 
@@ -89,8 +90,13 @@ endif()
 find_package(CUDAToolkit REQUIRED)
 message(STATUS "CUDA version: ${CUDAToolkit_VERSION}")
 
-# SM 110 (Thor) requires CUDA 13.0+.
+# SM 100 and SM 120 (Blackwell) require CUDA 12.8+.
 # CUDAToolkit_VERSION is only available once the toolkit is found.
+if (_TRT_CUDA_ARCHS_DEFAULTED AND CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.8")
+  list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
+endif()
+
+# SM 110 (Thor) requires CUDA 13.0+.
 if (_TRT_CUDA_ARCHS_DEFAULTED AND CUDAToolkit_VERSION VERSION_GREATER_EQUAL "13.0")
   list(APPEND CMAKE_CUDA_ARCHITECTURES 110)
 endif()
