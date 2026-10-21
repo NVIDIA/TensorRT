@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.check.subtool import Lint
+from polygraphy.tools.check.subtool import Accuracy, Lint
 
 
 class Check(Tool):
@@ -29,4 +29,5 @@ class Check(Tool):
     def get_subtools_impl(self):
         return "Check Subtools", [
             Lint(),
+            Accuracy(),
         ]

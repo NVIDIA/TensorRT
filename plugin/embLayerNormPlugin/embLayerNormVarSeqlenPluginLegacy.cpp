@@ -334,7 +334,7 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyHFace::enqueue(PluginTensorDesc const* 
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
@@ -406,7 +406,7 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyMTron::enqueue(PluginTensorDesc const* 
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input

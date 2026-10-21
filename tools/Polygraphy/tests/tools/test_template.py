@@ -64,14 +64,16 @@ class TestTrtConfig:
 
     def test_opts_basic(self, poly_template):
         with util.NamedTemporaryFile("w+", suffix=".py") as template:
-            poly_template(["trt-config", "--fp16", "--int8", "-o", template.name])
+            # --tf32 stands in for the removed-in-TRT-11 --fp16/--int8 flags; the
+            # point of this test is that builder-config options pre-populate the
+            # generated template script.
+            poly_template(["trt-config", "--tf32", "-o", template.name])
 
             builder, network = create_network()
             create_config = InvokeFromScript(template.name, "load_config")
             with builder, network, create_config(builder, network) as config:
                 assert isinstance(config, trt.IBuilderConfig)
-                assert config.get_flag(trt.BuilderFlag.FP16)
-                assert config.get_flag(trt.BuilderFlag.INT8)
+                assert config.get_flag(trt.BuilderFlag.TF32)
 
 
 class TestOnnxGs:

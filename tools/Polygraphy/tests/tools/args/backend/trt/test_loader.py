@@ -42,6 +42,7 @@ from polygraphy.tools.args import (
     TrtOnnxFlagArgs,
 )
 from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
+from polygraphy.tools.script import Script
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
@@ -130,6 +131,10 @@ class TestTrtLoadNetworkArgs:
                 assert network.num_outputs == 1
                 assert network.get_output(0).name == "modified_output"
 
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="Setting layer precisions is weak typing, removed in TRT 11 (strongly typed)",
+    )
     def test_set_layer_precisions(self):
         arg_group = ArgGroupTestHelper(
             TrtLoadNetworkArgs(),
@@ -175,6 +180,10 @@ class TestTrtLoadNetworkArgs:
                 ]
             )
 
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="Setting tensor datatypes is weak typing, removed in TRT 11 (strongly typed)",
+    )
     def test_set_tensor_datatypes(self):
         arg_group = ArgGroupTestHelper(
             TrtLoadNetworkArgs(),
@@ -284,9 +293,45 @@ class TestTrtLoadNetworkArgs:
         )
         arg_group.parse_args([ONNX_MODELS["identity_identity"].path] + args)
 
-        assert arg_group.get_flags()[0] == [
+        parser_flags, plugin_instancenorm = arg_group.get_flags()
+        assert plugin_instancenorm is None
+        assert parser_flags == [
             make_trt_enum_val("OnnxParserFlag", "NATIVE_INSTANCENORM")
         ]
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="OnnxParserFlag operations require TRT >= 8.6",
+    )
+    @pytest.mark.parametrize(
+        "cli_arg",
+        ["--plugin-instancenorm"]
+        + (
+            ["--enable-uint8-asymmetric-quantization-dla"]
+            if hasattr(
+                trt.OnnxParserFlag, "ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+            )
+            else []
+        ),
+    )
+    def test_parser_flag_args(self, cli_arg):
+        """Test that parser flag CLI arguments are properly parsed."""
+        arg_group = ArgGroupTestHelper(
+            TrtOnnxFlagArgs(), deps=[ModelArgs(), TrtConfigArgs()]
+        )
+        arg_group.parse_args([ONNX_MODELS["identity_identity"].path, cli_arg])
+
+        parser_flags, plugin_instancenorm = arg_group.get_flags()
+        if cli_arg == "--plugin-instancenorm":
+            assert plugin_instancenorm is True
+        else:
+            assert parser_flags is not None
+            assert (
+                make_trt_enum_val(
+                    "OnnxParserFlag", "ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+                )
+                in parser_flags
+            )
 
 
 @pytest.fixture()
@@ -306,6 +351,28 @@ def engine_loader_args():
 
 
 class TestTrtEngineLoaderArgs:
+    def test_dla_workspace_allocation_strategy(self, engine_loader_args):
+        engine_loader_args.parse_args(
+            [
+                "model.engine",
+                "--model-type=engine",
+                "--dla-workspace-allocation-strategy",
+                "ShArEd_StAtIc",
+            ]
+        )
+
+        expected_strategy = make_trt_enum_val(
+            "DLAWorkspaceAllocationStrategy", "SHARED_STATIC"
+        )
+        assert engine_loader_args.dla_workspace_allocation_strategy == expected_strategy
+
+        script = Script()
+        engine_loader_args.add_to_script(script)
+        assert (
+            "dla_workspace_allocation_strategy="
+            "trt.DLAWorkspaceAllocationStrategy.SHARED_STATIC" in str(script)
+        )
+
     def test_build_engine(self, engine_loader_args):
         engine_loader_args.parse_args(
             [ONNX_MODELS["identity_identity"].path, "--trt-outputs=identity_out_0"]
@@ -330,6 +397,28 @@ class TestTrtEngineLoaderArgs:
             assert isinstance(engine, trt.ICudaEngine)
             assert engine[0] == "input"
             assert engine[1] == "output"
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="OnnxParserFlag operations require TRT >= 8.6",
+    )
+    @pytest.mark.parametrize(
+        "cli_arg",
+        ["--plugin-instancenorm"]
+        + (
+            ["--enable-uint8-asymmetric-quantization-dla"]
+            if hasattr(
+                trt.OnnxParserFlag, "ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA"
+            )
+            else []
+        ),
+    )
+    def test_build_engine_with_parser_flags(self, engine_loader_args, cli_arg):
+        """Test building engine with parser flags."""
+        engine_loader_args.parse_args([ONNX_MODELS["identity_identity"].path, cli_arg])
+
+        with engine_loader_args.load_engine() as engine:
+            assert isinstance(engine, trt.ICudaEngine)
 
     def test_load_serialized_engine(self, engine_loader_args):
         with util.NamedTemporaryFile() as f, engine_bytes_from_network(

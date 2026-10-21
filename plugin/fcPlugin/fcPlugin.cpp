@@ -411,9 +411,9 @@ DimsExprs FCPluginDynamic::getOutputDimensions(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 1);
-        PLUGIN_VALIDATE(outputIndex == 0);
-        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 1);
+        PLUGIN_ASSERT(outputIndex == 0);
+        PLUGIN_ASSERT(inputs != nullptr);
         DimsExprs ret;
         ret.nbDims = 5;
         ret.d[0] = inputs[0].d[0];
@@ -454,18 +454,18 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
     try
     {
         // Validate input arguments
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 1);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(mType == inputs[0].desc.type);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 1);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(mType == inputs[0].desc.type);
         auto const& inDims0 = inputs[0].desc.dims;
 
-        PLUGIN_VALIDATE(inDims0.nbDims == 5);
+        PLUGIN_ASSERT(inDims0.nbDims == 5);
         mK = inDims0.d[HDIM]; // hiddensize
         // PLUGIN_ASSERT(hiddenSize * mOutDim == mNumParams);
-        PLUGIN_VALIDATE(inDims0.d[3] == 1);
-        PLUGIN_VALIDATE(inDims0.d[4] == 1);
+        PLUGIN_ASSERT(inDims0.d[3] == 1);
+        PLUGIN_ASSERT(inDims0.d[4] == 1);
 
         // m and k are mOutDim
         // n is B*S
@@ -551,7 +551,7 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
             && workSpace != nullptr);
 
         size_t const workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
@@ -559,7 +559,7 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
         int32_t const S = inputDesc->dims.d[SDIM];
         int32_t const B = inputDesc->dims.d[BDIM];
         int32_t const n = S * B;
-        PLUGIN_VALIDATE(n >= 0);
+        PLUGIN_ASSERT(n >= 0);
         mLtContext.setN(static_cast<uint64_t>(n));
 
         if (mType == DataType::kFLOAT)
@@ -683,7 +683,7 @@ void FCPluginDynamic::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -806,7 +806,7 @@ void FCPluginDynamicCreator::setPluginNamespace(char const* libNamespace) noexce
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

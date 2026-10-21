@@ -117,6 +117,17 @@ struct impl::EnumMaxImpl<EngineCapability>
 //!
 //! The term "empty weights" refers to Weights with weight coefficients ( \p count == 0 and \p values == nullptr).
 //!
+//! A positive count with a null values pointer denotes a build-time weight placeholder when supplied to a supported
+//! INetworkDefinition layer creation method. This is supported for IConvolutionLayer/IDeconvolutionLayer kernel or bias
+//! weights and IScaleLayer shift or scale weights only when calling IBuilder::buildSerializedNetwork() with
+//! BuilderFlag::kREFIT_INDIVIDUAL and BuilderFlag::kSTRIP_PLAN. Such weights are implicitly refittable and must be
+//! named using the canonical Weights descriptor returned by the corresponding layer getter. A placeholder descriptor
+//! is not readable storage: count records the eventual number of values, but the null values pointer must not be
+//! dereferenced. TensorRT supplies placeholder storage during the build; the actual values must be provided through
+//! refit before inference. The canonical descriptor is an opaque identity local to its INetworkDefinition. Its values
+//! pointer must not be dereferenced or used as layer input; the descriptor may only identify the existing weights in
+//! its originating network, such as in INetworkDefinition::setWeightsName().
+//!
 class Weights
 {
 public:
@@ -916,7 +927,7 @@ public:
     //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
     virtual int32_t getOutputDataTypes(
-        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept = 0;
 
     //!
     //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
@@ -1484,7 +1495,7 @@ enum class TensorFormat : int32_t
 
     //! Vector-minor format where channel dimension is third to last and unpadded.
     //!
-    //! This format requires either FP32 or UINT8 and at least three dimensions.
+    //! This format requires FP32, FP16, or UINT8 and at least three dimensions.
     kHWC = 8,
 
     //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis
@@ -1553,6 +1564,34 @@ struct impl::EnumMaxImpl<AllocatorFlag>
 };
 
 using AllocatorFlags = uint32_t;
+
+//!
+//! \enum DLAWorkspaceAllocationStrategy
+//!
+//! \brief Describes how DLA workspace memory is allocated.
+//!
+//! \see IRuntime::setDLAWorkspaceAllocationStrategy()
+//!
+enum class DLAWorkspaceAllocationStrategy : int32_t
+{
+    //! Each DLA module allocates its workspace memory separately.
+    kDEFAULT = 0,
+    //!
+    //! DLA modules deserialized by the same runtime for the same DLA core share a static workspace pool. This can
+    //! reduce memory consumption when multiple DLA engines are loaded concurrently. Each DLA core has a separate
+    //! workspace pool, and each engine captures the core selected by the runtime when it is deserialized.
+    //!
+    //! \warning Concurrent execution of engines that share DLA workspace results in undefined behavior.
+    kSHARED_STATIC = 1,
+};
+
+//! Maximum number of elements in DLAWorkspaceAllocationStrategy. \see DLAWorkspaceAllocationStrategy
+template <>
+struct impl::EnumMaxImpl<DLAWorkspaceAllocationStrategy>
+{
+    //! Number of elements in DLAWorkspaceAllocationStrategy.
+    static constexpr int32_t kVALUE = 2;
+};
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
 //! The name v_1_0 may change in future versions of TensorRT.
@@ -1870,7 +1909,10 @@ public:
     //!
     //! This function is used to specify which DLA core to use via indexing, if multiple DLA cores are available.
     //!
-    //! \warning if getNbDLACores() returns 0, then this function does nothing.
+    //! If no DLA core is set when DLAWorkspaceAllocationStrategy::kSHARED_STATIC is selected, core 0 is used
+    //! automatically.
+    //!
+    //! \warning If getNbDLACores() returns 0, then this function does nothing.
     //!
     //! \see getDLACore()
     //!
@@ -1895,6 +1937,33 @@ public:
     int32_t getNbDLACores() const noexcept
     {
         return mImpl->getNbDLACores();
+    }
+
+    //!
+    //! \brief Sets the strategy used for DLA workspace allocation by subsequent engine deserializations.
+    //!
+    //! \param strategy The DLA workspace allocation strategy.
+    //!
+    //! Engines already deserialized by this runtime retain the strategy that was selected when they were
+    //! deserialized. Selecting DLAWorkspaceAllocationStrategy::kSHARED_STATIC creates or reuses a shared workspace
+    //! for the selected DLA core. If no DLA core is selected, TensorRT selects core 0. Calling setDLACore() while
+    //! shared workspace is selected creates or reuses a separate shared workspace for the newly selected core.
+    //!
+    //! \return true if the workspace allocation strategy was changed successfully; false otherwise.
+    //!
+    bool setDLAWorkspaceAllocationStrategy(DLAWorkspaceAllocationStrategy strategy) noexcept
+    {
+        return mImpl->setDLAWorkspaceAllocationStrategy(strategy);
+    }
+
+    //!
+    //! \brief Returns the DLA workspace allocation strategy used for subsequent engine deserializations.
+    //!
+    //! \return The current DLA workspace allocation strategy.
+    //!
+    TRT_NODISCARD DLAWorkspaceAllocationStrategy getDLAWorkspaceAllocationStrategy() const noexcept
+    {
+        return mImpl->getDLAWorkspaceAllocationStrategy();
     }
 
     //!
@@ -2492,9 +2561,18 @@ public:
     //! Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refitCudaEngineAsync
     //! returns.
     //!
+    //! This method does not synchronize \p stream before returning. Work submitted to \p stream after this call,
+    //! including IExecutionContext::enqueueV3(), observes the updated weights through CUDA stream ordering. Before
+    //! serializing the engine or calling IExecutionContext::executeV2(), the application must synchronize with
+    //! \p stream. Before enqueuing inference on a different stream, the application must establish an ordering
+    //! dependency on \p stream.
+    //!
     //! IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
     //! weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights
     //! updating task should use the same stream as the one used for the refit call.
+    //!
+    //! \warning CUDA green context streams are not supported. Passing one may cause crashes or other undefined
+    //! behavior. Use an ordinary CUDA stream instead.
     //!
     bool refitCudaEngineAsync(cudaStream_t stream) noexcept
     {
@@ -2517,6 +2595,20 @@ public:
     Weights getWeightsPrototype(char const* weightsName) const noexcept
     {
         return mImpl->getWeightsPrototype(weightsName);
+    }
+
+    //!
+    //! \brief Release resources cached for the engine associated with this refitter.
+    //!
+    //! \return True on success, false otherwise.
+    //!
+    //! A later refit recreates the resources as needed. The application must ensure that all previously enqueued
+    //! asynchronous refit work from every refitter sharing the same engine has completed and that no such refitter
+    //! executes a refit operation concurrently with this call.
+    //!
+    bool releaseRefitResources() noexcept
+    {
+        return mImpl->releaseRefitResources();
     }
 
 protected:
@@ -2736,6 +2828,44 @@ public:
     int64_t const* getShapeValuesV2(char const* inputName, OptProfileSelector select) const noexcept
     {
         return mImpl->getShapeValuesV2(inputName, select);
+    }
+
+    //!
+    //! \brief Set the CUDA stream that is used to profile this optimization profile.
+    //!
+    //! This stream overrides IBuilderConfig::setProfileStream() for this optimization profile. Passing nullptr clears
+    //! the override, and the optimization profile uses the stream from IBuilderConfig instead.
+    //!
+    //! If \p stream belongs to a CUDA green context, TensorRT automatically queries the context's SM count and
+    //! co-scheduled-SM alignment, profiles this optimization profile on that stream, and stores the resulting
+    //! execution-resource contract for this optimization profile in the engine.
+    //!
+    //! CUDA green context use requires both a TensorRT build based on CUDA Toolkit 13.0 or newer and a CUDA driver
+    //! compatible with CUDA 13.0 or newer. Ordinary profile streams remain supported with older CUDA Toolkit and
+    //! driver versions supported by TensorRT.
+    //!
+    //! The application must keep the stream and its CUDA green context alive until the build completes.
+    //!
+    //! \param stream The CUDA stream used to profile this optimization profile, or nullptr to use the stream from
+    //!        IBuilderConfig.
+    //!
+    //! \see getProfileStream(), IBuilderConfig::setProfileStream()
+    //!
+    void setProfileStream(cudaStream_t stream) noexcept
+    {
+        mImpl->setProfileStream(stream);
+    }
+
+    //!
+    //! \brief Get the CUDA stream set for this optimization profile.
+    //!
+    //! \return The stream set by setProfileStream(), or nullptr if no profile-specific stream is set.
+    //!
+    //! \see setProfileStream(), IBuilderConfig::getProfileStream()
+    //!
+    cudaStream_t getProfileStream() const noexcept
+    {
+        return mImpl->getProfileStream();
     }
 
 protected:
@@ -2977,6 +3107,7 @@ protected:
 }; // class IRuntimeConfig
 
 inline IRuntimeConfig::~IRuntimeConfig() noexcept = default;
+
 
 //!
 //! \enum EngineStat
@@ -3808,6 +3939,7 @@ public:
     {
         return mImpl->getEngineStat(stat);
     }
+
 
 protected:
     apiv::VCudaEngine* mImpl;
@@ -4643,6 +4775,19 @@ public:
     //! \warning If the Engine is streaming weights, enqueueV3 will become synchronous, and
     //!          the graph will not be capturable.
     //!
+    //! \note When \p stream belongs to a CUDA green context, TensorRT compares its resources with the active
+    //!       optimization profile's stored execution contract. TensorRT emits a warning if the stream has fewer SMs or
+    //!       a smaller CGA size, or if the profile was built without CUDA green context constraints, and continues the
+    //!       enqueue. This configuration may cause enqueue crashes or other undefined behavior. CUDA green context
+    //!       execution requires both a TensorRT runtime built with CUDA Toolkit 13.0 or newer and a CUDA driver
+    //!       compatible with CUDA 13.0 or newer.
+    //!
+    //! \warning When capturing this call in a CUDA graph, capture on a stream in the target CUDA green context and
+    //!          execute the graph in that same context. The application must keep the green context alive until each
+    //!          captured graph and every graph executable instantiated from it has been destroyed; another context with
+    //!          identical resources is not interchangeable. A graph captured on an ordinary stream does not acquire
+    //!          resource isolation when launched on a CUDA green context stream.
+    //!
     bool enqueueV3(cudaStream_t stream) noexcept
     {
         return mImpl->enqueueV3(stream);
@@ -4734,6 +4879,23 @@ public:
     //!
     //! \note The provided auxiliary streams must not be the default stream and must all be different to avoid
     //!       deadlocks.
+    //!
+    //! \note If any provided auxiliary stream used by TensorRT or the main stream passed to enqueueV3() is associated
+    //!       with a CUDA green context, all provided auxiliary streams used by TensorRT and the main stream must belong
+    //!       to the same CUDA green context. Otherwise, enqueueV3() reports an invalid-argument error and returns
+    //!       false. When the main stream belongs to a CUDA green context, TensorRT creates any remaining auxiliary
+    //!       streams in that same context.
+    //!
+    //! CUDA green context use requires both a TensorRT runtime built with CUDA Toolkit 13.0 or newer and a CUDA driver
+    //! compatible with CUDA 13.0 or newer. Ordinary auxiliary streams remain supported with older CUDA Toolkit and
+    //! driver versions supported by TensorRT.
+    //!
+    //! \warning TensorRT does not take ownership of the provided auxiliary streams. The application must keep each
+    //!          provided auxiliary stream used by TensorRT, and any CUDA green context to which it belongs, alive while
+    //!          the stream is configured for use by enqueueV3() and until all work enqueued on it has completed. If
+    //!          TensorRT creates auxiliary streams in a CUDA green context, the application must keep that CUDA green
+    //!          context alive while the execution context retains those streams and until all work enqueued on them
+    //!          has completed.
     //!
     //! \see enqueueV3(), IBuilderConfig::setMaxAuxStreams(), ICudaEngine::getNbAuxStreams()
     //!

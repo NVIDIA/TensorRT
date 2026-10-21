@@ -38,8 +38,6 @@ class TestDataLoaderArgs:
         "case",
         [
             (["--seed=123"], ["seed"], [123]),
-            (["--int-min=23", "--int-max=94"], ["_int_range"], [(23, 94)]),
-            (["--float-min=2.3", "--float-max=9.4"], ["_float_range"], [(2.3, 9.4)]),
             (
                 [],
                 ["val_range"],

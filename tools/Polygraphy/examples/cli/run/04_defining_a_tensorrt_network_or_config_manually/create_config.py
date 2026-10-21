@@ -16,8 +16,9 @@
 # limitations under the License.
 #
 """
-Creates a TensorRT builder configuration and enables FP16 tactics.
+Creates a TensorRT builder configuration and enables TF32 tactics.
 """
+
 import tensorrt as trt
 from polygraphy import func
 from polygraphy.backend.trt import CreateConfig
@@ -33,6 +34,6 @@ def load_config(config):
     # NOTE: func.extend() causes the signature of this function to be `(builder, network) -> config`
     # For details on how this works, see examples/api/03_interoperating_with_tensorrt
 
-    config.set_flag(trt.BuilderFlag.FP16)
+    config.set_flag(trt.BuilderFlag.TF32)
 
     # Notice that we don't need to return anything - `extend()` takes care of that for us!

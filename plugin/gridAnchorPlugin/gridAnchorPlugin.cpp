@@ -38,22 +38,14 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
     : mPluginName(name)
     , mNumLayers(numLayers)
 {
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int32_t)));
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
-
-    mParam.resize(mNumLayers);
+    resizeForLayers();
     for (int32_t id = 0; id < mNumLayers; id++)
     {
         mParam[id] = paramIn[id];
         PLUGIN_VALIDATE(mParam[id].numAspectRatios >= 0 && mParam[id].aspectRatios != nullptr);
 
-        mParam[id].aspectRatios = (float*) malloc(sizeof(float) * mParam[id].numAspectRatios);
-
-        for (int32_t i = 0; i < paramIn[id].numAspectRatios; ++i)
-        {
-            mParam[id].aspectRatios[i] = paramIn[id].aspectRatios[i];
-        }
+        mAspectRatios[id].assign(paramIn[id].aspectRatios, paramIn[id].aspectRatios + paramIn[id].numAspectRatios);
+        mParam[id].aspectRatios = mAspectRatios[id].data();
 
         for (int32_t i = 0; i < 4; ++i)
         {
@@ -118,31 +110,50 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
             tmpHeights.push_back(scales[i] / sqrt_AR);
         }
 
-        mDeviceWidths[id] = copyToDevice(tmpWidths.data(), tmpWidths.size());
-        mDeviceHeights[id] = copyToDevice(tmpHeights.data(), tmpHeights.size());
+        mDeviceWidths[id] = makeUniqueDevice<float[]>(tmpWidths);
+        mDeviceHeights[id] = makeUniqueDevice<float[]>(tmpHeights);
     }
 }
 
 GridAnchorGenerator::GridAnchorGenerator(void const* data, size_t length, char const* name)
     : mPluginName(name)
 {
-    char const *d = reinterpret_cast<char const*>(data), *a = d;
+    PLUGIN_VALIDATE(data != nullptr);
+    char const* d = reinterpret_cast<char const*>(data);
+    char const* const a = d;
+
+    auto const ensureAvailable = [&](uint64_t bytes) {
+        PLUGIN_VALIDATE(d <= a + length);
+        PLUGIN_VALIDATE(static_cast<uint64_t>((a + length) - d) >= bytes);
+    };
+
+    // Smallest a layer can serialize to: its four int32 fields plus the six fixed floats
+    // (minSize, maxSize, variance[4]). Guards against a layer count the buffer can't hold.
+    constexpr uint64_t kMIN_LAYER_BYTES = 4 * sizeof(int32_t) + 6 * sizeof(float);
+
+    ensureAvailable(sizeof(int32_t));
     mNumLayers = read<int32_t>(d);
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int32_t)));
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
-    mParam.resize(mNumLayers);
+    // Match createPlugin, which requires numLayers > 0; a zero/negative count is invalid.
+    PLUGIN_VALIDATE(mNumLayers > 0);
+    PLUGIN_VALIDATE(static_cast<uint64_t>(mNumLayers) <= (length - sizeof(int32_t)) / kMIN_LAYER_BYTES);
+
+    resizeForLayers();
     for (int32_t id = 0; id < mNumLayers; id++)
     {
         // we have to deserialize GridAnchorParameters by hand
+        ensureAvailable(2 * sizeof(float) + sizeof(int32_t));
         mParam[id].minSize = read<float>(d);
         mParam[id].maxSize = read<float>(d);
         mParam[id].numAspectRatios = read<int32_t>(d);
-        mParam[id].aspectRatios = (float*) malloc(sizeof(float) * mParam[id].numAspectRatios);
-        for (int32_t i = 0; i < mParam[id].numAspectRatios; ++i)
+        PLUGIN_VALIDATE(mParam[id].numAspectRatios >= 0);
+        ensureAvailable(static_cast<uint64_t>(mParam[id].numAspectRatios) * sizeof(float));
+        mAspectRatios[id].resize(mParam[id].numAspectRatios);
+        for (auto& aspectRatio : mAspectRatios[id])
         {
-            mParam[id].aspectRatios[i] = read<float>(d);
+            aspectRatio = read<float>(d);
         }
+        mParam[id].aspectRatios = mAspectRatios[id].data();
+        ensureAvailable(3 * sizeof(int32_t) + 4 * sizeof(float));
         mParam[id].H = read<int32_t>(d);
         mParam[id].W = read<int32_t>(d);
         for (int32_t i = 0; i < 4; ++i)
@@ -151,24 +162,22 @@ GridAnchorGenerator::GridAnchorGenerator(void const* data, size_t length, char c
         }
 
         mNumPriors[id] = read<int32_t>(d);
-        mDeviceWidths[id] = deserializeToDevice(d, mNumPriors[id]);
-        mDeviceHeights[id] = deserializeToDevice(d, mNumPriors[id]);
+        PLUGIN_VALIDATE(mNumPriors[id] >= 0);
+        ensureAvailable(2 * static_cast<uint64_t>(mNumPriors[id]) * sizeof(float));
+        mDeviceWidths[id] = deserializeFloatsToDevice(d, mNumPriors[id]);
+        mDeviceHeights[id] = deserializeFloatsToDevice(d, mNumPriors[id]);
     }
 
     PLUGIN_VALIDATE(d == a + length);
 }
 
-GridAnchorGenerator::~GridAnchorGenerator()
+void GridAnchorGenerator::resizeForLayers()
 {
-    for (int32_t id = 0; id < mNumLayers; id++)
-    {
-        PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceWidths[id].values)));
-        PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceHeights[id].values)));
-        free(mParam[id].aspectRatios);
-    }
-    PLUGIN_CUERROR(cudaFreeHost(mNumPriors));
-    PLUGIN_CUERROR(cudaFreeHost(mDeviceWidths));
-    PLUGIN_CUERROR(cudaFreeHost(mDeviceHeights));
+    mParam.resize(mNumLayers);
+    mAspectRatios.resize(mNumLayers);
+    mNumPriors.resize(mNumLayers);
+    mDeviceWidths.resize(mNumLayers);
+    mDeviceHeights.resize(mNumLayers);
 }
 
 int32_t GridAnchorGenerator::getNbOutputs() const noexcept
@@ -204,7 +213,7 @@ int32_t GridAnchorGenerator::enqueue(
     {
         void* outputData = outputs[id];
         pluginStatus_t status = anchorGridInference(
-            stream, mParam[id], mNumPriors[id], mDeviceWidths[id].values, mDeviceHeights[id].values, outputData);
+            stream, mParam[id], mNumPriors[id], mDeviceWidths[id].get(), mDeviceHeights[id].get(), outputData);
         if (status != STATUS_SUCCESS)
         {
             return status;
@@ -221,8 +230,8 @@ size_t GridAnchorGenerator::getSerializationSize() const noexcept
         sum += 4 * sizeof(int32_t); // mNumPriors, mParam[i].{numAspectRatios, H, W}
         sum += (6 + mParam[i].numAspectRatios)
             * sizeof(float); // mParam[i].{minSize, maxSize, aspectRatios, variance[4]}
-        sum += mDeviceWidths[i].count * sizeof(float);
-        sum += mDeviceHeights[i].count * sizeof(float);
+        // Widths and heights, mNumPriors[i] floats each.
+        sum += 2 * static_cast<size_t>(mNumPriors[i]) * sizeof(float);
     }
     return sum;
 }
@@ -249,32 +258,24 @@ void GridAnchorGenerator::serialize(void* buffer) const noexcept
         }
 
         write(d, mNumPriors[id]);
-        serializeFromDevice(d, mDeviceWidths[id]);
-        serializeFromDevice(d, mDeviceHeights[id]);
+        auto const numPriors = static_cast<size_t>(mNumPriors[id]);
+        serializeFloatsFromDevice(d, {mDeviceWidths[id].get(), numPriors});
+        serializeFloatsFromDevice(d, {mDeviceHeights[id].get(), numPriors});
     }
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-Weights GridAnchorGenerator::copyToDevice(void const* hostData, size_t count) noexcept
+void GridAnchorGenerator::serializeFloatsFromDevice(char*& hostBuffer, std::span<float const> deviceData) const noexcept
 {
-    void* deviceData;
-    PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
-    PLUGIN_CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
-    return Weights{DataType::kFLOAT, deviceData, int64_t(count)};
+    PLUGIN_CUASSERT(cudaMemcpy(hostBuffer, deviceData.data(), deviceData.size_bytes(), cudaMemcpyDeviceToHost));
+    hostBuffer += deviceData.size_bytes();
 }
 
-void GridAnchorGenerator::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const noexcept
+UniqueDevicePtr<float[]> GridAnchorGenerator::deserializeFloatsToDevice(char const*& hostBuffer, size_t numFloats)
 {
-    PLUGIN_CUASSERT(
-        cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost));
-    hostBuffer += deviceWeights.count * sizeof(float);
-}
-
-Weights GridAnchorGenerator::deserializeToDevice(char const*& hostBuffer, size_t count) noexcept
-{
-    Weights w = copyToDevice(hostBuffer, count);
-    hostBuffer += count * sizeof(float);
-    return w;
+    auto deviceData = makeUniqueDevice<float[]>(std::span{reinterpret_cast<float const*>(hostBuffer), numFloats});
+    hostBuffer += numFloats * sizeof(float);
+    return deviceData;
 }
 bool GridAnchorGenerator::supportsFormat(DataType type, PluginFormat format) const noexcept
 {

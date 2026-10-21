@@ -40,6 +40,7 @@ class IProfiler;
 } // namespace v_1_0
 using IProfiler = v_1_0::IProfiler;
 
+
 namespace v_1_0
 {
 class IOutputAllocator;
@@ -135,6 +136,7 @@ class IRefitter;
 class IResizeLayer;
 class IReverseSequenceLayer;
 class IRuntime;
+class ISafeSerializedNetworkArtifacts;
 class IScaleLayer;
 class IScatterLayer;
 class ISelectLayer;
@@ -211,6 +213,8 @@ enum class TilingOptimizationLevel : int32_t;
 enum class EngineStat : int32_t;
 
 
+enum class DLAWorkspaceAllocationStrategy : int32_t;
+
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
 using BuilderFlags = uint32_t;
@@ -242,6 +246,7 @@ public:
     virtual std::size_t size() const noexcept = 0;
     virtual DataType type() const noexcept = 0;
 };
+
 
 class VDimensionExpr : public VRoot
 {
@@ -288,7 +293,17 @@ public:
     virtual bool getEngineHostCodeAllowed() const noexcept = 0;
     // Added in TensorRT version 10.7
     virtual nvinfer1::ICudaEngine* deserializeCudaEngineV2(IStreamReaderV2& streamReader) noexcept = 0;
+    // Added in TensorRT version 11.3
+    //!
+    //! \brief See IRuntime::setDLAWorkspaceAllocationStrategy.
+    //!
+    virtual bool setDLAWorkspaceAllocationStrategy(DLAWorkspaceAllocationStrategy strategy) noexcept = 0;
+    //!
+    //! \brief See IRuntime::getDLAWorkspaceAllocationStrategy.
+    //!
+    TRT_NODISCARD virtual DLAWorkspaceAllocationStrategy getDLAWorkspaceAllocationStrategy() const noexcept = 0;
 };
+
 
 class VRefitter : public VRoot
 {
@@ -314,6 +329,8 @@ public:
     virtual bool getWeightsValidation() const noexcept = 0;
     virtual bool refitCudaEngineAsync(cudaStream_t stream) noexcept = 0;
     virtual Weights getWeightsPrototype(char const* weightsName) const noexcept = 0;
+    // Added in TensorRT 11.4
+    virtual bool releaseRefitResources() noexcept = 0;
 };
 
 class VOptimizationProfile : public VRoot
@@ -327,9 +344,14 @@ public:
     virtual bool isValid() const noexcept = 0;
     // Added in TensorRT 10.11
     TRT_NODISCARD virtual bool setShapeValuesV2(
-        char const* inputName, OptProfileSelector select, int64_t const* values, int32_t nbValues) noexcept = 0;
+        char const* inputName, OptProfileSelector select, int64_t const* values, int32_t nbValues) noexcept
+        = 0;
     TRT_NODISCARD virtual int64_t const* getShapeValuesV2(
-        char const* inputName, OptProfileSelector select) const noexcept = 0;
+        char const* inputName, OptProfileSelector select) const noexcept
+        = 0;
+    // Added in TensorRT 11.4
+    virtual void setProfileStream(cudaStream_t stream) noexcept = 0;
+    TRT_NODISCARD virtual cudaStream_t getProfileStream() const noexcept = 0;
 };
 
 class VCudaEngine : public VRoot
@@ -1254,6 +1276,7 @@ public:
         ReduceOperation reduceOp, int64_t root, int64_t* groups, int64_t groupSize) noexcept = 0;
     virtual IAttention* addAttentionV2(ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp,
         CausalMaskKind causalKind) noexcept = 0;
+    virtual ISqueezeLayer* addSqueezeV2(ITensor& input, ITensor* axes) noexcept = 0;
 };
 
 class VTimingCache : public VRoot

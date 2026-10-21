@@ -107,6 +107,7 @@ class DataType:
         "FLOAT8E5M2FNUZ": DataTypeEntry(
             "float8e5m2fnuz", 1, _DataTypeKind.FLOATING_POINT
         ),
+        "FLOAT8E8M0": DataTypeEntry("float8e8m0", 1, _DataTypeKind.FLOATING_POINT),
     }
 
     @staticmethod

@@ -18,8 +18,10 @@
 #include "fftPlugin.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstring>
 #include <set>
+#include <span>
 #include <string_view>
 
 namespace nvinfer1::plugin
@@ -62,10 +64,6 @@ void validateCufft(cufftResult status, char const* what)
         status == CUFFT_SUCCESS, (std::string(what) + " failed with cuFFT error " + std::to_string(status)).c_str());
 }
 
-bool isPowerOfTwo(int64_t v)
-{
-    return v > 0 && (v & (v - 1)) == 0;
-}
 } // namespace
 
 void CufftHandleDeleter::operator()(cufftHandle* handle) const noexcept
@@ -314,11 +312,10 @@ FFTPlanContext const& FFTPlugin::ensurePlan(FFTPlanKey const& key) const
     // dimension.
     if (key.dtype == DataType::kHALF || key.dtype == DataType::kBF16)
     {
-        for (int32_t i = 0; i < mNdims; ++i)
-        {
-            PLUGIN_VALIDATE(
-                isPowerOfTwo(key.signalDims[i]), "FFTPlugin FP16/BF16 transforms require power-of-two signal lengths");
-        }
+        PLUGIN_VALIDATE(mNdims <= std::ssize(key.signalDims), "mNdims exceeds signalDims extent");
+        PLUGIN_VALIDATE(std::ranges::all_of(std::span(key.signalDims).first(mNdims),
+                            [](auto d) { return std::has_single_bit(static_cast<uint64_t>(d)); }),
+            "FFTPlugin FP16/BF16 transforms require power-of-two signal lengths");
     }
 
     std::lock_guard<std::mutex> lock(mCacheMutex);

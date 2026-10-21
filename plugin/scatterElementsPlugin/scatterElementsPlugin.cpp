@@ -118,7 +118,7 @@ int32_t ScatterElementsPluginV3::enqueue(PluginTensorDesc const* inputDesc, Plug
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc[kINDICES_TENSOR_IDX].type == DataType::kINT64);
+        PLUGIN_ASSERT(inputDesc[kINDICES_TENSOR_IDX].type == DataType::kINT64);
 
         runScatterElementsKernel(outputs[kOUTPUT_TENSOR_IDX], inputs[kDATA_TENSOR_IDX], inputs[kUPDATES_TENSOR_IDX],
             inputs[kINDICES_TENSOR_IDX], outputDesc[kOUTPUT_TENSOR_IDX], inputDesc[kDATA_TENSOR_IDX],
@@ -146,7 +146,7 @@ int32_t ScatterElementsPluginV3::onShapeChange(
     PLUGIN_ASSERT(in[1].dims.nbDims == rank);
     // rank and shape of updates should be same as indices
     PLUGIN_ASSERT(in[2].dims.nbDims == rank);
-    PLUGIN_VALIDATE(std::equal(in[2].dims.d, in[2].dims.d + rank, in[1].dims.d));
+    PLUGIN_ASSERT(std::equal(in[2].dims.d, in[2].dims.d + rank, in[1].dims.d));
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
@@ -168,7 +168,7 @@ bool ScatterElementsPluginV3::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut && pos < (nbInputs + nbOutputs));
+        PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
 
         if (inOut[pos].desc.format != PluginFormat::kLINEAR)
         {
@@ -218,7 +218,7 @@ int32_t ScatterElementsPluginV3::configurePlugin(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 3);
+        PLUGIN_ASSERT(nbInputs == 3);
         return pluginStatus_t::STATUS_SUCCESS;
     }
     catch (std::exception const& e)
@@ -312,8 +312,15 @@ char const* ScatterElementsPluginV3Creator::getPluginNamespace() const noexcept
 
 void ScatterElementsPluginV3Creator::setPluginNamespace(char const* libNamespace) noexcept
 {
-    PLUGIN_VALIDATE(libNamespace != nullptr);
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_ASSERT(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 IPluginV3* ScatterElementsPluginV3Creator::createPlugin(

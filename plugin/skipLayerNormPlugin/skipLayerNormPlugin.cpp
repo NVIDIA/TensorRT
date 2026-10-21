@@ -113,9 +113,9 @@ int32_t SkipLayerNormPluginV3::getOutputShapes(DimsExprs const* inputs, int32_t 
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(inputs[0].nbDims == inputs[1].nbDims);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
         outputs[0] = inputs[0];
         return pluginStatus_t::STATUS_SUCCESS;
     }
@@ -131,10 +131,10 @@ bool SkipLayerNormPluginV3::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(pos >= 0 && pos < (nbInputs + nbOutputs));
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(pos >= 0 && pos < (nbInputs + nbOutputs));
 
         PluginTensorDesc const& in = inOut[pos].desc;
         if (pos == 0)
@@ -188,7 +188,7 @@ int32_t SkipLayerNormPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDe
     int32_t status = -1;
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const inputVolume = volume(inputDesc[0].dims);
         DataType iType = inputDesc->type;
@@ -237,7 +237,7 @@ int32_t SkipLayerNormPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDe
         {
             float const dqScaleIn = inputDesc[0].scale;
             float const dqScaleSkip = inputDesc[1].scale;
-            PLUGIN_VALIDATE(outputDesc[0].scale != 0.0F);
+            PLUGIN_ASSERT(outputDesc[0].scale != 0.0F);
             float const qScale = 1.F / outputDesc[0].scale;
             auto const* const input = static_cast<int8_t const*>(inputs[0]);
             auto const* const skip = static_cast<int8_t const*>(inputs[1]);
@@ -275,10 +275,10 @@ int32_t SkipLayerNormPluginV3::getOutputDataTypes(
 {
     try
     {
-        PLUGIN_VALIDATE(outputTypes != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(inputTypes != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_ASSERT(outputTypes != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(inputTypes != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
         outputTypes[0] = inputTypes[0];
         return pluginStatus_t::STATUS_SUCCESS;
     }
@@ -371,31 +371,31 @@ int32_t SkipLayerNormPluginV3::onShapeChange(
         BERT_DEBUG_MSG("SkipLayerNormPluginV3 onShapeChange");
 
         // Validate input arguments
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 2);
         if (mType == DataType::kFLOAT || mType == DataType::kHALF)
         {
-            PLUGIN_VALIDATE(mType == inputs[0].type);
-            PLUGIN_VALIDATE(mType == inputs[1].type);
+            PLUGIN_ASSERT(mType == inputs[0].type);
+            PLUGIN_ASSERT(mType == inputs[1].type);
         }
         else
         {
-            PLUGIN_VALIDATE(mType == inputs[0].type || DataType::kFLOAT == inputs[0].type);
-            PLUGIN_VALIDATE(mType == inputs[1].type || DataType::kFLOAT == inputs[1].type);
+            PLUGIN_ASSERT(mType == inputs[0].type || DataType::kFLOAT == inputs[0].type);
+            PLUGIN_ASSERT(mType == inputs[1].type || DataType::kFLOAT == inputs[1].type);
         }
         auto const& inDims0 = inputs[0].dims;
         auto const& inDims1 = inputs[1].dims;
-        PLUGIN_VALIDATE(inDims0.nbDims == inDims1.nbDims);
+        PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
 
-        PLUGIN_VALIDATE(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+        PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
-        PLUGIN_VALIDATE(inDims0.nbDims == 5);
+        PLUGIN_ASSERT(inDims0.nbDims == 5);
         mLd = inDims0.d[HDIM]; // hiddensize
-        PLUGIN_VALIDATE(mLd != 0);
-        PLUGIN_VALIDATE(inDims0.d[3] == 1);
-        PLUGIN_VALIDATE(inDims0.d[4] == 1);
+        PLUGIN_ASSERT(mLd != 0);
+        PLUGIN_ASSERT(inDims0.d[3] == 1);
+        PLUGIN_ASSERT(inDims0.d[4] == 1);
 
         mCfgType = inputs[0].type == DataType::kINT8 ? DataType::kHALF : inputs[0].type;
 
@@ -623,10 +623,10 @@ int32_t SkipLayerNormVarSeqlenPluginV3::getOutputShapes(DimsExprs const* inputs,
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(inputs[0].nbDims == inputs[1].nbDims);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
         outputs[0] = inputs[0];
         return pluginStatus_t::STATUS_SUCCESS;
     }
@@ -642,10 +642,10 @@ bool SkipLayerNormVarSeqlenPluginV3::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(pos >= 0 && pos < (nbInputs + nbOutputs));
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(pos >= 0 && pos < (nbInputs + nbOutputs));
 
         PluginTensorDesc const& in = inOut[pos].desc;
 
@@ -702,10 +702,10 @@ int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const
     int32_t status = -1;
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const inputVolume = volume(inputDesc[0].dims);
-        PLUGIN_VALIDATE(inputVolume % mLd == 0 && "inconsistent dimensions");
+        PLUGIN_ASSERT(inputVolume % mLd == 0 && "inconsistent dimensions");
         DataType iType = inputDesc->type;
 
         // Our plugin outputs only one tensor
@@ -752,7 +752,7 @@ int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const
         {
             float const dqScaleIn = inputDesc[0].scale;
             float const dqScaleSkip = inputDesc[1].scale;
-            PLUGIN_VALIDATE(outputDesc[0].scale != 0.0F);
+            PLUGIN_ASSERT(outputDesc[0].scale != 0.0F);
             float const qScale = 1.F / outputDesc[0].scale;
             auto const* const input = static_cast<int8_t const*>(inputs[0]);
             auto const* const skip = static_cast<int8_t const*>(inputs[1]);
@@ -773,8 +773,9 @@ int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const
         }
         else
         {
-            PLUGIN_ERROR("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
+            PLUGIN_FAIL(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
+                            .c_str());
         }
     }
     catch (std::exception const& e)
@@ -789,10 +790,10 @@ int32_t SkipLayerNormVarSeqlenPluginV3::getOutputDataTypes(
 {
     try
     {
-        PLUGIN_VALIDATE(outputTypes != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(inputTypes != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_ASSERT(outputTypes != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(inputTypes != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
         outputTypes[0] = inputTypes[0];
         return pluginStatus_t::STATUS_SUCCESS;
     }
@@ -876,26 +877,26 @@ int32_t SkipLayerNormVarSeqlenPluginV3::onShapeChange(
     try
     {
         // Validate input arguments
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 2);
 
         if (mType == DataType::kFLOAT || mType == DataType::kHALF)
         {
-            PLUGIN_VALIDATE(mType == inputs[0].type);
-            PLUGIN_VALIDATE(mType == inputs[1].type);
+            PLUGIN_ASSERT(mType == inputs[0].type);
+            PLUGIN_ASSERT(mType == inputs[1].type);
         }
         else
         {
-            PLUGIN_VALIDATE(mType == inputs[0].type || DataType::kFLOAT == inputs[0].type);
-            PLUGIN_VALIDATE(mType == inputs[1].type || DataType::kFLOAT == inputs[1].type);
+            PLUGIN_ASSERT(mType == inputs[0].type || DataType::kFLOAT == inputs[0].type);
+            PLUGIN_ASSERT(mType == inputs[1].type || DataType::kFLOAT == inputs[1].type);
         }
         auto const& inDims0 = inputs[0].dims;
         auto const& inDims1 = inputs[1].dims;
-        PLUGIN_VALIDATE(inDims0.nbDims == inDims1.nbDims);
+        PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
 
-        PLUGIN_VALIDATE(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+        PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
         mCfgType = inputs[0].type == DataType::kINT8 ? DataType::kHALF : inputs[0].type;
 

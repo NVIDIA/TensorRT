@@ -18,6 +18,7 @@
 #ifndef PARSER_ONNX_CONFIG_H
 #define PARSER_ONNX_CONFIG_H
 
+#if TRT_BUILD_ONNX_PARSER
 
 #include <cstring>
 #include <iostream>
@@ -143,4 +144,5 @@ public:
     }
 }; // class ParserOnnxConfig
 
+#endif // TRT_BUILD_ONNX_PARSER
 #endif // PARSER_ONNX_CONFIG_H

@@ -283,20 +283,6 @@ class Logger:
         self._run_callbacks()
 
     @property
-    def severity(self):
-        print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.50.0. Use `module_severity` instead"
-        )
-        return self._module_severity.get()
-
-    @severity.setter
-    def severity(self, value):
-        print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.50.0. Use `module_severity` instead"
-        )
-        self.module_severity = value
-
-    @property
     def use_python_logging_system(self):
         return self._use_python_logging_system
 

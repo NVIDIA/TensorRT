@@ -311,7 +311,7 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const batchSize = inputDesc->dims.d[BDIM];
         int32_t const S = inputDesc->dims.d[SDIM];

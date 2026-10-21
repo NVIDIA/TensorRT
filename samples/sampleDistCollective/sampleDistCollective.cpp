@@ -40,11 +40,6 @@
 
 #include "common.h"
 #include "logger.h"
-#include "sampleDevice.h"
-#include "sampleEngines.h"
-#include "sampleInference.h"
-#include "sampleOptions.h"
-#include "sampleReporting.h"
 
 using namespace nvinfer1;
 using namespace sample;
@@ -67,6 +62,7 @@ typedef struct ncclComm* ncclComm_t;
 std::function<ncclResult_t(ncclUniqueId*)> pNcclGetUniqueId{};
 std::function<ncclResult_t(ncclComm_t*, int, ncclUniqueId, int)> pNcclCommInitRank{};
 std::function<ncclResult_t(ncclComm_t)> pNcclCommDestroy{};
+std::function<char const*(ncclResult_t)> pNcclGetErrorString{};
 // MD code end
 
 using namespace std;
@@ -76,6 +72,11 @@ using namespace std;
     do                                                                                                                 \
     {                                                                                                                  \
         ncclResult_t const r = (cmd);                                                                                  \
+        if (r != ncclSuccess && pNcclGetErrorString)                                                                   \
+        {                                                                                                              \
+            sample::gLogError << "NCCL call failed: " << #cmd << " returned " << static_cast<int>(r)                  \
+                               << " (" << pNcclGetErrorString(r) << ")" << std::endl;                                 \
+        }                                                                                                              \
         ASSERT(r == ncclSuccess);                                                                                      \
     } while (0)
 
@@ -116,10 +117,6 @@ std::function<void*(void*, void*, int32_t)> pCreateInferRefitterInternal{};
 std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxRefitterInternal{};
-
-//! Track runtime used for the execution of trtexec.
-//! Must be tracked as a global variable due to how library init functions APIs are organized.
-RuntimeMode gUseRuntime = RuntimeMode::kFULL;
 
 #if !TRT_STATIC
 template <typename FetchPtrs>
@@ -167,12 +164,9 @@ bool initNvinfer()
             sample::gLogWarning << "Could not load function createInferRefitter_INTERNAL : " << e.what() << std::endl;
         }
 
-        if (gUseRuntime == RuntimeMode::kFULL)
-        {
-            pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
-        }
+        pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
     };
-    return initLibrary(libnvinferPtr, sample::getRuntimeLibraryName(gUseRuntime), fetchPtrs);
+    return initLibrary(libnvinferPtr, kNVINFER_LIBNAME, fetchPtrs);
 #else
     pCreateInferRuntimeInternal = createInferRuntime_INTERNAL;
     pCreateInferRefitterInternal = createInferRefitter_INTERNAL;
@@ -209,12 +203,20 @@ bool initNccl()
         pNcclCommInitRank
             = l->symbolAddress<ncclResult_t(ncclComm_t*, int, ncclUniqueId, int)>("ncclCommInitRank");
         pNcclCommDestroy = l->symbolAddress<ncclResult_t(ncclComm_t)>("ncclCommDestroy");
+        try
+        {
+            pNcclGetErrorString = l->symbolAddress<char const*(ncclResult_t)>("ncclGetErrorString");
+        }
+        catch (std::exception const&)
+        {
+        }
     };
     return initLibrary(libncclPtr, "nccl.dll", fetchPtrs);
 #else
     pNcclGetUniqueId = ::ncclGetUniqueId;
     pNcclCommInitRank = ::ncclCommInitRank;
     pNcclCommDestroy = ::ncclCommDestroy;
+    pNcclGetErrorString = ::ncclGetErrorString;
     return true;
 #endif
 }

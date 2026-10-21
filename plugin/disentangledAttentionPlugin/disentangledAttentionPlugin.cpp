@@ -148,10 +148,10 @@ int32_t DisentangledAttentionPlugin::getOutputShapes(DimsExprs const* inputs, in
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 3);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 3);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == 1);
 
         // Output has the same shape as the first input
         outputs[0] = inputs[0];
@@ -170,17 +170,17 @@ int32_t DisentangledAttentionPlugin::configurePlugin(
 {
     try
     {
-        PLUGIN_VALIDATE(in != nullptr && out != nullptr && nbInputs == 3 && nbOutputs == 1);
+        PLUGIN_ASSERT(in != nullptr && out != nullptr && nbInputs == 3 && nbOutputs == 1);
 
         // Validate input and output shapes
         for (int32_t i = 0; i < nbInputs; i++)
         {
-            PLUGIN_VALIDATE(in[i].desc.dims.nbDims == in[0].desc.dims.nbDims);
+            PLUGIN_ASSERT(in[i].desc.dims.nbDims == in[0].desc.dims.nbDims);
         }
 
         // Check data types are consistent
-        PLUGIN_VALIDATE(in[0].desc.type == in[1].desc.type && in[0].desc.type == in[2].desc.type);
-        PLUGIN_VALIDATE(out[0].desc.type == in[0].desc.type);
+        PLUGIN_ASSERT(in[0].desc.type == in[1].desc.type && in[0].desc.type == in[2].desc.type);
+        PLUGIN_ASSERT(out[0].desc.type == in[0].desc.type);
 
         return STATUS_SUCCESS;
     }
@@ -196,8 +196,8 @@ int32_t DisentangledAttentionPlugin::getOutputDataTypes(
 {
     try
     {
-        PLUGIN_VALIDATE(inputTypes != nullptr && outputTypes != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 3 && nbOutputs == 1);
+        PLUGIN_ASSERT(inputTypes != nullptr && outputTypes != nullptr);
+        PLUGIN_ASSERT(nbInputs == 3 && nbOutputs == 1);
 
         // Output has the same data type as the first input
         outputTypes[0] = inputTypes[0];
@@ -296,20 +296,20 @@ int32_t DisentangledAttentionPlugin::onShapeChange(
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr && outputs != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 3 && nbOutputs == 1);
+        PLUGIN_ASSERT(inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 3 && nbOutputs == 1);
 
         // Check that all inputs have the same data type
         DataType dataType = inputs[0].type;
-        PLUGIN_VALIDATE(inputs[1].type == dataType && inputs[2].type == dataType);
+        PLUGIN_ASSERT(inputs[1].type == dataType && inputs[2].type == dataType);
 
         // Check that output has the same data type
-        PLUGIN_VALIDATE(outputs[0].type == dataType);
+        PLUGIN_ASSERT(outputs[0].type == dataType);
 
         // Validate dimensions
-        PLUGIN_VALIDATE(inputs[0].dims.nbDims == inputs[1].dims.nbDims);
-        PLUGIN_VALIDATE(inputs[0].dims.nbDims == inputs[2].dims.nbDims);
-        PLUGIN_VALIDATE(outputs[0].dims.nbDims == inputs[0].dims.nbDims);
+        PLUGIN_ASSERT(inputs[0].dims.nbDims == inputs[1].dims.nbDims);
+        PLUGIN_ASSERT(inputs[0].dims.nbDims == inputs[2].dims.nbDims);
+        PLUGIN_ASSERT(outputs[0].dims.nbDims == inputs[0].dims.nbDims);
 
         return STATUS_SUCCESS;
     }

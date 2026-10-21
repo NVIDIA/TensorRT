@@ -373,7 +373,7 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
@@ -445,7 +445,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
@@ -576,8 +576,8 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::getOutputShapes(DimsExprs const* input
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
 
         // Input should be input ids and token ids and cumulative seqlens
         // Output should be the embeddings tensor and mask indices
@@ -614,8 +614,8 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::getOutputShapes(DimsExprs const* input
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
         // Input should be input ids and token ids and cumulative seqlens
         // Output should be the embeddings tensor and mask indices
         PLUGIN_ASSERT(nbInputs == 4);

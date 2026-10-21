@@ -40,7 +40,7 @@ equivalents of each loader. Each functional variant uses the same name as the lo
 
 ```python
 parse_network = NetworkFromOnnxPath("/path/to/model.onnx")
-create_config = CreateConfig(fp16=True, tf32=True)
+create_config = CreateConfig(tf32=True)
 build_engine = EngineFromNetwork(parse_network, create_config)
 engine = build_engine()
 ```
@@ -49,14 +49,14 @@ becomes:
 
 ```python
 builder, network, parser = network_from_onnx_path("/path/to/model.onnx")
-config = create_config(builder, network, fp16=True, tf32=True)
+config = create_config(builder, network, tf32=True)
 engine = engine_from_network((builder, network, parser), config)
 ```
 <!-- Polygraphy Test: Ignore End -->
 
 
 In this example, we'll look at how you can leverage the functional API to convert an ONNX
-model to a TensorRT network, modify the network, build a TensorRT engine with FP16 precision
+model to a TensorRT network, modify the network, build a TensorRT engine with TF32 precision
 enabled, and run inference.
 We'll also save the engine to a file to see how you can load it again and run inference.
 

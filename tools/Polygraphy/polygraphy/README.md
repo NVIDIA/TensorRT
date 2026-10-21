@@ -114,7 +114,7 @@ This process is divided into two phases:
     run_results = Comparator.run(runners)
     ```
 
-    This function accepts a list of runners and returns a `RunResults` object (see [Comparator.py](./comparator/comparator.py))
+    This function accepts a list of runners and returns a `RunResults` object (see [struct.py](./comparator/struct.py))
     containing the inference outputs of each run.
     It also accepts an optional `data_loader` argument to control the input data. If not provided, it will use the
     default data loader. `Comparator.run()` continues until inputs from the data loader are exhausted.

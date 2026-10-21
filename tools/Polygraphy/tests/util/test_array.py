@@ -242,7 +242,7 @@ class TestArrayMathFuncs:
             (
                 util.array.where,
                 np.where,
-                tuple(map(DataType.from_dtype, (np.bool8, np.float32, np.float32))),
+                tuple(map(DataType.from_dtype, (np.bool_, np.float32, np.float32))),
             ),
         ],
     )

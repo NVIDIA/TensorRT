@@ -1,4 +1,4 @@
-# Inspect
+# Data
 
 ## Table of Contents
 
@@ -14,7 +14,8 @@ The `data` tool can be used to manipulate input and output data created by Polyg
 
 ## Subtools
 
-- `to-input` has two functions:
+- `concat` concatenates iterations from one or more input/output files into a single file
+- `merge` has two functions:
     1. Converts outputs written by `--save-outputs` to `feed_dict`s compatible with `--load-inputs`
     2. Merges outputs written by `--save-outputs` with inputs written by `--save-inputs` into `feed_dict`s compatible with `--load-inputs`
 

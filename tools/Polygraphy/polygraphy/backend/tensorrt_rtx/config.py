@@ -31,12 +31,7 @@ class CreateConfigRTX(_CreateConfigCommon):
     """
 
     @inherit_and_extend_docstring(_CreateConfigCommon.__init__)
-    def __init__(
-        self,
-        use_gpu=None,
-        compute_capabilities=None,
-        **kwargs
-    ):
+    def __init__(self, use_gpu=None, compute_capabilities=None, **kwargs):
         """
         Creates an IBuilderConfig with TensorRT-RTX specific features.
 
@@ -56,7 +51,9 @@ class CreateConfigRTX(_CreateConfigCommon):
         self.compute_capabilities = compute_capabilities
 
         if self.use_gpu and self.compute_capabilities:
-            G_LOGGER.critical("use_gpu and compute_capabilities are mutually exclusive.")
+            G_LOGGER.critical(
+                "use_gpu and compute_capabilities are mutually exclusive."
+            )
 
         self._validator()
 
@@ -66,15 +63,19 @@ class CreateConfigRTX(_CreateConfigCommon):
         """
         if self.use_gpu or self.compute_capabilities is not None:
             if not polygraphy_config.USE_TENSORRT_RTX:
-                G_LOGGER.critical("--compute-capabilities and --use-gpu settings are only supported with USE_TENSORRT_RTX=1.")
-            
+                G_LOGGER.critical(
+                    "--compute-capabilities and --use-gpu settings are only supported with USE_TENSORRT_RTX=1."
+                )
+
             # Validate compute capabilities format and availability
             if self.compute_capabilities:
                 for major, minor in self.compute_capabilities:
                     cap_name = f"SM{major}{minor}"
                     if not hasattr(trt.ComputeCapability, cap_name):
-                        G_LOGGER.critical(f"Compute capability {major}.{minor} ({cap_name})"
-                                           " not supported by this TensorRT-RTX version.")
+                        G_LOGGER.critical(
+                            f"Compute capability {major}.{minor} ({cap_name})"
+                            " not supported by this TensorRT-RTX version."
+                        )
 
     def _configure_flags(self, builder, network, config):
         """
@@ -92,17 +93,23 @@ class CreateConfigRTX(_CreateConfigCommon):
                     # Use current GPU device
                     config.num_compute_capabilities = 1
                     config.set_compute_capability(trt.ComputeCapability.CURRENT, 0)
-                    G_LOGGER.info("Using current GPU device for engine compilation (ComputeCapability.CURRENT)")
+                    G_LOGGER.info(
+                        "Using current GPU device for engine compilation (ComputeCapability.CURRENT)"
+                    )
                 elif self.compute_capabilities:
                     # Set specific compute capabilities
                     config.num_compute_capabilities = len(self.compute_capabilities)
-                    G_LOGGER.info(f"Setting {len(self.compute_capabilities)} target compute capabilities: {self.compute_capabilities}")
+                    G_LOGGER.info(
+                        f"Setting {len(self.compute_capabilities)} target compute capabilities: {self.compute_capabilities}"
+                    )
                     for i, (major, minor) in enumerate(self.compute_capabilities):
                         cap_name = f"SM{major}{minor}"
                         compute_cap = getattr(trt.ComputeCapability, cap_name)
                         config.set_compute_capability(compute_cap, i)
             except Exception as e:
-                G_LOGGER.critical(f"Failed to set compute capabilities: {e}. You are likely not using a TensorRT-RTX build.")
+                G_LOGGER.critical(
+                    f"Failed to set compute capabilities: {e}. You are likely not using a TensorRT-RTX build."
+                )
 
     @util.check_called_by("__call__")
     def call_impl(self, builder, network):

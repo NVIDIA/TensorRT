@@ -32,7 +32,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="append",
         nargs="+",
         metavar="PATH",
-        help="Explicit backend input. Use --data layers.json for layer-only analysis or --data layers.json profile.json for a layer/profile pair. Repeat for multiple backends.",
+        help="Explicit backend input as --data layer-info.json profile.json. Repeat for multiple backends.",
     )
     parser.add_argument(
         "--model-name",

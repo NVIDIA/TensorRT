@@ -17,6 +17,7 @@
 
 from polygraphy import config, mod
 
+
 def tensorrt_module_and_version_string():
     """
     Returns the name of the TensorRT module to import. This selects between
@@ -28,10 +29,11 @@ def tensorrt_module_and_version_string():
     else:
         return "tensorrt>=8.5"
 
+
 def lazy_import_trt():
     """
     Returns either tensorrt or tensorrt_rtx based on config.USE_TENSORRT_RTX.
-    
+
     Prefer to use this function instead of mod.lazy_import("tensorrt>=8.5") to
     import TensorRT, so that your code can use TensorRT-RTX.
     """

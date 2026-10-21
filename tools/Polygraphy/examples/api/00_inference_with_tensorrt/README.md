@@ -8,7 +8,7 @@ and run inference with various backends. For an overview of the Polygraphy
 Python API, see [here](../../../polygraphy/).
 
 In this example, we'll look at how you can leverage the API to easily convert an ONNX
-model to TensorRT and run inference with FP16 precision enabled. We'll then save the
+model to TensorRT and run inference with TF32 precision enabled. We'll then save the
 engine to a file and see how you can load it again and run inference.
 
 

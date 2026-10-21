@@ -19,10 +19,11 @@ import contextlib
 import os
 from textwrap import dedent
 
-import polygraphy.tools.args.util as args_util
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
+
+import polygraphy.tools.args.util as args_util
+from polygraphy import config, mod, util
 from polygraphy.backend.trt import (
     TacticRecorder,
     TacticReplayData,
@@ -41,6 +42,14 @@ def trt_config_args():
         TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True),
         deps=[ModelArgs(), DataLoaderArgs()],
     )
+
+
+# INT8 calibration (IInt8* calibrators) and the FP16/INT8 precision BuilderFlags
+# were removed in TensorRT 11, so tests that exercise them are skipped there.
+skip_if_trt_11 = pytest.mark.skipif(
+    mod.version(trt.__version__) >= mod.version("11.0"),
+    reason="INT8 calibration and FP16/INT8 BuilderFlags were removed in TRT 11",
+)
 
 
 class TestTrtConfigArgs:
@@ -80,6 +89,19 @@ class TestTrtConfigArgs:
             trt.__version__
         ) < mod.version("9.0"):
             pytest.skip("BF16 support was added in 9.0")
+        if flag in (
+            "FP16",
+            "INT8",
+            "BF16",
+            "FP8",
+            "OBEY_PRECISION_CONSTRAINTS",
+            "PREFER_PRECISION_CONSTRAINTS",
+        ) and mod.version(trt.__version__) >= mod.version("11.0"):
+            pytest.skip(f"{flag} BuilderFlag was removed in TRT 11")
+
+        # allow_gpu_fallback is only supported if use_dla is also set
+        if flag == "GPU_FALLBACK":
+            args.append("--use-dla")
 
         trt_config_args.parse_args(args)
 
@@ -111,7 +133,7 @@ class TestTrtConfigArgs:
             assert config.engine_capability == expected
 
     def test_dla(self, trt_config_args):
-        trt_config_args.parse_args(["--use-dla"])
+        trt_config_args.parse_args(["--use-dla", "--allow-gpu-fallback"])
         assert trt_config_args.use_dla
 
         builder, network = create_network()
@@ -122,8 +144,9 @@ class TestTrtConfigArgs:
             if has_dla():
                 assert config.DLA_core == 0
 
+    @skip_if_trt_11
     def test_calibrator_when_dla(self, trt_config_args):
-        trt_config_args.parse_args(["--use-dla", "--int8"])
+        trt_config_args.parse_args(["--use-dla", "--int8", "--allow-gpu-fallback"])
 
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(
@@ -162,6 +185,10 @@ class TestTrtConfigArgs:
         ) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, "WEIGHT_STREAMING"))
 
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="TacticRecorder/TacticReplayer rely on the algorithm selector API, removed in TRT 11",
+    )
     @pytest.mark.parametrize(
         "opt, cls",
         [
@@ -183,40 +210,53 @@ class TestTrtConfigArgs:
                 assert selector.make_func == cls
                 assert selector.path == f.name
 
+    # Expected bitmasks are computed from the live enum values (the config builder
+    # uses 1 << int(source)), so they stay correct regardless of how a given TRT
+    # version numbers the TacticSource bits.
+    def _ts_bit(name):
+        source = getattr(trt.TacticSource, name, None)
+        return (1 << int(source)) if source is not None else 0
+
+    _EDGE = _ts_bit("EDGE_MASK_CONVOLUTIONS")
+    _JIT = _ts_bit("JIT_CONVOLUTIONS")
+
+    # EDGE_MASK_CONVOLUTIONS / JIT_CONVOLUTIONS survive on every supported TRT version.
     TACTIC_SOURCES_CASES = [
-        ([], 31),  # By default, all sources are enabled.
+        ([], 31),  # By default, all available sources are enabled (fixed up below).
         (["--tactic-sources"], 0),
-        (["--tactic-sources", "CUBLAS"], 1),
-        (["--tactic-sources", "CUBLAS_LT"], 2),
-        (["--tactic-sources", "CUDNN"], 4),
-        (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
-        (["--tactic-sources", "CUBLAS", "cuDNN"], 5),
-        (["--tactic-sources", "CUBLAS_LT", "CUDNN"], 6),
-        (["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT"], 7),
+        (["--tactic-sources", "edge_mask_convolutions"], _EDGE),
+        (["--tactic-sources", "jit_convolutions"], _JIT),
+        # Names are not case sensitive.
         (
-            [
-                "--tactic-sources",
-                "CUDNN",
-                "cuBLAS",
-                "CUBLAS_LT",
-                "edge_mask_convolutions",
-            ],
-            15,
-        ),
-        (
-            [
-                "--tactic-sources",
-                "CUDNN",
-                "cuBLAS",
-                "CUBLAS_LT",
-                "edge_mask_convolutions",
-                "jit_convolutions",
-            ],
-            31,
+            ["--tactic-sources", "EDGE_mask_CONVOLUTIONS", "jit_convolutions"],
+            _EDGE | _JIT,
         ),
     ]
 
-    if mod.version(trt.__version__) >= mod.version("10.0"):
+    # CUBLAS / CUBLAS_LT / CUDNN were removed in TRT 11; only exercise them where present.
+    if all(hasattr(trt.TacticSource, n) for n in ("CUBLAS", "CUBLAS_LT", "CUDNN")):
+        _CUBLAS, _CUBLAS_LT, _CUDNN = (
+            _ts_bit("CUBLAS"),
+            _ts_bit("CUBLAS_LT"),
+            _ts_bit("CUDNN"),
+        )
+        TACTIC_SOURCES_CASES += [
+            (["--tactic-sources", "CUBLAS"], _CUBLAS),
+            (["--tactic-sources", "CUBLAS_LT"], _CUBLAS_LT),
+            (["--tactic-sources", "CUDNN"], _CUDNN),
+            (["--tactic-sources", "CUblAS", "cublas_lt"], _CUBLAS | _CUBLAS_LT),
+            (["--tactic-sources", "CUBLAS", "cuDNN"], _CUBLAS | _CUDNN),
+            (["--tactic-sources", "CUBLAS_LT", "CUDNN"], _CUBLAS_LT | _CUDNN),
+            (
+                ["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT"],
+                _CUBLAS | _CUBLAS_LT | _CUDNN,
+            ),
+        ]
+
+    # The set of tactic sources enabled by default differs across versions.
+    if mod.version(trt.__version__) >= mod.version("11.0"):
+        TACTIC_SOURCES_CASES[0] = ([], _EDGE | _JIT)
+    elif mod.version(trt.__version__) >= mod.version("10.0"):
         TACTIC_SOURCES_CASES[0] = ([], 24)
     elif mod.version(trt.__version__) >= mod.version("8.7"):
         TACTIC_SOURCES_CASES[0] = ([], 29)
@@ -246,6 +286,7 @@ class TestTrtConfigArgs:
                 getattr(trt.BuilderFlag, "ERROR_ON_TIMING_CACHE_MISS")
             )
 
+    @skip_if_trt_11
     @pytest.mark.parametrize(
         "base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"]
     )
@@ -259,6 +300,7 @@ class TestTrtConfigArgs:
         ) as config:
             assert isinstance(config.int8_calibrator, getattr(trt, base_class))
 
+    @skip_if_trt_11
     def test_legacy_calibrator_params(self, trt_config_args):
         quantile = 0.25
         regression_cutoff = 0.9
@@ -282,6 +324,7 @@ class TestTrtConfigArgs:
             assert config.int8_calibrator.get_quantile() == quantile
             assert config.int8_calibrator.get_regression_cutoff() == regression_cutoff
 
+    @skip_if_trt_11
     def test_no_deps_profiles_int8(self, trt_config_args):
         trt_config_args.parse_args(
             [
@@ -327,7 +370,7 @@ class TestTrtConfigArgs:
 
                     @func.extend(CreateConfig())
                     def my_load_config(config):
-                        config.set_flag(trt.BuilderFlag.FP16)
+                        config.set_flag(trt.BuilderFlag.TF32)
                     """
                 )
             )
@@ -345,7 +388,7 @@ class TestTrtConfigArgs:
                 builder, network
             ) as config:
                 assert isinstance(config, trt.IBuilderConfig)
-                assert config.get_flag(trt.BuilderFlag.FP16)
+                assert config.get_flag(trt.BuilderFlag.TF32)
 
     def test_config_postprocess_script_default_func(self, trt_config_args):
         trt_config_args.parse_args(["--trt-config-postprocess-script", "example.py"])
@@ -359,7 +402,7 @@ class TestTrtConfigArgs:
                     import tensorrt as trt
 
                     def my_postprocess_config(builder, network, config):
-                        config.set_flag(trt.BuilderFlag.FP16)
+                        config.set_flag(trt.BuilderFlag.TF32)
                     """
                 )
             )
@@ -370,7 +413,7 @@ class TestTrtConfigArgs:
                 [
                     "--trt-config-postprocess-script",
                     f"{f.name}:my_postprocess_config",
-                    "--int8",
+                    "--direct-io",
                 ]
             )
             assert trt_config_args.trt_config_postprocess_script == f.name
@@ -384,8 +427,8 @@ class TestTrtConfigArgs:
                 builder, network
             ) as config:
                 assert isinstance(config, trt.IBuilderConfig)
-                assert config.get_flag(trt.BuilderFlag.FP16)
-                assert config.get_flag(trt.BuilderFlag.INT8)
+                assert config.get_flag(trt.BuilderFlag.TF32)
+                assert config.get_flag(trt.BuilderFlag.DIRECT_IO)
 
     @pytest.mark.parametrize(
         "args",
@@ -480,9 +523,13 @@ class TestTrtConfigArgs:
         "preview_features",
         [
             (
-                ["PROFILE_SHAriNG_0806"]
-                if mod.version(trt.__version__) >= mod.version("10.0")
-                else ["FASter_DYNAMIC_ShAPeS_0805"]
+                ["ALiaseD_PLUGiN_IO_10_03"]
+                if mod.version(trt.__version__) >= mod.version("11.0")
+                else (
+                    ["PROFILE_SHAriNG_0806"]
+                    if mod.version(trt.__version__) >= mod.version("10.0")
+                    else ["FASter_DYNAMIC_ShAPeS_0805"]
+                )
             ),
         ],
     )
@@ -502,6 +549,10 @@ class TestTrtConfigArgs:
                     name in sanitized_preview_features
                 )
 
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="TensorRT-RTX and TRT 11.0 and newer do not support quantization_flag API",
+    )
     @pytest.mark.parametrize(
         "quantization_flags",
         [
@@ -572,8 +623,22 @@ class TestTrtConfigArgs:
             "platform, expected",
             [
                 ("same_as_build", trt.RuntimePlatform.SAME_AS_BUILD),
-                ("windows_amd64", trt.RuntimePlatform.WINDOWS_AMD64),
-                ("Windows_AMD64", trt.RuntimePlatform.WINDOWS_AMD64),
+                pytest.param(
+                    "windows_amd64",
+                    trt.RuntimePlatform.WINDOWS_AMD64,
+                    marks=pytest.mark.skipif(
+                        not config.USE_TENSORRT_RTX,
+                        reason="TensorRT-RTX not enabled",
+                    ),
+                ),
+                pytest.param(
+                    "Windows_AMD64",
+                    trt.RuntimePlatform.WINDOWS_AMD64,
+                    marks=pytest.mark.skipif(
+                        not config.USE_TENSORRT_RTX,
+                        reason="TensorRT-RTX not enabled",
+                    ),
+                ),
             ],
         )
         def test_runtime_platform(self, trt_config_args, platform, expected):
@@ -656,8 +721,9 @@ class TestTrtConfigArgs:
             builder, network=network
         ) as config:
             assert config.profiling_verbosity == expected
-    
+
     if mod.version(trt.__version__) >= mod.version("10.8"):
+
         @pytest.mark.parametrize(
             "level, expected",
             [

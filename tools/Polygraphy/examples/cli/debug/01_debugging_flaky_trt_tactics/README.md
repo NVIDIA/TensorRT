@@ -80,9 +80,9 @@ For more details on how the `debug` tools work, see the help output:
 
     <!-- Polygraphy Test: Ignore Start -->
     ```
-    [I] Loaded 2 good tactic replays.
+    [I] Loaded 10 good tactic replays.
     [I] Loaded 0 bad tactic replays.
-    [I] Could not determine potentially bad tactics. Try generating more tactic replay files?
+    [I] Could not determine potentially bad tactics. Try providing more tactic replay files if possible.
     ```
     <!-- Polygraphy Test: Ignore End -->
 

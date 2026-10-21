@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 import contextlib
+import fnmatch
 import json
 import os
 import re
 import signal
-
+import math
 from polygraphy import config, mod, util, cuda
 from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.common import TensorMetadata
+from polygraphy.common import FormattedArray
 from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
@@ -164,6 +166,10 @@ def get_layer_class_mapping():
     try_add("DYNAMIC_QUANTIZE", "IDynamicQuantizeLayer")
     try_add("ATTENTION_INPUT", "IAttentionInputLayer")
     try_add("ATTENTION_OUTPUT", "IAttentionOutputLayer")
+    try_add("ROTARY_EMBEDDING", "IRotaryEmbeddingLayer")
+    try_add("KV_CACHE_UPDATE", "IKVCacheUpdateLayer")
+    try_add("MOE", "IMoELayer")
+    try_add("DIST_COLLECTIVE", "IDistCollectiveLayer")
 
     return layer_class_mapping
 
@@ -265,7 +271,7 @@ def get_layer_attribute_names(layer):
 
 def str_from_network(network, show_layers=None, show_attrs=None, show_weights=None):
     """
-    Converts a TensorRT network to a human-readable representation
+    Converts a TensorRT network to a human-readable representation.
 
     Args:
         network (trt.INetworkDefinition): The network.
@@ -276,52 +282,22 @@ def str_from_network(network, show_layers=None, show_attrs=None, show_weights=No
     Returns:
         str
     """
+    from polygraphy.tools.inspect.subtool.model.extractors import (
+        graph_data_from_trt_network,
+    )
+    from polygraphy.tools.inspect.subtool.model.text import str_from_graph_data
+
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
     show_weights = util.default(show_weights, False)
 
-    LAYER_TYPE_CLASS_MAPPING = get_layer_class_mapping()
-
-    network_str = f"Name: {network.name} | {'Implicit' if hasattr(network, 'has_implicit_batch_dimension') and network.has_implicit_batch_dimension else 'Explicit'} Batch{' Strongly Typed' if hasattr(network, 'get_flag') and network.get_flag(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED) else ''} Network\n"
-    network_str += "\n"
-
-    _, input_metadata = get_network_input_names_meta(network)
-    network_str += (
-        f"---- {len(input_metadata)} Network Input(s) ----\n{input_metadata}\n\n"
+    graph_data = graph_data_from_trt_network(network, show_weights=show_weights)
+    return str_from_graph_data(
+        graph_data,
+        show_layers=show_layers,
+        show_attrs=show_attrs,
+        show_weights=show_weights,
     )
-    _, output_metadata = get_network_output_names_meta(network)
-    network_str += (
-        f"---- {len(output_metadata)} Network Output(s) ----\n{output_metadata}\n\n"
-    )
-    network_str += f"---- {network.num_layers} Layer(s) ----\n"
-    if show_layers:
-        for index, layer in enumerate(network):
-            if layer.type in LAYER_TYPE_CLASS_MAPPING:
-                layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
-
-            network_str += str_from_layer(layer, index)
-
-            if show_attrs:
-                # Exclude special attributes, as well as any attributes of the base layer class (those can be displayed above).
-                attrs = get_layer_attribute_names(layer)
-                if attrs:
-                    network_str += util.indent_block("---- Attributes ----") + "\n"
-                for attr in attrs:
-                    with G_LOGGER.verbosity():
-                        try:
-                            val = getattr(layer, attr)
-                        except Exception as err:
-                            val = f"<Error: could not retrieve layer attribute: {attr}. Note: Error was: {err}>"
-                    if show_weights or not isinstance(val, np.ndarray):
-                        attr_str = ""
-                        if layer.name:
-                            attr_str += f"{layer.name}."
-                        network_str += (
-                            util.indent_block(f"{attr_str}{attr} = {val}") + "\n"
-                        )
-            network_str += "\n"
-
-    return util.indent_block(network_str, level=0)
 
 
 def get_all_tensors(network):
@@ -335,6 +311,29 @@ def get_all_tensors(network):
     return {t.name: t for t in all_tensors if t is not None}
 
 
+def get_all_io_tensors(network):
+    all_io_tensors = set()
+    for i in range(network.num_inputs):
+        all_io_tensors.add(network.get_input(i))
+    for i in range(network.num_outputs):
+        all_io_tensors.add(network.get_output(i))
+    return {t.name: t for t in all_io_tensors if t is not None}
+
+
+def _expand_wildcard_patterns(names, candidates):
+    """Expand fnmatch wildcard patterns in `names` against `candidates`."""
+    result = []
+    for name in names:
+        if any(c in name for c in ("*", "?", "[", "]")):
+            matches = fnmatch.filter(candidates, name)
+            if not matches:
+                G_LOGGER.warning(f"No tensors matched wildcard pattern: '{name}'")
+            result.extend(matches)
+        else:
+            result.append(name)
+    return result
+
+
 def mark_outputs(network, outputs):
     """
     Mark the specified outputs as network outputs.
@@ -342,10 +341,16 @@ def mark_outputs(network, outputs):
     Args:
         network (trt.INetworkDefinition): The network in which to mark outputs.
         outputs (Sequence[str]): The names of tensors to mark as outputs.
+            Supports fnmatch wildcard patterns (e.g. ``"conv_*"``).
     """
-    outputs = util.unique_list(outputs)
-
     tensor_map = get_all_tensors(network)
+    outputs = _expand_wildcard_patterns(outputs, list(tensor_map.keys()))
+    outputs = util.unique_list(outputs)
+    if not outputs:
+        G_LOGGER.critical(
+            "No outputs were selected. Please check your wildcard patterns."
+        )
+
     util.check_sequence_contains(
         tensor_map.keys(),
         outputs,
@@ -403,10 +408,56 @@ def mark_layerwise(network):
     mark_outputs(network, outputs)
 
 
+def mark_by_layer_type(network, layer_types):
+    """
+    Mark outputs of all layers whose type matches any of the given TRT layer type names (case-insensitive).
+
+    Args:
+        network (trt.INetworkDefinition): The TensorRT network.
+        layer_types (Sequence[str]): Layer type names to match against ``trt.LayerType`` enum values.
+            If a name does not match any enum value, a critical error is raised with suggestions.
+    """
+    import difflib
+
+    all_type_names = [
+        attr
+        for attr in dir(trt.LayerType)
+        if not attr.startswith("_")
+        and isinstance(getattr(trt.LayerType, attr), trt.LayerType)
+    ]
+    lower_to_canonical = {t.lower(): t for t in all_type_names}
+
+    outputs = []
+    for requested in layer_types:
+        canonical = lower_to_canonical.get(requested.lower())
+        if canonical is None:
+            similar = difflib.get_close_matches(
+                requested.upper(), all_type_names, n=5, cutoff=0.6
+            )
+            hint = (
+                f" Did you mean one of: {similar}?"
+                if similar
+                else f" Available layer types: {sorted(all_type_names)}"
+            )
+            G_LOGGER.critical(f"No TensorRT layer type '{requested}' was found.{hint}")
+        else:
+            target_type = getattr(trt.LayerType, canonical)
+            for layer in network:
+                if layer.type == target_type:
+                    for i in range(layer.num_outputs):
+                        tensor = layer.get_output(i)
+                        if tensor is not None:
+                            outputs.append(tensor.name)
+
+    if outputs:
+        mark_outputs(network, outputs)
+
+
 def unmark_outputs(network, outputs):
+    tensor_map = get_all_tensors(network)
+    outputs = _expand_wildcard_patterns(outputs, list(tensor_map.keys()))
     outputs = util.unique_list(outputs)
 
-    tensor_map = get_all_tensors(network)
     util.check_sequence_contains(
         tensor_map.keys(),
         outputs,
@@ -645,16 +696,14 @@ def get_tensor_format(engine, context, name):
         return engine.get_tensor_format(name)
 
 
-def get_hwc_shape_from_chw(shape, strides):
-    # The relative size (descending sorted order) of the strides should give the permutation to convert the shape
-    perm = sorted(range(len(strides)), key=strides.__getitem__, reverse=True)
-    return tuple([shape[i] for i in perm])
+def get_hwc_shape_from_chw(shape):
+    # Move 3rd-to-last dim to last, shifting last 2 dims earlier
+    return shape[:-3] + shape[-2:] + (shape[-3],)
 
 
-def get_chw_shape_from_hwc(shape, strides):
-    perm = sorted(range(len(strides)), key=strides.__getitem__, reverse=True)
-    inv_perm = sorted(range(len(perm)), key=perm.__getitem__)
-    return tuple([shape[i] for i in inv_perm])
+def get_chw_shape_from_hwc(shape):
+    # Move last dim to 3rd-to-last, shifting other dims later
+    return shape[:-3] + (shape[-1],) + shape[-3:-1]
 
 
 def get_metadata_from_engine(engine, context, mode):
@@ -667,7 +716,7 @@ def get_metadata_from_engine(engine, context, mode):
         shape = engine.get_tensor_shape(name)
         # If the input format is HWC, make sure the input is shaped accordingly
         if get_tensor_format(engine, context, name) == trt.TensorFormat.HWC:
-            shape = get_hwc_shape_from_chw(shape, context.get_tensor_strides(name))
+            shape = get_hwc_shape_from_chw(shape)
 
         meta.add(
             name=name,
@@ -721,206 +770,22 @@ class TensorInfo:
 def str_from_engine(
     engine, context, show_layers=None, show_attrs=None, combine_tensor_info=None
 ):
+    from polygraphy.tools.inspect.subtool.model.extractors import (
+        graph_data_from_trt_engine,
+    )
+    from polygraphy.tools.inspect.subtool.model.text import str_from_graph_data
+
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
 
-    num_io_tensors = engine.num_io_tensors
-
-    engine_str = f"Name: {engine.name} | {'Refittable ' if engine.refittable else ''}{'Implicit' if hasattr(engine, 'has_implicit_batch_dimension') and engine.has_implicit_batch_dimension else 'Explicit'} Batch Engine\n"
-    engine_str += "\n"
-
-    # Show metadata for the first profile (i.e. the dynamic shapes)
-    input_metadata = get_metadata_from_engine(
-        engine, context, mode=trt.TensorIOMode.INPUT
+    graph_data = graph_data_from_trt_engine(
+        engine, context, combine_tensor_info=combine_tensor_info
     )
-    output_metadata = get_metadata_from_engine(
-        engine, context, mode=trt.TensorIOMode.OUTPUT
+    return str_from_graph_data(
+        graph_data,
+        show_layers=show_layers,
+        show_attrs=show_attrs,
     )
-
-    engine_str += (
-        f"---- {len(input_metadata)} Engine Input(s) ----\n{input_metadata}\n\n"
-    )
-    engine_str += (
-        f"---- {len(output_metadata)} Engine Output(s) ----\n{output_metadata}\n\n"
-    )
-
-    engine_str += (
-        f"---- Memory ----\nDevice Memory: {engine.device_memory_size} bytes\n\n"
-    )
-
-    engine_str += f"---- {engine.num_optimization_profiles} Profile(s) ({num_io_tensors} Tensor(s) Each) ----\n"
-    for profile_index in range(engine.num_optimization_profiles):
-        engine_str += f"- Profile: {profile_index}\n"
-
-        max_width = (
-            max(
-                [
-                    len(engine.get_tensor_name(idx))
-                    for idx in range(engine.num_io_tensors)
-                ]
-            )
-            + 8
-        )
-
-        for idx in range(num_io_tensors):
-            name = engine.get_tensor_name(idx)
-            binding_type = (
-                " (Input)"
-                if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
-                else "(Output)"
-            )
-            engine_str += util.indent_block(
-                f"Tensor: {name:<{max_width}} {binding_type}, Index: {idx}"
-            )
-
-            if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
-                min_shape, opt_shape, max_shape = engine.get_tensor_profile_shape(
-                    name, profile_index
-                )
-                engine_str += (
-                    f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
-                )
-            else:
-                engine_str += f" | Shape: {engine.get_tensor_shape(name)}\n"
-        engine_str += "\n"
-
-    layers_per_profile = engine.num_layers // engine.num_optimization_profiles
-    engine_str += f"---- {layers_per_profile} Layer(s){' Per Profile' if engine.num_optimization_profiles > 1 else ''} ----\n"
-    if show_layers:
-        try:
-            inspector = engine.create_engine_inspector()
-        except AttributeError:
-            G_LOGGER.warning(
-                f"Cannot show layer information because IEngineInspector is not available in this version of TensorRT ({trt.__version__})"
-            )
-        else:
-            inspector.execution_context = context
-
-            # In TRT 10, layer information is not specified per profile.
-            if mod.version(trt.__version__) >= mod.version("10"):
-                num_profiles_to_print = 1
-            else:
-                num_profiles_to_print = engine.num_optimization_profiles
-
-            for profile_idx in range(num_profiles_to_print):
-                indent_level = 0
-                if num_profiles_to_print > 1:
-                    indent_level = 1
-                    engine_str += f"- Profile: {profile_idx}\n"
-                tensor_info = TensorInfo(combine_tensor_info)
-
-                offset = profile_idx * layers_per_profile
-                for index in range(layers_per_profile):
-                    layer_info = json.loads(
-                        inspector.get_layer_information(
-                            offset + index, trt.LayerInformationFormat.JSON
-                        )
-                    )
-
-                    op = "Unknown"
-                    input_names, input_meta = [], TensorMetadata()
-                    output_names, output_meta = [], TensorMetadata()
-                    origin = "Unknown"
-                    tactic = "Unknown"
-                    if engine.profiling_verbosity == trt.ProfilingVerbosity.DETAILED:
-                        name = layer_info.get("Name", "Unknown")
-                        op = layer_info.get("LayerType", "Unknown")
-
-                        def names_meta_from_inspector(key):
-                            def dtype_from_fmt_dtype(contents):
-                                contents = contents.upper()
-                                mapping = {
-                                    "BFLOAT16": DataType.BFLOAT16,
-                                    "FLOAT": DataType.FLOAT32,
-                                    "FP32": DataType.FLOAT32,
-                                    "FP16": DataType.FLOAT16,
-                                    "INT8": DataType.INT8,
-                                    "INT32": DataType.INT32,
-                                    "INT64": DataType.INT64,
-                                    "BOOL": DataType.BOOL,
-                                    "N/A": None,
-                                }
-
-                                for key, val in mapping.items():
-                                    if key in contents:
-                                        return val
-                                G_LOGGER.internal_error(
-                                    f"Could not determine data type from format string: {contents}"
-                                )
-                                return None
-
-                            names = []
-                            meta = TensorMetadata()
-                            info = layer_info.get(key)
-                            if info is None:
-                                return meta
-                            for elem in info:
-                                names.append(elem["Name"])
-                                tensor_statistics = tensor_info.get_tensor_statistics(
-                                    elem["Name"]
-                                )
-                                meta.add(
-                                    name=elem["Name"],
-                                    dtype=dtype_from_fmt_dtype(elem["Format/Datatype"]),
-                                    shape=elem["Dimensions"],
-                                    docstring=(
-                                        f"Format: {elem['Format/Datatype']}"
-                                        if "N/A" not in elem["Format/Datatype"]
-                                        else ""
-                                    )
-                                    + tensor_statistics,
-                                )
-                            return names, meta
-
-                        input_names, input_meta = names_meta_from_inspector("Inputs")
-                        output_names, output_meta = names_meta_from_inspector("Outputs")
-                        origin = layer_info.get("Origin", "Unknown")
-                        tactic = layer_info.get("TacticValue", "Unknown")
-                        # For Myelin layers, use `TacticName` instead of `TacticValue`
-                        if "TacticValue" not in layer_info:
-                            tactic = layer_info.get("TacticName", "Unknown")
-
-                    else:
-                        G_LOGGER.warning(
-                            f"This engine was created with a profiling verbosity of: {engine.profiling_verbosity}. Some layer information may be missing. Try setting a higher profiling verbosity to see more detailed layer information. ",
-                            mode=LogMode.ONCE,
-                        )
-                        name = layer_info
-
-                    engine_str += (
-                        util.indent_block(
-                            util.str_from_layer(
-                                "Layer",
-                                index,
-                                name,
-                                op,
-                                input_names,
-                                input_meta,
-                                output_names,
-                                output_meta,
-                            ),
-                            indent_level,
-                        )
-                        + "\n"
-                    )
-
-                    if show_attrs:
-                        engine_str += (
-                            util.indent_block("---- Attributes ----", indent_level + 1)
-                            + "\n"
-                        )
-                        engine_str += (
-                            util.indent_block(f"Origin = {origin}", indent_level + 1)
-                            + "\n"
-                        )
-                        engine_str += (
-                            util.indent_block(f"Tactic = {tactic}", indent_level + 1)
-                            + "\n"
-                        )
-
-                    engine_str += "\n"
-
-    return util.indent_block(engine_str, level=0)
 
 
 def _get_array_on_gpu(arr, name, device_buffers, stream=None):
@@ -1010,3 +875,75 @@ def inherit_and_extend_docstring(parent_method):
         return child_method
 
     return decorator
+
+
+def convert_linear_to_vectorized_format(context, name, input_arr):
+    dims = context.get_tensor_shape(name)
+    vector_dim = context.engine.get_tensor_vectorized_dim(name)
+    spv = context.engine.get_tensor_components_per_element(name)
+
+    # For DLA, format is typically (N, C / spv, H, W, spv).
+    # Can be performed by reshape then transpose.
+    # If vector dim doesn't divide evenly into channel dimension, we need to pad.
+
+    assert (
+        vector_dim == 1 and len(dims) == 4
+    ), "Only 4D channel vectorization is supported"
+
+    if dims[vector_dim] < spv or dims[vector_dim] % spv != 0:
+        pad_value = spv - (dims[vector_dim] % spv)
+        input_arr = util.array.pad(input_arr, [(0, pad_value)], [vector_dim])
+        dims = input_arr.shape
+
+    # Reshape to vectorized dimensions then transpose.
+    vectorized_dims = [dims[0], math.ceil(dims[1] / spv), spv, dims[2], dims[3]]
+
+    vectorized_arr = util.array.reshape(input_arr, vectorized_dims)
+    vectorized_arr = util.array.transpose(vectorized_arr, (0, 1, 3, 4, 2))
+    return FormattedArray(vectorized_arr, shape=vectorized_dims)
+
+
+def convert_vectorized_to_linear_format(context, name, raw_array):
+    dims = context.get_tensor_shape(name)
+    vector_dim = context.engine.get_tensor_vectorized_dim(name)
+    spv = context.engine.get_tensor_components_per_element(name)
+
+    # Raw array is provided as bytes, so convert to target datatype.
+    dtype = DataType.to_dtype(
+        DataType.from_dtype(
+            context.engine.get_tensor_dtype(name), source_module="tensorrt"
+        ),
+        "numpy",
+    )
+
+    assert (
+        vector_dim == 1 and len(dims) == 4
+    ), "Only 4D channel vectorization is supported"
+
+    # Get view of raw-byte array as specified dtype. Note view_arr is flattened at this point.
+    view_arr = util.array.view(raw_array, dtype, len(raw_array) // dtype.itemsize)
+
+    # Original vectorized dimensions
+    vectorized_dims = [dims[0], math.ceil(dims[1] / spv), dims[2], dims[3], spv]
+
+    if dims[vector_dim] % spv != 0:
+        # Figure out how much padding was added
+        padded_dims = list(dims)
+        padded_dims[vector_dim] = spv * math.ceil(dims[vector_dim] / spv)
+
+        # Reshape to vectorized dimensions, transpose, and reshape to padded dimensions
+        linear_arr = util.array.reshape(view_arr, vectorized_dims)
+        linear_arr = util.array.transpose(linear_arr, (0, 1, 4, 2, 3))
+        linear_arr = util.array.reshape(linear_arr, padded_dims)
+        # We need to slice off the padding.
+        slice_end = spv - (dims[1] % spv)
+        linear_arr = linear_arr[:, 0:-slice_end, :, :]
+        return linear_arr
+
+    # There's no padding so we can just reshape / transpose directly.
+    else:
+        linear_arr = util.array.reshape(view_arr, dims)
+        linear_arr = util.array.reshape(linear_arr, vectorized_dims)
+        linear_arr = util.array.transpose(linear_arr, (0, 1, 4, 2, 3))
+        linear_arr = util.array.reshape(linear_arr, dims)
+        return linear_arr

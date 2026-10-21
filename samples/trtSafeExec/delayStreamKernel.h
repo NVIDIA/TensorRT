@@ -1,5 +1,5 @@
 /*
-* SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +18,16 @@
 #ifndef DELAY_STREAM_KERNEL_H
 #define DELAY_STREAM_KERNEL_H
 
+#include <chrono>
 #include <cstdint>
 #include <cuda_runtime_api.h>
 
 namespace nvinfer1
 {
-cudaError_t delayStream(cudaStream_t stream, float timeInMsec) noexcept;
+//! \brief Launch a kernel on \p stream that busy-waits for \p duration, delaying subsequent work on the stream.
+//!
+//! \return cudaSuccess on success, cudaErrorInvalidValue if \p duration is negative or not representable as a
+//!         nanosecond count, otherwise the error from the kernel launch.
+cudaError_t delayStream(cudaStream_t stream, std::chrono::duration<float, std::milli> duration) noexcept;
 } // namespace nvinfer1
 #endif // DELAY_STREAM_KERNEL_H

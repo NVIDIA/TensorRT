@@ -1226,7 +1226,9 @@ namespace tensorrt
             .def("is_debug_tensor", &INetworkDefinition::isDebugTensor, "tensor"_a, INetworkDefinitionDoc::is_debug_tensor)
             .def("mark_unfused_tensors_as_debug_tensors", &INetworkDefinition::markUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::mark_unfused_tensors_as_debug_tensors)
             .def("unmark_unfused_tensors_as_debug_tensors", &INetworkDefinition::unmarkUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::unmark_unfused_tensors_as_debug_tensors)
-            .def("add_squeeze", &INetworkDefinition::addSqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
+            .def("add_squeeze",
+                py::overload_cast<ITensor&, ITensor*>(&INetworkDefinition::addSqueeze),
+                "input"_a, "axes"_a = nullptr, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
             .def("add_normalization_v2", &INetworkDefinition::addNormalizationV2, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization_v2,
                 py::return_value_policy::reference_internal)

@@ -120,6 +120,7 @@ html_theme_options = {
     ],
 }
 
+
 # Allows us to override the default page width in the Sphinx theme.
 def setup(app):
     app.add_css_file("style.css")

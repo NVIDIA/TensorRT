@@ -284,38 +284,6 @@ def lazy_import(
     return LazyModule()
 
 
-def has_mod(modname):
-    """
-    Checks whether a module is installed without importing the module.
-
-    Args:
-        modname (str): The name of the module to check.
-
-    Returns:
-        bool: Whether the module is installed.
-    """
-    import warnings
-
-    import polygraphy
-    from polygraphy.logger import G_LOGGER
-
-    remove_in = "0.50.0"
-    if mod_util.version(polygraphy.__version__) >= mod_util.version(remove_in):
-        G_LOGGER.internal_error(
-            f"has_mod should have been removed in version: {remove_in}"
-        )
-    warnings.warn(
-        f"has_mod is deprecated and will be removed in Polygraphy {remove_in}",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-    try:
-        return modname in sys.modules or (importlib.util.find_spec(modname) is not None)
-    except ValueError:
-        return False
-
-
 def autoinstall(lazy_mod):
     """
     If the config.AUTOINSTALL_DEPS is set to 1, automatically install or upgrade a module.

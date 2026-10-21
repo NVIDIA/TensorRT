@@ -176,6 +176,8 @@ protected:
     virtual ~IParserError() {}
 };
 
+class IRefitterObserver;
+
 //!
 //! \class IParser
 //!
@@ -437,6 +439,48 @@ public:
     //! \return true if the IBuilderConfig was set successfully, false otherwise.
     //!
     virtual bool setBuilderConfig(const nvinfer1::IBuilderConfig* const builderConfig) noexcept = 0;
+
+    //!
+    //! \brief Set or clear an optional observer notified once per refittable weight during parsing.
+    //!
+    //! When attached, the parser emits one RefitRecord per network weight it names via
+    //! INetworkDefinition::setWeightsName, at the moment the weight is created during
+    //! parse/parseModelProto. This is the same record schema emitted by
+    //! IParserRefitter::setRefitObserver during refit, produced without building or
+    //! deserializing an engine. Because the network has not been built yet, the records are a
+    //! candidate superset of the built engine's refittable weights: the builder may fold or
+    //! absorb some of them. Consumers replaying the records against an engine must skip
+    //! records whose trtName the engine's nvinfer1::IRefitter does not report in
+    //! getAllWeights, and rely on refitCudaEngine's missing-weights check for coverage.
+    //!
+    //! TensorRT-RTX only: When an observer is attached to the parser associated with a BuilderConfig that sets
+    //! kREFIT_INDIVIDUAL and kSTRIP_PLAN, the parser will provide placeholder weights for the listed initializers
+    //! of the following ONNX nodes:
+    //!  * Conv kernels and biases
+    //!  * Gemm operands and bias
+    //!  * MatMul operands
+    //!  * DequantizeLinear scales
+    //!  * DequantizeLinear FP8 or FP4 data
+    //!  * TRT_FP8DequantizeLinear/TRT_MXFP8DequantizeLinear FP8 data
+    //! A placeholder weight is represented by nvinfer1::Weights with the same type and count as the original
+    //! initializer, but with nullptr values. All placeholder weights are expected to be refit prior to inference.
+    //!
+    //! A placeholder weight will not be produced under the following circumstances:
+    //!  * If the initializer is also a graph input or output
+    //!  * If the initializer is referenced by a nested graph
+    //!
+    //! Placeholders will not be created when importing a model whose producer name is "TensorRT". Networks
+    //! containing placeholders must be built with IBuilder::buildSerializedNetwork().
+    //!
+    //! Records are only valid if the subsequent parse call returns true.
+    //!
+    //! May be called any time before parse / parseModelProto. Pass nullptr to detach. The
+    //! observer must outlive the parse call, or be detached before destruction. Ownership
+    //! remains with the caller.
+    //!
+    //! \see IRefitterObserver IParserRefitter::setRefitObserver
+    //!
+    virtual void setRefitObserver(IRefitterObserver* observer) noexcept = 0;
 };
 
 //!

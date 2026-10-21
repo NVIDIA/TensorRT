@@ -7,7 +7,8 @@ torch
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy
 colored
-numpy==1.26.4
+numpy==1.26.4; python_version<"3.13"
+numpy==2.2.3; python_version>="3.13"
 onnx==1.18.0; platform_system == "Windows"
 --extra-index-url https://pypi.ngc.nvidia.com
 onnx-graphsurgeon

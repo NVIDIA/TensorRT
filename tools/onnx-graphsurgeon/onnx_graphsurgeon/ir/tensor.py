@@ -305,17 +305,76 @@ class SparseValues(LazyValues):
             values = getattr(self.tensor.values, field_name)
             dtype = onnx.helper.tensor_dtype_to_np_dtype(self.tensor.values.data_type)
             values_data = np.asarray(values, dtype)
-        indices_data = self.tensor.indices.int64_data
+        indices_data = np.asarray(self.tensor.indices.int64_data, dtype=np.int64)
 
         if len(self.tensor.indices.dims) == 1:
-            values = np.zeros(np.prod(self.tensor.dims))
+            nnz = int(self.tensor.indices.dims[0])
+            dense_size = int(np.prod(self.tensor.dims))
+            if indices_data.size != nnz:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} declares {nnz} indices, "
+                    f"but stores {indices_data.size}"
+                )
+            if values_data.size != nnz:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} declares {nnz} values, "
+                    f"but stores {values_data.size}"
+                )
+            if indices_data.size != values_data.size:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} has {indices_data.size} indices, "
+                    f"but {values_data.size} values"
+                )
+
+            out_of_bounds_indices = (indices_data < 0) | (indices_data >= dense_size)
+            if np.any(out_of_bounds_indices):
+                bad_index = int(
+                    indices_data[np.nonzero(out_of_bounds_indices)[0][0]]
+                )
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} contains index {bad_index} "
+                    f"out of bounds for dense shape {self.tensor.dims}"
+                )
+
+            values = np.zeros(dense_size)
             # [NNZ] layout, in which case the i-th value must be the linearized-index of the i-th value.
             values[indices_data] = values_data
             values = values.reshape(self.tensor.dims)
         elif len(self.tensor.indices.dims) == 2:
             # [NNZ, rank] with the [i,j]-th value corresponding to the j-th index of the i-th value
+            nnz, index_rank = self.tensor.indices.dims
+            rank = len(self.tensor.dims)
+            if index_rank != rank:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} has index rank {index_rank}, "
+                    f"but dense shape {self.tensor.dims} has rank {rank}"
+                )
+            if nnz != values_data.size:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} has {nnz} indices, "
+                    f"but {values_data.size} values"
+                )
+            if indices_data.size != nnz * index_rank:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} has {indices_data.size} index values, "
+                    f"but index shape {self.tensor.indices.dims} requires {nnz * index_rank}"
+                )
+
             values = np.zeros(self.tensor.dims)
-            indices_data = np.asarray(indices_data).reshape(self.tensor.indices.dims)
+            indices_data = indices_data.reshape(self.tensor.indices.dims)
+            dimension_bounds = np.asarray(self.tensor.dims, dtype=np.int64)
+            out_of_bounds_indices = (indices_data < 0) | (
+                indices_data >= dimension_bounds
+            )
+            if np.any(out_of_bounds_indices):
+                bad_index_row = int(
+                    np.nonzero(np.any(out_of_bounds_indices, axis=1))[0][0]
+                )
+                bad_index = tuple(int(index) for index in indices_data[bad_index_row])
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} contains index {bad_index} "
+                    f"out of bounds for dense shape {self.tensor.dims}"
+                )
 
             for i in range(len(values_data)):
                 values[tuple(indices_data[i])] = values_data[i]

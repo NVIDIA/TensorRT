@@ -64,6 +64,8 @@ function(get_all_fatbin_archs OUT_VAR OUT_VAR_CROSS)
 
     # Exclude sm103 explicitly since it is proxied to sm100.
     list(FILTER ARCH_LIST EXCLUDE REGEX "sm103")
+    # Exclude sm107 explicitly since it is proxied to sm100.
+    list(FILTER ARCH_LIST EXCLUDE REGEX "sm107")
     # Exclude sm121 explicitly since it is proxied to sm120.
     list(FILTER ARCH_LIST EXCLUDE REGEX "sm121")
 

@@ -74,28 +74,52 @@ class SaveBytes(BaseLoader):
 @mod.export(funcify=True)
 class InvokeFromScript(BaseLoader):
     """
-    Functor that invokes a function from a Python script.
+    Functor that invokes a function (or functor) from a Python script.
     """
 
     def __init__(self, path, name):
         """
         Invokes the specified function from the specified Python script.
 
-        If you intend to use the function more than once, you should import
-        the function using ``polygraphy.mod.import_from_script`` instead.
+        The imported symbol is instantiated with no arguments if it is a class, so it may be a
+        plain function, a functor instance, or a functor class (e.g. a ``BaseCompareFunc``
+        subclass). Calling this functor invokes the loaded object, and attribute access is
+        forwarded to it (so, for example, a loaded ``BaseCompareFunc`` exposes its
+        ``thresholds_for`` method).
+
+        If you intend to use the imported object more than once, you should import it using
+        ``polygraphy.mod.import_from_script`` instead, since it is re-imported on each use here.
 
         Args:
             path (str): The path to the Python script. The path must include a '.py' extension.
-            name (str): The name of the function to import and invoke.
+            name (str): The name of the function (or functor) to import and invoke.
         """
         self._path = path
         self._name = name
+
+    @property
+    def __name__(self):
+        return self._name
+
+    def _load(self):
+        obj = mod.import_from_script(self._path, self._name)
+        if isinstance(obj, type):
+            obj = obj()
+        return obj
 
     @util.check_called_by("__call__")
     def call_impl(self, *args, **kwargs):
         """
         Returns:
             object:
-                    The return value of the imported function.
+                    The return value of the imported function (or functor).
         """
-        return mod.import_from_script(self._path, self._name)(*args, **kwargs)
+        return self._load()(*args, **kwargs)
+
+    def __getattr__(self, name):
+        # Forward attribute access to the loaded object so that functor APIs (e.g. a
+        # BaseCompareFunc's thresholds_for) are accessible through this wrapper.
+        # Private/dunder names are not forwarded, which also avoids recursion during init.
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._load(), name)

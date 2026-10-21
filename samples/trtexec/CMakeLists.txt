@@ -15,17 +15,29 @@
 # limitations under the License.
 #
 add_executable(trtexec trtexec_main.cpp trtexec.cpp)
-target_link_libraries(trtexec PRIVATE trt_samples_common)
-if (TRT_BUILD_SAMPLES)
+target_link_libraries(trtexec PRIVATE trtexec_common)
+if(TARGET tensorrt_tools)
+    add_dependencies(tensorrt_tools trtexec)
+elseif(TARGET tensorrt_samples)
     add_dependencies(tensorrt_samples trtexec)
 endif()
 
 # Windows-specific configuration for long path support
 if(MSVC)
-    # For long path support to work on Windows, users must 
+    # For long path support to work on Windows, users must
     # additionally enable a system-level setting.
     # Adding manifest as a source file works on CMake 3.4+.
-    target_sources(trtexec PRIVATE trtexec.manifest)
+    if(TRT_IS_LINUX_TO_WINDOWS_CROSS_COMPILATION)
+        # Remove all content in the manifest file before the <?xml ...?> tag
+        # to ensure lld-link is able to parse the file.
+        file(READ trtexec.manifest trtexec_manifest_content)
+        string(REGEX REPLACE "<!--.*-->\n\n" "" trtexec_manifest_content "${trtexec_manifest_content}")
+        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/trtexec.manifest "${trtexec_manifest_content}")
+
+        target_sources(trtexec PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/trtexec.manifest)
+    else()
+        target_sources(trtexec PRIVATE trtexec.manifest)
+    endif()
 endif()
 
 installLibraries(
@@ -57,8 +69,10 @@ set_target_properties(trtexec
 # In this mode, we build an additional binary trtexec_static that always links tensorrt_static.
 if(${TRT_BUILD_TRTEXEC_STATIC})
     add_executable(trtexec_static trtexec_main.cpp trtexec.cpp)
-    target_link_libraries(trtexec_static PRIVATE trt_samples_common)
-    if (TRT_BUILD_SAMPLES)
+    target_link_libraries(trtexec_static PRIVATE trtexec_common)
+    if(TARGET tensorrt_tools)
+        add_dependencies(tensorrt_tools trtexec_static)
+    elseif(TARGET tensorrt_samples)
         add_dependencies(tensorrt_samples trtexec_static)
     endif()
 
@@ -84,7 +98,7 @@ endif()
 if(TRT_BUILD_WINML_PLUGIN)
     set(internal_sample_name "tensorrt_rtx_internal")
     add_executable(${internal_sample_name} trtexec_main.cpp trtexec.cpp)
-    target_link_libraries(${internal_sample_name} PRIVATE trt_samples_common)
+    target_link_libraries(${internal_sample_name} PRIVATE trtexec_common)
     target_compile_definitions(${internal_sample_name} PRIVATE TRT_WINML_PLUGIN=1)
 
     installLibraries(

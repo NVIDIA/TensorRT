@@ -38,7 +38,7 @@ ALL_TOOLS = {
     ],
     "template": ["trt-network", "trt-config", "onnx-gs"],
     "debug": ["build", "precision", "reduce", "repeat"],
-    "data": ["to-input"],
+    "data": ["concat", "merge"],
 }
 
 

@@ -1,0 +1,3908 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <algorithm>
+#include <cctype>
+#include <charconv>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <limits>
+#include <ranges>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <vector>
+
+#include "NvInfer.h"
+#include "logger.h"
+#include "sampleOptions.h"
+#include "sampleUtils.h"
+
+using namespace nvinfer1;
+namespace sample
+{
+
+namespace
+{
+
+using namespace std::string_view_literals;
+
+std::map<char, std::pair<int64_t, std::string>> const kUNIT_MULTIPLIERS{
+    {'B', {1LL, "Bytes"}},
+    {'K', {1LL << 10, "Kibibytes"}},
+    {'M', {1LL << 20, "Mebibytes"}},
+    {'G', {1LL << 30, "Gibibytes"}},
+};
+
+std::string addDefaultUnitSuffixIfNotSpecified(std::string const& option, char defaultUnit)
+{
+    char lastChar = option.at(option.size() - 1);
+    return std::isdigit(lastChar) ? option + defaultUnit : option;
+}
+
+// Returns "B (Bytes), K (Kilobytes), ..."
+std::string getAvailableUnitSuffixes()
+{
+    std::ostringstream ss;
+    for (auto it = kUNIT_MULTIPLIERS.begin(); it != kUNIT_MULTIPLIERS.end(); ++it)
+    {
+        if (it != kUNIT_MULTIPLIERS.begin())
+        {
+            ss << ", ";
+        }
+        ss << it->first << " (" << it->second.second << ")";
+    }
+    return ss.str();
+}
+
+// Numeric trtexec arguments can have unit specifiers in similar to polygraphy.
+// E.g. --weightStreamingBudget=20M would be 20 Mebibytes (base 2).
+int64_t getUnitMultiplier(std::string const& option)
+{
+    char lastChar = option.at(option.size() - 1);
+    if (!std::isdigit(lastChar))
+    {
+        char unit = std::toupper(lastChar);
+        auto found = kUNIT_MULTIPLIERS.find(unit);
+        if (found == kUNIT_MULTIPLIERS.end())
+        {
+            std::ostringstream ss;
+            ss << "Error parsing \"" << option << "\": invalid unit specifier '" << unit
+               << "'. Valid base-2 unit suffixes include: ";
+            ss << getAvailableUnitSuffixes() << ".";
+            throw std::invalid_argument(ss.str());
+        }
+        return found->second.first;
+    }
+
+    // Return bytes by default
+    return kUNIT_MULTIPLIERS.at('B').first;
+}
+
+template <typename T>
+T stringToValue(std::string const& option)
+{
+    return T{option};
+}
+
+template <>
+int32_t stringToValue<int32_t>(std::string const& option)
+{
+    return std::stoi(option);
+}
+
+template <>
+int64_t stringToValue<int64_t>(std::string const& option)
+{
+    return std::stoi(option);
+}
+
+template <>
+size_t stringToValue<size_t>(std::string const& option)
+{
+    return std::stoi(option) * getUnitMultiplier(option);
+}
+
+template <>
+float stringToValue<float>(std::string const& option)
+{
+    return std::stof(option);
+}
+
+template <>
+double stringToValue<double>(std::string const& option)
+{
+    return std::stod(option) * getUnitMultiplier(option);
+}
+
+template <>
+bool stringToValue<bool>(std::string const& option)
+{
+    return true;
+}
+
+template <>
+std::vector<int64_t> stringToValue<std::vector<int64_t>>(std::string const& option)
+{
+    std::vector<int64_t> shape;
+    if (option == "scalar")
+    {
+        return shape;
+    }
+    std::vector<std::string> dimsStrings = splitToStringVec(option, 'x');
+    for (auto const& d : dimsStrings)
+    {
+        shape.push_back(stringToValue<int64_t>(d));
+    }
+    return shape;
+}
+
+#if !TRT_WINML
+#if ENABLE_FEATURE_WEAK_TYPING
+template <>
+nvinfer1::DataType stringToValue<nvinfer1::DataType>(std::string const& option)
+{
+    std::unordered_map<std::string, nvinfer1::DataType> const strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
+        {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
+        {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"int64", nvinfer1::DataType::kINT64},
+        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8},
+        {"int4", nvinfer1::DataType::kINT4}};
+    auto const& dt = strToDT.find(option);
+    if (dt == strToDT.end())
+    {
+        throw std::invalid_argument("Invalid DataType " + option);
+    }
+    return dt->second;
+}
+#endif // ENABLE_FEATURE_WEAK_TYPING
+
+template <>
+[[nodiscard]] nvinfer1::DLAWorkspaceAllocationStrategy stringToValue<nvinfer1::DLAWorkspaceAllocationStrategy>(
+    std::string const& option)
+{
+    if (option == "default"sv)
+    {
+        return nvinfer1::DLAWorkspaceAllocationStrategy::kDEFAULT;
+    }
+    if (option == "sharedStatic"sv)
+    {
+        return nvinfer1::DLAWorkspaceAllocationStrategy::kSHARED_STATIC;
+    }
+    throw std::invalid_argument(
+        "Unknown DLA workspace allocation strategy: " + option + ". Valid options: default, sharedStatic.");
+}
+
+template <>
+nvinfer1::DeviceType stringToValue<nvinfer1::DeviceType>(std::string const& option)
+{
+    std::unordered_map<std::string, nvinfer1::DeviceType> const strToDevice = {
+        {"GPU", nvinfer1::DeviceType::kGPU},
+        {"DLA", nvinfer1::DeviceType::kDLA},
+    };
+    auto const& device = strToDevice.find(option);
+    if (device == strToDevice.end())
+    {
+        throw std::invalid_argument("Invalid Device Type " + option);
+    }
+    return device->second;
+}
+
+template <>
+nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(std::string const& option)
+{
+    std::vector<std::string> optionStrings = splitToStringVec(option, '+');
+    const std::unordered_map<std::string, nvinfer1::TensorFormat> strToFmt{{"chw", nvinfer1::TensorFormat::kLINEAR},
+        {"chw2", nvinfer1::TensorFormat::kCHW2}, {"chw4", nvinfer1::TensorFormat::kCHW4},
+        {"hwc8", nvinfer1::TensorFormat::kHWC8}, {"chw16", nvinfer1::TensorFormat::kCHW16},
+        {"chw32", nvinfer1::TensorFormat::kCHW32}, {"dhwc8", nvinfer1::TensorFormat::kDHWC8},
+        {"cdhw32", nvinfer1::TensorFormat::kCDHW32}, {"hwc", nvinfer1::TensorFormat::kHWC},
+        {"dhwc", nvinfer1::TensorFormat::kDHWC}, {"dla_linear", nvinfer1::TensorFormat::kDLA_LINEAR},
+        {"hwc16", nvinfer1::TensorFormat::kHWC16}, {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
+    nvinfer1::TensorFormats formats{};
+    for (auto f : optionStrings)
+    {
+        auto const& tf = strToFmt.find(f);
+        if (tf == strToFmt.end())
+        {
+            throw std::invalid_argument(std::string("Invalid TensorFormat ") + f);
+        }
+        formats |= 1U << static_cast<int32_t>(tf->second);
+    }
+
+    return formats;
+}
+
+template <>
+IOFormat stringToValue<IOFormat>(std::string const& option)
+{
+#if ENABLE_FEATURE_WEAK_TYPING
+    IOFormat ioFormat{};
+    size_t const colon = option.find(':');
+
+    if (colon == std::string::npos)
+    {
+        ioFormat.formats = stringToValue<nvinfer1::TensorFormats>(option);
+    }
+    else
+    {
+        ioFormat.type = stringToValue<nvinfer1::DataType>(option.substr(0, colon));
+        ioFormat.formats = stringToValue<nvinfer1::TensorFormats>(option.substr(colon + 1));
+    }
+    return ioFormat;
+#else
+    return IOFormat{stringToValue<nvinfer1::TensorFormats>(option)};
+#endif // ENABLE_FEATURE_WEAK_TYPING
+}
+#endif // !TRT_WINML
+
+template <>
+SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
+{
+    std::unordered_map<std::string, SparsityFlag> const table
+    {
+        {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE},
+#if !TRT_WINML
+        {
+            "force", SparsityFlag::kFORCE
+        }
+#endif // !TRT_WINML
+    };
+    auto search = table.find(option);
+    if (search == table.end())
+    {
+        throw std::invalid_argument(std::string("Unknown sparsity mode: ") + option);
+    }
+#if !TRT_WINML
+    if (search->second == SparsityFlag::kFORCE)
+    {
+        sample::gLogWarning << "--sparsity=force has been deprecated. "
+                            << "Please use <polygraphy surgeon prune> to rewrite the weights to a sparsity pattern "
+                            << "and then run with --sparsity=enable" << std::endl;
+    }
+#endif // !TRT_WINML
+    return search->second;
+}
+
+template <>
+WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& option)
+{
+    WeightStreamingBudget budget;
+    if (option.find('%') != std::string::npos)
+    {
+        double percent = std::stod(option);
+        if (!(percent >= 0 && percent <= 100.0))
+        {
+            std::ostringstream err;
+            err << "The weight streaming percent must be between 0 and 100.";
+            throw std::invalid_argument(err.str());
+        }
+        budget.percent = percent;
+    }
+    else
+    {
+        double bytes = stringToValue<double>(option);
+        if (!(bytes == WeightStreamingBudget::kAUTOMATIC || bytes == WeightStreamingBudget::kDISABLE || bytes >= 0))
+        {
+            std::ostringstream err;
+            err << "The weight streaming budget must be " << WeightStreamingBudget::kDISABLE << ", "
+                << WeightStreamingBudget::kAUTOMATIC << ", or at least 0.";
+            throw std::invalid_argument(err.str());
+        }
+        budget.bytes = static_cast<int64_t>(bytes);
+    }
+    return budget;
+}
+
+#if ENABLE_UNIFIED_BUILDER
+template <>
+samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::SafetyPluginLibraryArgument>(
+    std::string const& option)
+{
+    samplesSafeCommon::SafetyPluginLibraryArgument argument;
+    auto status = parseSafetyPluginArgument(option, argument);
+    if (!status)
+    {
+        throw std::invalid_argument(std::string("Invalid Safety plugin library option: " + option));
+    }
+    return argument;
+}
+#endif
+
+#if TRT_WINML
+template <>
+nvinfer1::DynamicShapesKernelSpecializationStrategy stringToValue<nvinfer1::DynamicShapesKernelSpecializationStrategy>(
+    std::string const& option)
+{
+    if (option == "lazy")
+    {
+        return nvinfer1::DynamicShapesKernelSpecializationStrategy::kLAZY;
+    }
+    if (option == "eager")
+    {
+        return nvinfer1::DynamicShapesKernelSpecializationStrategy::kEAGER;
+    }
+    if (option == "none")
+    {
+        return nvinfer1::DynamicShapesKernelSpecializationStrategy::kNONE;
+    }
+    throw std::invalid_argument("Unknown kernel specialization strategy: " + option);
+}
+
+template <>
+nvinfer1::CudaGraphStrategy stringToValue<nvinfer1::CudaGraphStrategy>(std::string const& option)
+{
+    if (option == "disable")
+    {
+        return nvinfer1::CudaGraphStrategy::kDISABLED;
+    }
+
+    if (option == "wholeGraph")
+    {
+        return nvinfer1::CudaGraphStrategy::kWHOLE_GRAPH_CAPTURE;
+    }
+    throw std::invalid_argument("Unknown CUDA graph strategy: " + option);
+}
+#endif // TRT_WINML
+
+template <typename T>
+std::pair<std::string, T> splitNameAndValue(std::string const& s)
+{
+    std::string tensorName;
+    std::string valueString;
+
+    // Support 'inputName':Path format for --loadInputs flag when dealing with Windows paths.
+    // i.e. 'inputName':c:\inputData
+    std::vector<std::string> quoteNameRange{splitToStringVec(s, '\'')};
+    // splitToStringVec returns the entire string when delimiter is not found, so it's size is always at least 1
+    if (quoteNameRange.size() != 1)
+    {
+        if (quoteNameRange.size() != 3)
+        {
+            std::string errorMsg = std::string("Found invalid number of \'s when parsing ") + s +
+                std::string(". Expected: 2, received: ") + std::to_string(quoteNameRange.size() -1) +
+                ". Please ensure that a singular comma is used within each comma-separated key-value pair for options like --inputIOFormats, --optShapes, etc.";
+            throw std::invalid_argument(errorMsg);
+        }
+        // Everything before the second "'" is the name.
+        tensorName = quoteNameRange[0] + quoteNameRange[1];
+        // Path is the last string - ignoring leading ":" so slice it with [1:]
+        valueString = quoteNameRange[2].substr(1);
+        return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+    }
+
+    // Split on the last :
+    std::vector<std::string> nameRange{splitToStringVec(s, ':')};
+    // Everything before the last : is the name
+    tensorName = nameRange[0];
+    for (size_t i = 1; i < nameRange.size() - 1; i++)
+    {
+        tensorName += ":" + nameRange[i];
+    }
+    // Value is the string element after the last :
+    valueString = nameRange[nameRange.size() - 1];
+    return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+}
+
+template <typename T>
+void splitInsertKeyValue(std::vector<std::string> const& kvList, T& map)
+{
+    for (auto const& kv : kvList)
+    {
+        map.insert(splitNameAndValue<typename T::mapped_type>(kv));
+    }
+}
+
+char const* boolToEnabled(bool enable)
+{
+    return enable ? "Enabled" : "Disabled";
+}
+
+//! A helper function similar to sep.join(list) in Python.
+template <typename T>
+std::string joinValuesToString(std::vector<T> const& list, std::string const& sep)
+{
+    std::ostringstream os;
+    for (int32_t i = 0, n = list.size(); i < n; ++i)
+    {
+        os << list[i];
+        if (i != n - 1)
+        {
+            os << sep;
+        }
+    }
+    return os.str();
+}
+
+template <typename T, size_t N>
+std::string joinValuesToString(std::array<T, N> const& list, std::string const& sep)
+{
+    return joinValuesToString(std::vector<T>(list.begin(), list.end()), sep);
+}
+
+//! Check if input option exists in input arguments.
+//! If it does: set its value, and return true
+//! If it does not: return false.
+template <typename T>
+bool getOption(Arguments& arguments, std::string const& option, T& value)
+{
+    auto const match = arguments.find(option);
+    if (match != arguments.end())
+    {
+        value = stringToValue<T>(match->second.first);
+        return true;
+    }
+
+    return false;
+}
+
+//! Check if input option exists in input arguments.
+//! If it does: set its value, erase the argument and return true.
+//! If it does not: return false.
+template <typename T>
+bool getAndDelOption(Arguments& arguments, std::string const& option, T& value)
+{
+    auto [beg, end] = arguments.equal_range(option);
+    auto range = std::ranges::subrange(beg, end);
+    if (range.empty())
+    {
+        return false;
+    }
+    // Select the entry with the smallest position index (first on the command line).
+    auto it = std::ranges::min_element(range, {}, [](auto const& x) -> decltype(auto) { return x.second.second; });
+    value = stringToValue<T>(it->second.first);
+    if constexpr (std::is_same_v<T, bool>)
+    {
+        // Idempotent bool flags may be repeated; consume every copy so no leftover
+        // is later flagged as an unknown option.
+        if (std::distance(beg, end) > 1)
+        {
+            sample::gLogWarning << "Option '" << option << "' was specified more than once." << std::endl;
+        }
+        arguments.erase(range.begin(), range.end());
+    }
+    else
+    {
+        // Non-bool options keep the original consume-one-per-call behavior, which
+        // supports both single-use (--onnx) and repeatable (--plugins) options.
+        arguments.erase(it);
+    }
+    return true;
+}
+
+//! Check if input option exists in input arguments.
+//! If it does: set its value and position, erase the argument and return true.
+//! If it does not: return false.
+template <typename T>
+bool getAndDelOptionWithPosition(Arguments& arguments, std::string const& option, T& value, int32_t& pos)
+{
+    auto const match = arguments.find(option);
+    if (match != arguments.end())
+    {
+        value = stringToValue<T>(match->second.first);
+        pos = match->second.second;
+        arguments.erase(match);
+        return true;
+    }
+
+    return false;
+}
+
+//! Check if input option exists in input arguments behind the position spcecified by pos.
+//! If it does: set its value, erase the argument and return true.
+//! If it does not: return false.
+template <typename T>
+bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int32_t pos, T& value)
+{
+    auto const match = arguments.equal_range(option);
+    if (match.first == match.second)
+    {
+        return false;
+    }
+    for (auto i = match.first; i != match.second; ++i)
+    {
+        if (i->second.second - pos == 1)
+        {
+            value = stringToValue<T>(i->second.first);
+            arguments.erase(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+#if !TRT_WINML
+//! Check if input option exists in input arguments.
+//! If it does: set false in value, erase the argument and return true.
+//! If it does not: return false.
+bool getAndDelNegOption(Arguments& arguments, std::string const& option, bool& value)
+{
+    bool dummy;
+    if (getAndDelOption(arguments, option, dummy))
+    {
+        value = false;
+        return true;
+    }
+    return false;
+}
+#endif // !TRT_WINML
+
+//! Check if input option exists in input arguments.
+//! If it does: add all the matched arg values to values vector, erase the argument and return true.
+//! If it does not: return false.
+template <typename T>
+bool getAndDelRepeatedOption(Arguments& arguments, std::string const& option, std::vector<T>& values)
+{
+    auto const match = arguments.equal_range(option);
+    if (match.first == match.second)
+    {
+        return false;
+    }
+
+    auto addToValues
+        = [&values](Arguments::value_type& argValue) { values.emplace_back(stringToValue<T>(argValue.second.first)); };
+    std::for_each(match.first, match.second, addToValues);
+    arguments.erase(match.first, match.second);
+
+    return true;
+}
+
+void insertShapesBuild(BuildOptions::ShapeProfile& shapes, nvinfer1::OptProfileSelector selector,
+    std::string const& name, std::vector<int64_t> const& dims)
+{
+    shapes[name][static_cast<size_t>(selector)] = dims;
+}
+
+void insertShapesInference(
+    InferenceOptions::ShapeProfile& shapes, std::string const& name, std::vector<int64_t> const& dims)
+{
+    shapes[name] = dims;
+}
+
+std::string removeSingleQuotationMarks(std::string& str)
+{
+    std::vector<std::string> strList{splitToStringVec(str, '\'')};
+    // Remove all the escaped single quotation marks
+    std::string retVal;
+    // Do not really care about unterminated sequences
+    for (size_t i = 0; i < strList.size(); i++)
+    {
+        retVal += strList[i];
+    }
+    return retVal;
+}
+
+#if !TRT_WINML
+#if ENABLE_FEATURE_WEAK_TYPING
+void getLayerPrecisions(Arguments& arguments, char const* argument, LayerPrecisions& layerPrecisions)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> precisionList{splitToStringVec(list, ',')};
+    for (auto const& s : precisionList)
+    {
+        auto namePrecisionPair = splitNameAndValue<std::string>(s);
+        auto const layerName = removeSingleQuotationMarks(namePrecisionPair.first);
+        layerPrecisions[layerName] = stringToValue<nvinfer1::DataType>(namePrecisionPair.second);
+    }
+}
+
+void getLayerOutputTypes(Arguments& arguments, char const* argument, LayerOutputTypes& layerOutputTypes)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> outputList{splitToStringVec(list, ',')};
+    for (auto const& s : outputList)
+    {
+        auto nameTypesPair = splitNameAndValue<std::string>(s);
+        auto const layerName = removeSingleQuotationMarks(nameTypesPair.first);
+        std::vector<std::string> typeStrings{splitToStringVec(nameTypesPair.second, '+')};
+        std::vector<nvinfer1::DataType> typeVec(typeStrings.size());
+        std::transform(typeStrings.begin(), typeStrings.end(), typeVec.begin(), stringToValue<nvinfer1::DataType>);
+        layerOutputTypes[layerName] = std::move(typeVec);
+    }
+}
+#endif // ENABLE_FEATURE_WEAK_TYPING
+
+void getLayerDeviceTypes(Arguments& arguments, char const* argument, LayerDeviceTypes& layerDeviceTypes)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    // The layerDeviceTypes flag contains comma-separated layerName:deviceType pairs.
+    std::vector<std::string> deviceList{splitToStringVec(list, ',')};
+    for (auto const& s : deviceList)
+    {
+        auto nameDevicePair = splitNameAndValue<std::string>(s);
+        auto const layerName = removeSingleQuotationMarks(nameDevicePair.first);
+        layerDeviceTypes[layerName] = stringToValue<nvinfer1::DeviceType>(nameDevicePair.second);
+    }
+}
+
+void getDecomposableAttentions(
+    Arguments& arguments, char const* argument, DecomposableAttentions& decomposableAttentions)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> attentionList{splitToStringVec(list, ',')};
+    for (auto& s : attentionList)
+    {
+        auto const attentionName = removeSingleQuotationMarks(s);
+        decomposableAttentions[attentionName] = true;
+    }
+}
+
+void getAndDelStringsSet(Arguments& arguments, char const* argument, StringSet& stringSet)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    // The layerPrecisions flag contains comma-separated layerName:precision pairs.
+    std::vector<std::string> strings{splitToStringVec(list, ',')};
+    for (auto const& s : strings)
+    {
+        stringSet.insert(s);
+    }
+}
+#endif // !TRT_WINML
+bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, char const* argument,
+    nvinfer1::OptProfileSelector selector)
+{
+    std::string list;
+    bool retVal = getAndDelOption(arguments, argument, list);
+    std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+    for (auto const& s : shapeList)
+    {
+        auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
+        auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+        auto dims = nameDimsPair.second;
+        insertShapesBuild(shapes, selector, tensorName, dims);
+    }
+    return retVal;
+}
+
+bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& shapes, char const* argument)
+{
+    std::string list;
+    bool retVal = getAndDelOption(arguments, argument, list);
+    std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+    for (auto const& s : shapeList)
+    {
+        auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
+        auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+        auto dims = nameDimsPair.second;
+        insertShapesInference(shapes, tensorName, dims);
+    }
+    return retVal;
+}
+
+void fillShapes(BuildOptions::ShapeProfile& shapes, std::string const& name, ShapeRange const& sourceShapeRange,
+    nvinfer1::OptProfileSelector minDimsSource, nvinfer1::OptProfileSelector optDimsSource,
+    nvinfer1::OptProfileSelector maxDimsSource)
+{
+    insertShapesBuild(
+        shapes, nvinfer1::OptProfileSelector::kMIN, name, sourceShapeRange[static_cast<size_t>(minDimsSource)]);
+    insertShapesBuild(
+        shapes, nvinfer1::OptProfileSelector::kOPT, name, sourceShapeRange[static_cast<size_t>(optDimsSource)]);
+    insertShapesBuild(
+        shapes, nvinfer1::OptProfileSelector::kMAX, name, sourceShapeRange[static_cast<size_t>(maxDimsSource)]);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void processShapes(BuildOptions::ShapeProfile& shapes, bool minShapes, bool optShapes, bool maxShapes)
+{
+    if (!minShapes && !optShapes && !maxShapes)
+    {
+        return;
+    }
+
+    BuildOptions::ShapeProfile newShapes;
+    for (auto& s : shapes)
+    {
+        nvinfer1::OptProfileSelector minDimsSource, optDimsSource, maxDimsSource;
+        minDimsSource = nvinfer1::OptProfileSelector::kMIN;
+        optDimsSource = nvinfer1::OptProfileSelector::kOPT;
+        maxDimsSource = nvinfer1::OptProfileSelector::kMAX;
+
+        // Populate missing minShapes
+        if (!minShapes)
+        {
+            if (optShapes)
+            {
+                minDimsSource = optDimsSource;
+                sample::gLogWarning << "optShapes is being broadcasted to minShapes for tensor " << s.first
+                                    << std::endl;
+            }
+            else
+            {
+                minDimsSource = maxDimsSource;
+                sample::gLogWarning << "maxShapes is being broadcasted to minShapes for tensor " << s.first
+                                    << std::endl;
+            }
+        }
+
+        // Populate missing optShapes
+        if (!optShapes)
+        {
+            if (maxShapes)
+            {
+                optDimsSource = maxDimsSource;
+                sample::gLogWarning << "maxShapes is being broadcasted to optShapes for tensor " << s.first
+                                    << std::endl;
+            }
+            else
+            {
+                optDimsSource = minDimsSource;
+                sample::gLogWarning << "minShapes is being broadcasted to optShapes for tensor " << s.first
+                                    << std::endl;
+            }
+        }
+
+        // Populate missing maxShapes
+        if (!maxShapes)
+        {
+            if (optShapes)
+            {
+                maxDimsSource = optDimsSource;
+                sample::gLogWarning << "optShapes is being broadcasted to maxShapes for tensor " << s.first
+                                    << std::endl;
+            }
+            else
+            {
+                maxDimsSource = minDimsSource;
+                sample::gLogWarning << "minShapes is being broadcasted to maxShapes for tensor " << s.first
+                                    << std::endl;
+            }
+        }
+
+        fillShapes(newShapes, s.first, s.second, minDimsSource, optDimsSource, maxDimsSource);
+    }
+    shapes = newShapes;
+}
+
+//! Throw a consistently formatted error for an invalid green context specification.
+[[noreturn]] void throwInvalidGreenContext(std::string const& spec, std::string const& reason)
+{
+    throw std::invalid_argument("Invalid --greenContext specification '" + spec + "': " + reason);
+}
+
+//! Parse a positive SM count from a green context specification.
+[[nodiscard]] int32_t parseGreenContextCount(
+    std::string_view const value, std::string const& name, std::string const& spec)
+{
+    uint32_t count{};
+    char const* const end = value.data() + value.size();
+    auto const [ptr, error] = std::from_chars(value.data(), end, count);
+    if (error == std::errc::result_out_of_range || count > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()))
+    {
+        throwInvalidGreenContext(
+            spec, name + " must not exceed " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    }
+    if (error != std::errc{} || ptr != end)
+    {
+        throwInvalidGreenContext(spec, name + " must be a positive decimal integer.");
+    }
+    if (count == 0)
+    {
+        throwInvalidGreenContext(spec, name + " must be greater than zero.");
+    }
+    return static_cast<int32_t>(count);
+}
+
+//! Parse the command-line grammar for one green context.
+[[nodiscard]] GreenContextSpec parseGreenContextSpec(std::string const& value)
+{
+    GreenContextSpec spec{};
+    if (value.find(':') == std::string::npos)
+    {
+        spec.smCount = parseGreenContextCount(value, "SM count", value);
+        return spec;
+    }
+
+    bool foundSmCount{false};
+    bool foundCoscheduledSmCount{false};
+    for (std::string const& fieldString : splitToStringVec(value, ','))
+    {
+        std::string_view const field{fieldString};
+        size_t const colon = field.find(':');
+        if (field.empty() || colon == std::string_view::npos || colon == 0 || colon + 1 == field.size()
+            || field.find(':', colon + 1) != std::string_view::npos)
+        {
+            throwInvalidGreenContext(value, "expected sm:<N>[,cosched:<M>] or a bare SM count.");
+        }
+
+        std::string_view const key = field.substr(0, colon);
+        std::string_view const count = field.substr(colon + 1);
+        if (key == "sm")
+        {
+            if (foundSmCount)
+            {
+                throwInvalidGreenContext(value, "sm may be specified only once.");
+            }
+            spec.smCount = parseGreenContextCount(count, "SM count", value);
+            foundSmCount = true;
+        }
+        else if (key == "cosched")
+        {
+            if (!foundSmCount)
+            {
+                throwInvalidGreenContext(value, "cosched must follow sm.");
+            }
+            if (foundCoscheduledSmCount)
+            {
+                throwInvalidGreenContext(value, "cosched may be specified only once.");
+            }
+            spec.coscheduledSmCount = parseGreenContextCount(count, "co-scheduled SM count", value);
+            foundCoscheduledSmCount = true;
+        }
+        else
+        {
+            throwInvalidGreenContext(value, "unknown key '" + std::string(key) + "'.");
+        }
+    }
+
+    if (!foundSmCount)
+    {
+        throwInvalidGreenContext(value, "sm is required.");
+    }
+    return spec;
+}
+
+//! Assign each green context to the nearest preceding optimization profile, or to the engine if none precedes it.
+void getGreenContexts(Arguments const& arguments, std::optional<GreenContextSpec>& greenContext,
+    std::vector<std::optional<GreenContextSpec>>& profileGreenContexts)
+{
+    auto const greenContextRange = arguments.equal_range("--greenContext");
+    if (greenContextRange.first == greenContextRange.second)
+    {
+        return;
+    }
+
+    struct PositionedProfile
+    {
+        int32_t position;
+        size_t index;
+    };
+    struct PositionedGreenContext
+    {
+        int32_t position;
+        GreenContextSpec spec;
+    };
+
+    std::vector<PositionedProfile> profiles;
+    auto const profileRange = arguments.equal_range("--profile");
+    std::transform(profileRange.first, profileRange.second, std::back_inserter(profiles), [](auto const& entry) {
+        return PositionedProfile{entry.second.second, stringToValue<size_t>(entry.second.first)};
+    });
+    std::ranges::sort(profiles, {}, &PositionedProfile::position);
+
+    std::vector<PositionedGreenContext> contexts;
+    std::transform(
+        greenContextRange.first, greenContextRange.second, std::back_inserter(contexts), [](auto const& entry) {
+            return PositionedGreenContext{entry.second.second, parseGreenContextSpec(entry.second.first)};
+        });
+    std::ranges::sort(contexts, {}, &PositionedGreenContext::position);
+
+    for (auto const& context : contexts)
+    {
+        auto const nextProfile = std::ranges::upper_bound(profiles, context.position, {}, &PositionedProfile::position);
+        if (nextProfile == profiles.begin())
+        {
+            if (greenContext)
+            {
+                throw std::invalid_argument(
+                    "--greenContext can be specified at most once outside an optimization profile block.");
+            }
+            greenContext = context.spec;
+            continue;
+        }
+
+        size_t const profileIndex = std::prev(nextProfile)->index;
+        if (profileIndex >= profileGreenContexts.size())
+        {
+            profileGreenContexts.resize(profileIndex + 1);
+        }
+        if (profileGreenContexts[profileIndex])
+        {
+            throw std::invalid_argument("--greenContext can be specified at most once for optimization profile "
+                + std::to_string(profileIndex) + ".");
+        }
+        profileGreenContexts[profileIndex] = context.spec;
+    }
+}
+
+bool getOptimizationProfiles(
+    Arguments& arguments, std::vector<BuildOptions::ShapeProfile>& optProfiles, char const* argument)
+{
+    bool retValue{false};
+    int32_t pos{};
+    size_t profileIndex{};
+
+    auto getShapes
+        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector) {
+              std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+              for (auto const& s : shapeList)
+              {
+                  auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
+                  auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+                  auto dims = nameDimsPair.second;
+                  insertShapesBuild(shapes, selector, tensorName, dims);
+              }
+          };
+
+    while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
+    {
+        BuildOptions::ShapeProfile optProfile{};
+        bool minShapes{false}, maxShapes{false}, optShapes{false}, greenContext{false};
+        constexpr int32_t kMAX_PROFILE_OPTIONS{nvinfer1::EnumMax<nvinfer1::OptProfileSelector>() + 1};
+        for (int32_t i = 0; i < kMAX_PROFILE_OPTIONS; i++, pos++)
+        {
+            std::string value;
+
+            if (!minShapes && getAndDelOptionBehind(arguments, "--minShapes", pos, value))
+            {
+                minShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kMIN);
+            }
+            else if (!maxShapes && getAndDelOptionBehind(arguments, "--maxShapes", pos, value))
+            {
+                maxShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kMAX);
+            }
+            else if (!optShapes && getAndDelOptionBehind(arguments, "--optShapes", pos, value))
+            {
+                optShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kOPT);
+            }
+            else if (!greenContext && getAndDelOptionBehind(arguments, "--greenContext", pos, value))
+            {
+                greenContext = true;
+            }
+            else
+            {
+                break;
+            }
+        }
+        processShapes(optProfile, minShapes, optShapes, maxShapes);
+        if (profileIndex >= optProfiles.size())
+        {
+            optProfiles.resize(profileIndex + 1);
+        }
+        if (!optProfiles[profileIndex].empty())
+        {
+            throw std::invalid_argument("Optimization profile index cannot be the same.");
+        }
+        optProfiles[profileIndex] = optProfile;
+        retValue = true;
+    }
+
+    profileIndex = 0;
+    for (auto const& optProfile : optProfiles)
+    {
+        if (optProfile.empty())
+        {
+            throw std::invalid_argument(std::string("Found invalid or missing shape spec at profile index ")
+                + std::to_string(profileIndex) + std::string(". "));
+        }
+        ++profileIndex;
+    }
+    return retValue;
+}
+
+// Helper function to output a map as "name1:file1, name2:file2, ..."
+std::string mapToString(std::unordered_map<std::string, std::string> const& m)
+{
+    std::string result;
+    char const* delim = "";
+    for (auto const& kv : m)
+    {
+        result += delim;
+        delim = ", ";
+        result += kv.first + ":" + kv.second;
+    }
+    return result;
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+bool getRefPairs(Arguments& arguments, std::vector<InferenceOptions::RefPair>& refPairs)
+{
+    bool retValue{false};
+    int32_t pos{};
+    constexpr int32_t kNUM_REF_PAIR_FOLLOW_OPTIONS
+        = 2; // Number of options that can follow --refPair: --loadInputs and --loadRefOutputs
+    size_t pairIndex{};
+
+    auto parseIntoMap = [](std::string const& value, std::unordered_map<std::string, std::string>& map) {
+        std::vector<std::string> kvList{splitToStringVec(value, ',')};
+        splitInsertKeyValue(kvList, map);
+    };
+
+    while (getAndDelOptionWithPosition(arguments, "--refPair", pairIndex, pos))
+    {
+        InferenceOptions::RefPair pair;
+
+        for (int32_t i = 0; i < kNUM_REF_PAIR_FOLLOW_OPTIONS; ++i, ++pos)
+        {
+            std::string value;
+
+            if (getAndDelOptionBehind(arguments, "--loadInputs", pos, value))
+            {
+                parseIntoMap(value, pair.first); // Parse into input map
+            }
+            else if (getAndDelOptionBehind(arguments, "--loadRefOutputs", pos, value))
+            {
+                parseIntoMap(value, pair.second); // Parse into output map
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (pairIndex >= refPairs.size())
+        {
+            refPairs.resize(pairIndex + 1);
+        }
+        if (!refPairs[pairIndex].first.empty() || !refPairs[pairIndex].second.empty())
+        {
+            throw std::invalid_argument("Reference pair index cannot be the same.");
+        }
+        refPairs[pairIndex] = pair;
+        retValue = true;
+    }
+
+    // Validate refPairs when --refPair is used
+    if (retValue)
+    {
+        // Rule: Need at least 2 pairs when using --refPair
+        if (refPairs.size() < 2)
+        {
+            throw std::invalid_argument("When using --refPair, you need at least two pairs of I/O.");
+        }
+
+        size_t idx = 0;
+        for (auto const& pair : refPairs)
+        {
+            // Rule: Each pair must have both --loadInputs and --loadRefOutputs
+            if (pair.first.empty())
+            {
+                throw std::invalid_argument(std::string("Missing --loadInputs for reference pair at index ")
+                    + std::to_string(idx)
+                    + std::string(". Each --refPair must have both --loadInputs and --loadRefOutputs."));
+            }
+            if (pair.second.empty())
+            {
+                throw std::invalid_argument(std::string("Missing --loadRefOutputs for reference pair at index ")
+                    + std::to_string(idx)
+                    + std::string(". Each --refPair must have both --loadInputs and --loadRefOutputs."));
+            }
+            ++idx;
+        }
+
+        // Output parsed refPairs for verification
+        sample::gLogVerbose << "Parsed refPairs:" << std::endl;
+        for (size_t i = 0; i < refPairs.size(); ++i)
+        {
+            sample::gLogVerbose << "  refPair[" << i << "]:" << std::endl;
+            sample::gLogVerbose << "    loadInputs: {" << mapToString(refPairs[i].first) << "}" << std::endl;
+            sample::gLogVerbose << "    loadRefOutputs: {" << mapToString(refPairs[i].second) << "}" << std::endl;
+        }
+    }
+    return retValue;
+}
+
+template <typename T>
+void printShapes(std::ostream& os, char const* phase, T const& shapes, int32_t profileIndex)
+{
+    using namespace std::string_view_literals;
+    if (shapes.empty())
+    {
+        os << "Input " << phase << " shapes: model" << std::endl;
+    }
+    else
+    {
+        std::string profileString
+            = (profileIndex != -1 && phase == "build"sv) ? "(profile " + std::to_string(profileIndex) + ")" : "";
+        for (auto const& s : shapes)
+        {
+            os << "Input " << phase << " shape " << profileString << ": " << s.first << "=" << s.second << std::endl;
+        }
+    }
+}
+
+std::ostream& printTacticSources(
+    std::ostream& os, nvinfer1::TacticSources enabledSources, nvinfer1::TacticSources disabledSources)
+{
+    if (!enabledSources && !disabledSources)
+    {
+        os << "Using default tactic sources";
+    }
+    else
+    {
+        auto const addSource = [&](uint32_t source, std::string const& name) {
+            if (enabledSources & source)
+            {
+                os << name << " [ON], ";
+            }
+            else if (disabledSources & source)
+            {
+                os << name << " [OFF], ";
+            }
+        };
+
+        addSource(
+            1U << static_cast<uint32_t>(nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS), "edge mask convolutions");
+        addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kJIT_CONVOLUTIONS), "JIT convolutions");
+    }
+    return os;
+}
+
+#if !TRT_WINML
+std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
+{
+    os << "Strongly Typed";
+    return os;
+}
+
+std::ostream& printTempfileControls(std::ostream& os, TempfileControlFlags const tempfileControls)
+{
+    auto getFlag = [&](TempfileControlFlag f) -> char const* {
+        bool allowed = !!(tempfileControls & (1U << static_cast<int64_t>(f)));
+        return allowed ? "allow" : "deny";
+    };
+    auto const inMemory = getFlag(TempfileControlFlag::kALLOW_IN_MEMORY_FILES);
+    auto const temporary = getFlag(TempfileControlFlag::kALLOW_TEMPORARY_FILES);
+
+    os << "{ in_memory: " << inMemory << ", temporary: " << temporary << " }";
+
+    return os;
+}
+#endif // !TRT_WINML
+std::ostream& printTimingCache(std::ostream& os, TimingCacheMode const& timingCacheMode)
+{
+    switch (timingCacheMode)
+    {
+    case TimingCacheMode::kGLOBAL: os << "global"; break;
+    case TimingCacheMode::kLOCAL: os << "local"; break;
+    case TimingCacheMode::kDISABLE: os << "disable"; break;
+    }
+    return os;
+}
+
+std::ostream& printSparsity(std::ostream& os, BuildOptions const& options)
+{
+    switch (options.sparsity)
+    {
+    case SparsityFlag::kDISABLE: os << "Disabled"; break;
+    case SparsityFlag::kENABLE: os << "Enabled"; break;
+    case SparsityFlag::kFORCE: os << "Forced"; break;
+    }
+
+    return os;
+}
+
+std::ostream& printMemoryPools(std::ostream& os, BuildOptions const& options)
+{
+    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB") {
+        if (val >= 0)
+        {
+            os << val << " " << unit;
+        }
+        else
+        {
+            os << "default";
+        }
+    };
+    os << "workspace: ";
+    printValueOrDefault(options.workspace);
+    os << ", ";
+    os << "dlaSRAM: ";
+    printValueOrDefault(options.dlaSRAM);
+    os << ", ";
+    os << "dlaLocalDRAM: ";
+    printValueOrDefault(options.dlaLocalDRAM);
+    os << ", ";
+    os << "dlaGlobalDRAM: ";
+    printValueOrDefault(options.dlaGlobalDRAM);
+    os << ", ";
+    os << "tacticSharedMem: ";
+    printValueOrDefault(options.tacticSharedMem, "KiB");
+    return os;
+}
+
+std::string previewFeatureToString(PreviewFeature feature)
+{
+    // clang-format off
+    switch (feature)
+    {
+    case PreviewFeature::kALIASED_PLUGIN_IO_10_03: return "kALIASED_PLUGIN_IO_10_03";
+    case PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10: return "kRUNTIME_ACTIVATION_RESIZE_10_10";
+    }
+    return "Invalid Preview Feature";
+    // clang-format on
+}
+
+std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
+{
+    if (options.previewFeatures.empty())
+    {
+        os << "Use default preview flags.";
+        return os;
+    }
+
+    auto const addFlag = [&](PreviewFeature feat) {
+        int32_t featVal = static_cast<int32_t>(feat);
+        if (options.previewFeatures.find(featVal) != options.previewFeatures.end())
+        {
+            os << previewFeatureToString(feat) << (options.previewFeatures.at(featVal) ? " [ON], " : " [OFF], ");
+        }
+    };
+
+    addFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
+    addFlag(PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10);
+
+    return os;
+}
+
+} // namespace
+
+Arguments argsToArgumentsMap(int32_t argc, char* argv[])
+{
+    Arguments arguments;
+    for (int32_t i = 1; i < argc; ++i)
+    {
+        auto valuePtr = strchr(argv[i], '=');
+        if (valuePtr)
+        {
+            std::string value{valuePtr + 1};
+            arguments.emplace(std::string(argv[i], valuePtr - argv[i]), std::make_pair(value, i));
+        }
+        else
+        {
+            arguments.emplace(argv[i], std::make_pair(std::string(""), i));
+        }
+    }
+    return arguments;
+}
+
+namespace
+{
+std::string resolveHomeDirectoryOnLinux(std::string const& model)
+{
+    std::string filePath{model};
+#ifndef _WIN32
+    if (filePath[0] == '~')
+    {
+        char const* home = std::getenv("HOME");
+        if (home)
+        {
+            filePath.replace(0, 1, home);
+        }
+    }
+#endif
+    return filePath;
+}
+} // namespace
+
+void BaseModelOptions::parse(Arguments& arguments)
+{
+    if (getAndDelOption(arguments, "--onnx", model))
+    {
+        format = ModelFormat::kONNX;
+        model = resolveHomeDirectoryOnLinux(model);
+    }
+}
+
+void ModelOptions::parse(Arguments& arguments)
+{
+    baseModel.parse(arguments);
+
+    switch (baseModel.format)
+    {
+    case ModelFormat::kONNX:
+    case ModelFormat::kANY:
+    {
+        break;
+    }
+    }
+
+    if (baseModel.format == ModelFormat::kONNX)
+    {
+        if (!outputs.empty())
+        {
+            throw std::invalid_argument("The --output flag should not be used with ONNX models.");
+        }
+    }
+}
+
+void getTempfileControls(Arguments& arguments, char const* argument, TempfileControlFlags& tempfileControls)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> controlList{splitToStringVec(list, ',')};
+    for (auto const& s : controlList)
+    {
+        auto const [control, allow] = splitNameAndValue<std::string>(s);
+        if (!(allow == "allow"sv || allow == "deny"sv))
+        {
+            throw std::invalid_argument("--tempfileControls value should be `deny` or `allow`");
+        }
+        if (!(control == "in_memory"sv || control == "temporary"sv))
+        {
+            throw std::invalid_argument(std::string{"Unknown --tempfileControls key "} + control);
+        }
+
+        bool const allowed = (allow == "allow"sv);
+        int32_t const offset = (control == "in_memory"sv)
+            ? static_cast<int32_t>(TempfileControlFlag::kALLOW_IN_MEMORY_FILES)
+            : static_cast<int32_t>(TempfileControlFlag::kALLOW_TEMPORARY_FILES);
+        if (allowed)
+        {
+            tempfileControls |= (1U << offset);
+        }
+        else
+        {
+            tempfileControls &= ~(1U << offset);
+        }
+    }
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity,readability-function-size)
+void BuildOptions::parse(Arguments& arguments)
+{
+#if TRT_WINML
+    bool const cpuOnlyExplicit = getAndDelOption(arguments, "--cpuOnly", cpuOnly);
+#else
+    getAndDelOption(arguments, "--cpuOnly", cpuOnly);
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, char const* argument) {
+        std::string list;
+        getAndDelOption(arguments, argument, list);
+        std::vector<std::string> formats{splitToStringVec(list, ',')};
+        for (const auto& f : formats)
+        {
+            formatsVector.push_back(stringToValue<IOFormat>(f));
+        }
+    };
+
+    getFormats(inputFormats, "--inputIOFormats");
+    getFormats(outputFormats, "--outputIOFormats");
+#endif // TRT_WINML
+    getGreenContexts(arguments, greenContext, profileGreenContexts);
+    if (!getOptimizationProfiles(arguments, optProfiles, "--profile"))
+    {
+        ShapeProfile shapes;
+        bool minShapes{false}, optShapes{false}, maxShapes{false};
+        try
+        {
+            minShapes = getShapesBuild(arguments, shapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
+            optShapes = getShapesBuild(arguments, shapes, "--optShapes", nvinfer1::OptProfileSelector::kOPT);
+            maxShapes = getShapesBuild(arguments, shapes, "--maxShapes", nvinfer1::OptProfileSelector::kMAX);
+        }
+        catch (std::invalid_argument const& arg)
+        {
+            throw std::invalid_argument(arg.what()
+                + std::string(" conversion failure: failed to parse minShapes/optShapes/maxShapes. Please double check "
+                              "your input string."));
+        }
+
+        processShapes(shapes, minShapes, optShapes, maxShapes);
+        optProfiles.emplace_back(shapes);
+    }
+    arguments.erase("--greenContext");
+    profileGreenContexts.resize(optProfiles.size());
+    BuildOptions::ShapeProfile dummyShapes;
+
+    bool remainingMinShapes = getShapesBuild(arguments, dummyShapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
+    bool remainingOptShapes = getShapesBuild(arguments, dummyShapes, "--optShapes", nvinfer1::OptProfileSelector::kOPT);
+    bool remainingMaxShapes = getShapesBuild(arguments, dummyShapes, "--maxShapes", nvinfer1::OptProfileSelector::kMAX);
+    if (remainingMinShapes || remainingOptShapes || remainingMaxShapes)
+    {
+        throw std::invalid_argument("Multiple --minShapes/--optShapes/--maxShapes without --profile are not allowed. ");
+    }
+
+    std::string memPoolSizes;
+    getAndDelOption(arguments, "--memPoolSize", memPoolSizes);
+    std::vector<std::string> memPoolSpecs{splitToStringVec(memPoolSizes, ',')};
+    for (auto const& memPoolSpec : memPoolSpecs)
+    {
+        std::string memPoolName;
+        double memPoolSize;
+        try
+        {
+            std::string strPoolSize;
+            std::tie(memPoolName, strPoolSize) = splitNameAndValue<std::string>(memPoolSpec);
+            memPoolSize = stringToValue<double>(addDefaultUnitSuffixIfNotSpecified(strPoolSize, 'M'));
+        }
+        catch (std::invalid_argument const& arg)
+        {
+            throw std::invalid_argument(arg.what()
+                + std::string(
+                    " conversion failure: failed to parse --memPoolSize. Please double check your input string."));
+        }
+
+        if (memPoolSize < 0)
+        {
+            throw std::invalid_argument(std::string("Negative memory pool size: ") + std::to_string(memPoolSize));
+        }
+        if (memPoolName == "workspace")
+        {
+            // use unit in MB.
+            workspace = memPoolSize / 1.0_MiB;
+        }
+#if !TRT_WINML
+        else if (memPoolName == "dlaSRAM")
+        {
+            // use unit in MB.
+            dlaSRAM = memPoolSize / 1.0_MiB;
+        }
+        else if (memPoolName == "dlaLocalDRAM")
+        {
+            // use unit in MB.
+            dlaLocalDRAM = memPoolSize / 1.0_MiB;
+        }
+        else if (memPoolName == "dlaGlobalDRAM")
+        {
+            // use unit in MB.
+            dlaGlobalDRAM = memPoolSize / 1.0_MiB;
+        }
+#endif // !TRT_WINML
+        else if (memPoolName == "tacticSharedMem")
+        {
+            // use unit in KB.
+            tacticSharedMem = memPoolSize / 1.0_KiB;
+        }
+        else if (!memPoolName.empty())
+        {
+            throw std::invalid_argument(std::string("Unknown memory pool: ") + memPoolName);
+        }
+    }
+
+    getAndDelOption(arguments, "--avgTiming", avgTiming);
+
+    getAndDelOption(arguments, "--refit", refittable);
+
+    getAndDelOption(arguments, "--stripWeights", stripWeights);
+
+    bool stripAllWeights{};
+    getAndDelOption(arguments, "--stripAllWeights", stripAllWeights);
+    if (stripAllWeights)
+    {
+        refittable = true;
+        stripWeights = true;
+    }
+
+#if !TRT_WINML
+    // --vc and --versionCompatible are synonyms
+    getAndDelOption(arguments, "--vc", versionCompatible);
+    if (!versionCompatible)
+    {
+        getAndDelOption(arguments, "--versionCompatible", versionCompatible);
+    }
+
+    // --pi and --pluginInstanceNorm are synonyms
+    getAndDelOption(arguments, "--pi", pluginInstanceNorm);
+    if (!pluginInstanceNorm)
+    {
+        getAndDelOption(arguments, "--pluginInstanceNorm", pluginInstanceNorm);
+    }
+
+    getAndDelOption(arguments, "--uint8AsymmetricQuantizationDLA", enableUInt8AsymmetricQuantizationDLA);
+    getAndDelOption(arguments, "--reportCapabilityDLA", reportCapabilityDLA);
+    getAndDelOption(arguments, "--adjustForDLA", adjustForDLA);
+    getAndDelOption(arguments, "--enablePluginOverride", enablePluginOverride);
+    getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
+    getAndDelOption(arguments, "--monitorMemory", enableMonitorMemory);
+#if !TRT_WINML
+    getAndDelNegOption(arguments, "--noTF32", tf32);
+#if ENABLE_FEATURE_WEAK_TYPING
+    getAndDelOption(arguments, "--fp16", fp16);
+    getAndDelOption(arguments, "--bf16", bf16);
+    getAndDelOption(arguments, "--int8", int8);
+    getAndDelOption(arguments, "--fp8", fp8);
+    getAndDelOption(arguments, "--int4", int4);
+#endif // ENABLE_FEATURE_WEAK_TYPING
+    getAndDelOption(arguments, "--stronglyTyped", stronglyTyped);
+    getAndDelOption(arguments, "--distributiveIndependence", distributiveIndependence);
+
+    getAndDelOption(arguments, "--safe", safe);
+    // --dumpKernelText is the former spelling of --dumpCheckerBlob. Consume both unconditionally.
+    bool dumpKernelText{false};
+    getAndDelOption(arguments, "--dumpKernelText", dumpKernelText);
+    getAndDelOption(arguments, "--dumpCheckerBlob", dumpCheckerBlob);
+    dumpCheckerBlob = dumpCheckerBlob || dumpKernelText;
+    if (dumpCheckerBlob && !safe)
+    {
+        throw std::invalid_argument("--dumpCheckerBlob requires --safe to be enabled.");
+    }
+    getAndDelOption(arguments, "--buildDLAStandalone", buildDLAStandalone);
+    getAndDelOption(arguments, "--allowGPUFallback", allowGPUFallback);
+    getAndDelOption(arguments, "--consistency", consistency);
+    getAndDelOption(arguments, "--reference", reference);
+    if (getAndDelOption(arguments, "--loadCheckerBlob", checkerBlob) && !reference)
+    {
+        throw std::invalid_argument("--loadCheckerBlob requires --reference to be enabled.");
+    }
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--skipInference", skipInference);
+#if TRT_WINML
+    getAndDelOption(arguments, "--deferWeightsLoading", deferWeightsLoading);
+#endif // TRT_WINML
+#if !TRT_WINML
+    if (getAndDelOption(arguments, "--directIO", directIO))
+    {
+        sample::gLogWarning << "--directIO flag has been deprecated" << std::endl;
+    }
+
+    getLayerDeviceTypes(arguments, "--layerDeviceTypes", layerDeviceTypes);
+    getDecomposableAttentions(arguments, "--decomposableAttentions", decomposableAttentions);
+
+    getAndDelStringsSet(arguments, "--markDebug", debugTensors);
+    getAndDelOption(arguments, "--markUnfusedTensorsAsDebugTensors", markUnfusedTensorsAsDebugTensors);
+#if ENABLE_FEATURE_WEAK_TYPING
+    std::string precisionConstraintsString;
+    getAndDelOption(arguments, "--precisionConstraints", precisionConstraintsString);
+    if (!precisionConstraintsString.empty())
+    {
+        static std::unordered_map<std::string, PrecisionConstraints> const precisionConstraintsMap{
+            {"obey", PrecisionConstraints::kOBEY},
+            {"prefer", PrecisionConstraints::kPREFER},
+            {"none", PrecisionConstraints::kNONE},
+        };
+        auto it = precisionConstraintsMap.find(precisionConstraintsString);
+        if (it == precisionConstraintsMap.end())
+        {
+            throw std::invalid_argument(std::string("Unknown precision constraints: ") + precisionConstraintsString);
+        }
+        precisionConstraints = it->second;
+    }
+    else
+    {
+        precisionConstraints = PrecisionConstraints::kNONE;
+    }
+
+    getLayerPrecisions(arguments, "--layerPrecisions", layerPrecisions);
+    getLayerOutputTypes(arguments, "--layerOutputTypes", layerOutputTypes);
+
+    if (layerPrecisions.empty() && layerOutputTypes.empty() && precisionConstraints != PrecisionConstraints::kNONE)
+    {
+        sample::gLogWarning << R"(When --precisionConstraints flag is set to "obey" or "prefer", please add )"
+                            << "--layerPrecision/--layerOutputTypes flags to set layer-wise precisions and output "
+                               "types."
+                            << std::endl;
+    }
+    if ((!layerPrecisions.empty() || !layerOutputTypes.empty()) && precisionConstraints == PrecisionConstraints::kNONE)
+    {
+        sample::gLogWarning << "--layerPrecision/--layerOutputTypes flags have no effect when --precisionConstraints "
+                               "is not set."
+                            << std::endl;
+    }
+#endif // ENABLE_FEATURE_WEAK_TYPING
+#endif // !TRT_WINML
+
+    getAndDelOption(arguments, "--sparsity", sparsity);
+    std::string profilingVerbosityString;
+
+    getAndDelOption(arguments, "--profilingVerbosity", profilingVerbosityString);
+    if (profilingVerbosityString == "layer_names_only")
+    {
+        profilingVerbosity = nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY;
+    }
+    else if (profilingVerbosityString == "none")
+    {
+        profilingVerbosity = nvinfer1::ProfilingVerbosity::kNONE;
+    }
+    else if (profilingVerbosityString == "detailed")
+    {
+        profilingVerbosity = nvinfer1::ProfilingVerbosity::kDETAILED;
+    }
+    else if (profilingVerbosityString == "default")
+    {
+        sample::gLogWarning << "--profilingVerbosity=default has been deprecated by "
+                               "--profilingVerbosity=layer_names_only."
+                            << std::endl;
+        profilingVerbosity = nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY;
+    }
+    else if (profilingVerbosityString == "verbose")
+    {
+        sample::gLogWarning << "--profilingVerbosity=verbose has been deprecated by --profilingVerbosity=detailed."
+                            << std::endl;
+        profilingVerbosity = nvinfer1::ProfilingVerbosity::kDETAILED;
+    }
+    else if (!profilingVerbosityString.empty())
+    {
+        throw std::invalid_argument(std::string("Unknown profilingVerbosity: ") + profilingVerbosityString);
+    }
+
+    if (getAndDelOption(arguments, "--loadEngine", engine))
+    {
+        load = true;
+    }
+#if !TRT_WINML
+    getAndDelOption(arguments, "--asyncFileReader", asyncFileReader);
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--getPlanVersionOnly", getPlanVersionOnly);
+
+    if (getAndDelOption(arguments, "--saveEngine", engine))
+    {
+        save = true;
+    }
+    getAndDelOption(arguments, "--saveAllEngines", saveAllEngines);
+    if (load && save)
+    {
+        throw std::invalid_argument("Incompatible load and save engine options selected");
+    }
+    if (saveAllEngines && !save)
+    {
+        throw std::invalid_argument("--saveAllEngines requires --saveEngine to be specified.");
+    }
+    if (reference && !load)
+    {
+        throw std::invalid_argument(
+            "--reference requires --loadEngine: build and save the engine first, then "
+            "check the saved engine in a separate run.");
+    }
+#if TRT_WINML
+    if (deferWeightsLoading && !load)
+    {
+        throw std::invalid_argument("--deferWeightsLoading requires --loadEngine to be specified.");
+    }
+#endif // TRT_WINML
+
+    std::string tacticSourceArgs;
+    if (getAndDelOption(arguments, "--tacticSources", tacticSourceArgs))
+    {
+        std::vector<std::string> tacticList = splitToStringVec(tacticSourceArgs, ',');
+        for (auto& t : tacticList)
+        {
+            bool enable{false};
+            if (t.front() == '+')
+            {
+                enable = true;
+            }
+            else if (t.front() != '-')
+            {
+                throw std::invalid_argument(
+                    "Tactic source must be prefixed with + or -, indicating whether it should be enabled or disabled "
+                    "respectively.");
+            }
+            t.erase(0, 1);
+
+            auto const toUpper = [](std::string& sourceName) {
+                std::transform(
+                    sourceName.begin(), sourceName.end(), sourceName.begin(), [](char c) { return std::toupper(c); });
+                return sourceName;
+            };
+
+            nvinfer1::TacticSource source{};
+            t = toUpper(t);
+            if (t == "EDGE_MASK_CONVOLUTIONS")
+            {
+                source = nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS;
+            }
+            else if (t == "JIT_CONVOLUTIONS")
+            {
+                source = nvinfer1::TacticSource::kJIT_CONVOLUTIONS;
+            }
+            else
+            {
+                throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
+            }
+
+            uint32_t sourceBit = 1U << static_cast<uint32_t>(source);
+
+            if (enable)
+            {
+                enabledTactics |= sourceBit;
+            }
+            else
+            {
+                disabledTactics |= sourceBit;
+            }
+
+            if (enabledTactics & disabledTactics)
+            {
+                throw std::invalid_argument(std::string("Cannot enable and disable ") + t);
+            }
+        }
+    }
+
+    bool noBuilderCache{false};
+    getAndDelOption(arguments, "--noBuilderCache", noBuilderCache);
+    getAndDelOption(arguments, "--timingCacheFile", timingCacheFile);
+    if (noBuilderCache)
+    {
+        timingCacheMode = TimingCacheMode::kDISABLE;
+    }
+    else if (!timingCacheFile.empty())
+    {
+        timingCacheMode = TimingCacheMode::kGLOBAL;
+    }
+    else
+    {
+        timingCacheMode = TimingCacheMode::kLOCAL;
+    }
+    getAndDelOption(arguments, "--errorOnTimingCacheMiss", errorOnTimingCacheMiss);
+    getAndDelOption(arguments, "--builderOptimizationLevel", builderOptimizationLevel);
+    getAndDelOption(arguments, "--maxTactics", maxTactics);
+
+    std::string runtimePlatformArgs;
+    getAndDelOption(arguments, "--runtimePlatform", runtimePlatformArgs);
+    if (runtimePlatformArgs == "SameAsBuild" || runtimePlatformArgs.empty())
+    {
+        runtimePlatform = RuntimePlatform::kSAME_AS_BUILD;
+    }
+    else if (runtimePlatformArgs == "WindowsAMD64")
+    {
+        runtimePlatform = RuntimePlatform::kWINDOWS_AMD64;
+    }
+#if HOS_WIN_BUILDER
+    else if (runtimePlatformArgs == "HOSARM64")
+    {
+        runtimePlatform = RuntimePlatform::kHOS_ARM64;
+    }
+#endif
+    else
+    {
+        std::string validOptions = "SameAsBuild, WindowsAMD64";
+#if HOS_WIN_BUILDER
+        validOptions += ", HOSARM64";
+#endif
+        throw std::invalid_argument(
+            std::string("Unknown runtime platform: ") + runtimePlatformArgs + ". Valid options: " + validOptions);
+    }
+
+#if TRT_WINML
+    std::string computeCapabilitiesArgs;
+    getAndDelOption(arguments, "--computeCapabilities", computeCapabilitiesArgs);
+    if (!computeCapabilitiesArgs.empty())
+    {
+        std::vector<std::string> computeCapabilityList{splitToStringVec(computeCapabilitiesArgs, ',')};
+        for (auto computeCapability : computeCapabilityList)
+        {
+            computeCapabilities.push_back(static_cast<nvinfer1::ComputeCapability>(std::stoi(computeCapability)));
+        }
+    }
+    bool useGpu{false};
+    getAndDelOption(arguments, "--useGpu", useGpu);
+    if (useGpu && !computeCapabilities.empty())
+    {
+        std::string errorMsg = "Cannot specify both --useGpu and --computeCapabilities.";
+        throw std::invalid_argument(errorMsg);
+    }
+    if (useGpu && cpuOnlyExplicit)
+    {
+        std::string errorMsg = "Cannot specify both --useGpu and --cpuOnly.";
+        throw std::invalid_argument(errorMsg);
+    }
+    if (useGpu)
+    {
+        computeCapabilities.push_back(nvinfer1::ComputeCapability::kCURRENT);
+        cpuOnly = false;
+    }
+
+#endif // TRT_WINML
+    std::string hardwareCompatibleArgs;
+    getAndDelOption(arguments, "--hardwareCompatibilityLevel", hardwareCompatibleArgs);
+    if (hardwareCompatibleArgs == "none" || hardwareCompatibleArgs.empty())
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kNONE;
+    }
+    else if (samplesCommon::toLower(hardwareCompatibleArgs) == "ampere+")
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kAMPERE_PLUS;
+    }
+    else if (samplesCommon::toLower(hardwareCompatibleArgs) == "samecomputecapability")
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY;
+    }
+    else
+    {
+        throw std::invalid_argument(std::string("Unknown hardwareCompatibilityLevel: ") + hardwareCompatibleArgs
+            + ". Valid options: none, ampere+, sameComputeCapability.");
+    }
+#if !TRT_WINML
+    if (pluginInstanceNorm
+        && (versionCompatible || hardwareCompatibilityLevel == HardwareCompatibilityLevel::kAMPERE_PLUS))
+    {
+        throw std::invalid_argument(
+            "Plugin InstanceNorm cannot be used with version compatible or hardware compatible engines!");
+    }
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--maxAuxStreams", maxAuxStreams);
+#if !TRT_WINML
+    std::string previewFeaturesBuf;
+    getAndDelOption(arguments, "--preview", previewFeaturesBuf);
+    std::vector<std::string> previewFeaturesVec{splitToStringVec(previewFeaturesBuf, ',')};
+    for (auto featureName : previewFeaturesVec)
+    {
+        bool enable{false};
+        if (featureName.front() == '+')
+        {
+            enable = true;
+        }
+        else if (featureName.front() != '-')
+        {
+            throw std::invalid_argument(
+                "Preview features must be prefixed with + or -, indicating whether it should be enabled or disabled "
+                "respectively.");
+        }
+        featureName.erase(0, 1);
+
+        PreviewFeature feat{};
+        if (featureName == "aliasedPluginIO1003")
+        {
+            feat = PreviewFeature::kALIASED_PLUGIN_IO_10_03;
+        }
+        else if (featureName == "runtimeActivationResize")
+        {
+            feat = PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10;
+        }
+        else
+        {
+            throw std::invalid_argument(std::string("Unknown preview feature: ") + featureName);
+        }
+        previewFeatures[static_cast<int32_t>(feat)] = enable;
+    }
+
+    getAndDelOption(arguments, "--tempdir", tempdir);
+    getTempfileControls(arguments, "--tempfileControls", tempfileControls);
+
+    std::string runtimeMode;
+    getAndDelOption(arguments, "--useRuntime", runtimeMode);
+    if (runtimeMode == "full")
+    {
+        useRuntime = RuntimeMode::kFULL;
+    }
+    else if (runtimeMode == "dispatch")
+    {
+        useRuntime = RuntimeMode::kDISPATCH;
+    }
+    else if (runtimeMode == "lean")
+    {
+        useRuntime = RuntimeMode::kLEAN;
+    }
+    else if (!runtimeMode.empty())
+    {
+        throw std::invalid_argument(std::string("Unknown useRuntime: ") + runtimeMode);
+    }
+
+    if ((useRuntime == RuntimeMode::kDISPATCH || useRuntime == RuntimeMode::kLEAN) && !versionCompatible)
+    {
+        versionCompatible = true;
+        sample::gLogWarning << "Implicitly enabling --versionCompatible since --useRuntime=" << runtimeMode
+                            << " is set." << std::endl;
+    }
+
+    if (useRuntime != RuntimeMode::kFULL && !load)
+    {
+        throw std::invalid_argument(std::string("Building a TensorRT engine requires --useRuntime=full."));
+    }
+
+    getAndDelOption(arguments, "--leanDLLPath", leanDLLPath);
+    getAndDelOption(arguments, "--setBuildRoute", buildRoute);
+#else  // !TRT_WINML
+    // Only full runtime supported for TensorRT-RTX
+    useRuntime = RuntimeMode::kFULL;
+#endif // !TRT_WINML
+    // Don't delete the option because the inference option parser requires it
+    getOption(arguments, "--allowWeightStreaming", allowWeightStreaming);
+
+    getAndDelOption(arguments, "--tilingOptimizationLevel", tilingOptimizationLevel);
+    getAndDelOption(arguments, "--l2LimitForTiling", l2LimitForTiling);
+#if !TRT_WINML
+    getAndDelOption(arguments, "--remoteConfig", remoteConfig);
+    if (std::string aliasValue; getAndDelOption(arguments, "--remoteAutoTuningConfig", aliasValue))
+    {
+        if (!remoteConfig.empty() && remoteConfig != aliasValue)
+        {
+            throw std::invalid_argument(
+                "--remoteConfig and its alias --remoteAutoTuningConfig were given conflicting values.");
+        }
+        remoteConfig = std::move(aliasValue);
+    }
+#if !HOS_WIN_BUILDER
+    if (!remoteConfig.empty() && !safe)
+    {
+        throw std::invalid_argument("--remoteConfig is not supported in standard build. Use --safe flag to enable it.");
+    }
+#endif // HOS_WIN_BUILDER
+
+    if (cpuOnly)
+    {
+        if (!safe)
+        {
+            throw std::invalid_argument("CPU-only mode (--cpuOnly) requires --safe flag to be enabled.");
+        }
+        if (remoteConfig.empty())
+        {
+            throw std::invalid_argument("CPU-only mode (--cpuOnly) requires --remoteConfig to be specified.");
+        }
+    }
+#endif // !TRT_WINML
+}
+
+void SystemOptions::parse(Arguments& arguments)
+{
+    getAndDelOption(arguments, "--device", device);
+#if !TRT_WINML
+    getAndDelOption(arguments, "--useDLACore", DLACore);
+    getAndDelOption(arguments, "--dlaWorkspaceAllocationStrategy", dlaWorkspaceAllocationStrategy);
+    std::string pluginName;
+    while (getAndDelOption(arguments, "--plugins", pluginName))
+    {
+        sample::gLogWarning << "--plugins flag has been deprecated, use --staticPlugins flag instead." << std::endl;
+        plugins.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--setPluginsToSerialize", pluginName))
+    {
+        setPluginsToSerialize.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--dynamicPlugins", pluginName))
+    {
+        dynamicPlugins.emplace_back(pluginName);
+    }
+#if ENABLE_UNIFIED_BUILDER
+    samplesSafeCommon::SafetyPluginLibraryArgument safetyPluginOption;
+    while (getAndDelOption(arguments, "--safetyPlugins", safetyPluginOption))
+    {
+        safetyPlugins.emplace_back(std::move(safetyPluginOption));
+    }
+#endif // ENABLE_UNIFIED_BUILDER
+    getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
+#endif // !TRT_WINML
+    if (this->enableStaticPlugins)
+    {
+        std::string staticPluginName;
+        while (getAndDelOption(arguments, "--staticPlugins", staticPluginName))
+        {
+            plugins.emplace_back(staticPluginName);
+        }
+    }
+}
+
+namespace
+{
+
+//! Parse the --tuningSearch=<spec> value into the enum.
+//! Throws std::invalid_argument on unknown non-empty strings; leaves the
+//! algorithm unchanged on empty input.
+TuningSearchAlgorithm parseTuningSearchAlgorithm(std::string const& spec, TuningSearchAlgorithm defaultValue)
+{
+    if (spec.empty())
+    {
+        return defaultValue;
+    }
+    if (spec == "fast")
+    {
+        return TuningSearchAlgorithm::kFAST;
+    }
+    if (spec == "full")
+    {
+        return TuningSearchAlgorithm::kEXHAUSTIVE;
+    }
+    if (spec == "mixed")
+    {
+        return TuningSearchAlgorithm::kMIXED;
+    }
+    throw std::invalid_argument(std::string("Unknown tuning search algorithm: ") + spec);
+}
+
+//! Validate the exclusivity rules for --continue. The flag recovers everything
+//! from the cache header, so any other tuning flag is ambiguous.
+void validateContinueExclusivity(TuningOptions const& opts)
+{
+    if (opts.tuningCacheFile.empty())
+    {
+        throw std::invalid_argument("--continue requires --tuningCacheFile to be specified.");
+    }
+    if (!opts.tuningExpr.empty() || !opts.tuningExprFile.empty())
+    {
+        throw std::invalid_argument(
+            "--continue cannot be used with --tuneBuildRoutes or --tuneBuildRouteFile. "
+            "All options are recovered from the cache file header.");
+    }
+    if (opts.dryRun)
+    {
+        throw std::invalid_argument("--continue cannot be used with --dryRun.");
+    }
+    if (opts.helpBuildRoute)
+    {
+        throw std::invalid_argument("--continue cannot be used with --helpBuildRoute.");
+    }
+}
+
+//! Read --tuneBuildRouteFile contents and append to tuningExpr. Newlines and
+//! spaces are both treated as delimiters, so the file content is equivalent
+//! to a single --tuneBuildRoutes argument.
+void appendTuningExprFromFile(std::string const& path, std::string& tuningExpr)
+{
+    std::ifstream file(path);
+    if (!file.is_open())
+    {
+        throw std::invalid_argument("Cannot open --tuneBuildRouteFile: " + path);
+    }
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (!tuningExpr.empty())
+        {
+            tuningExpr += " ";
+        }
+        tuningExpr += line;
+    }
+}
+
+} // namespace
+
+void TuningOptions::parse(Arguments& arguments)
+{
+    // --helpBuildRoute is a short-circuit; the option's value (if any) is the
+    // optional knob filter (e.g. --helpBuildRoute=conv_use_long_w).
+    if (getAndDelOption(arguments, "--helpBuildRoute", helpBuildRouteKnob))
+    {
+        helpBuildRoute = true;
+    }
+
+    getAndDelOption(arguments, "--tuneBuildRoutes", tuningExpr);
+    getAndDelOption(arguments, "--tuneBuildRouteFile", tuningExprFile);
+
+    std::string searchAlgorithmString;
+    getAndDelOption(arguments, "--tuningSearch", searchAlgorithmString);
+    tuningSearchAlgorithm = parseTuningSearchAlgorithm(searchAlgorithmString, tuningSearchAlgorithm);
+
+    getAndDelOption(arguments, "--tuningTimeOut", timeout);
+    getAndDelOption(arguments, "--tuningCacheFile", tuningCacheFile);
+    getAndDelOption(arguments, "--continue", continueFromCache);
+    getAndDelOption(arguments, "--dryRun", dryRun);
+    // Hidden parent->child IPC flag (not in TuningOptions::help()).
+    getAndDelOption(arguments, "--tuningResultFile", tuningResultFile);
+
+    // Validate
+    if (!tuningExpr.empty() && !tuningExprFile.empty())
+    {
+        throw std::invalid_argument("Cannot specify both --tuneBuildRoutes and --tuneBuildRouteFile.");
+    }
+    if (continueFromCache)
+    {
+        validateContinueExclusivity(*this);
+    }
+    if (tuningSearchAlgorithm == TuningSearchAlgorithm::kMIXED && dryRun)
+    {
+        throw std::invalid_argument("--dryRun is incompatible with --tuningSearch=mixed.");
+    }
+
+    if (!tuningExprFile.empty())
+    {
+        appendTuningExprFromFile(tuningExprFile, tuningExpr);
+    }
+}
+
+constexpr int64_t WeightStreamingBudget::kDISABLE;
+constexpr int64_t WeightStreamingBudget::kAUTOMATIC;
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void InferenceOptions::parse(Arguments& arguments)
+{
+
+    if (getAndDelOption(arguments, "--streams", infStreams))
+    {
+        sample::gLogWarning << "--streams flag has been deprecated, use --infStreams flag instead." << std::endl;
+    }
+    getAndDelOption(arguments, "--infStreams", infStreams);
+
+    getAndDelOption(arguments, "--iterations", iterations);
+    getAndDelOption(arguments, "--duration", duration);
+    getAndDelOption(arguments, "--warmUp", warmup);
+    getAndDelOption(arguments, "--sleepTime", sleep);
+    getAndDelOption(arguments, "--idleTime", idle);
+    bool exposeDMA{false};
+    if (getAndDelOption(arguments, "--exposeDMA", exposeDMA))
+    {
+        overlap = !exposeDMA;
+    }
+    // Data transfers are now disabled by default (--noDataTransfers behavior).
+    // Spin wait is now enabled by default (--useSpinWait behavior).
+    // CUDA graph is now enabled by default (--useCudaGraph behavior).
+    // The old flags are kept for backward compatibility but are no-ops (the behavior is already the default).
+    // Use --includeDataTransfers, --noSpinWait, --noCudaGraph to override these defaults.
+    bool dummyBool{false};
+    if (getAndDelOption(arguments, "--noDataTransfers", dummyBool))
+    {
+        sample::gLogWarning << "--noDataTransfers is deprecated. Data transfers are now disabled by default. "
+                               "Use --includeDataTransfers to re-enable data transfers."
+                            << std::endl;
+    }
+    getAndDelOption(arguments, "--includeDataTransfers", includeTransfers);
+    getAndDelOption(arguments, "--useManagedMemory", useManaged);
+    if (getAndDelOption(arguments, "--useSpinWait", dummyBool))
+    {
+        sample::gLogWarning << "--useSpinWait is deprecated. Spin wait is now enabled by default. "
+                               "Use --noSpinWait to disable spin wait."
+                            << std::endl;
+    }
+    bool noSpinWait{false};
+    if (getAndDelOption(arguments, "--noSpinWait", noSpinWait))
+    {
+        spin = !noSpinWait;
+    }
+    getAndDelOption(arguments, "--threads", threads);
+    if (getAndDelOption(arguments, "--useCudaGraph", dummyBool))
+    {
+        sample::gLogWarning << "--useCudaGraph is deprecated. CUDA graph is now enabled by default. "
+                               "Use --noCudaGraph to disable CUDA graph."
+                            << std::endl;
+    }
+    bool noCudaGraph{false};
+    bool const noCudaGraphOption = getAndDelOption(arguments, "--noCudaGraph", noCudaGraph);
+    if (noCudaGraphOption)
+    {
+        graph = !noCudaGraph;
+#if TRT_WINML
+        if (noCudaGraph)
+        {
+            rtxCudaGraphStrategy = nvinfer1::CudaGraphStrategy::kDISABLED;
+        }
+#endif // TRT_WINML
+    }
+    if (getAndDelOption(arguments, "--separateProfileRun", dummyBool))
+    {
+        sample::gLogWarning << "--separateProfileRun is deprecated. Separate profile run is now always enabled. "
+                               "This flag will be removed in a future release."
+                            << std::endl;
+    }
+    getAndDelOption(arguments, "--timeDeserialize", timeDeserialize);
+    getAndDelOption(arguments, "--timeRefit", timeRefit);
+    getAndDelOption(arguments, "--persistentCacheRatio", persistentCacheRatio);
+
+    // Parse reference pairs: either single pair (--loadInputs/--loadRefOutputs) or multiple pairs (--refPair)
+    // This is similar to how --profile works with --minShapes/--optShapes/--maxShapes
+    if (!getRefPairs(arguments, refPairs))
+    {
+        // No --refPair was used, parse single --loadInputs/--loadRefOutputs pair into refPairs[0]
+        ASSERT(refPairs.size() > 0 && "refPairs must have at least one element");
+        auto& inferenceInputs = refPairs[0].first;
+        auto& inferenceRefOutputs = refPairs[0].second;
+
+        std::string ilist;
+        getAndDelOption(arguments, "--loadInputs", ilist);
+        std::vector<std::string> inputsList{splitToStringVec(ilist, ',')};
+        splitInsertKeyValue(inputsList, inferenceInputs);
+
+        std::string olist;
+        getAndDelOption(arguments, "--loadRefOutputs", olist);
+        std::vector<std::string> refOutputsList{splitToStringVec(olist, ',')};
+        splitInsertKeyValue(refOutputsList, inferenceRefOutputs);
+
+        // Rule: --loadRefOutputs without --loadInputs should fail
+        if (!inferenceRefOutputs.empty() && inferenceInputs.empty())
+        {
+            throw std::invalid_argument("--loadRefOutputs requires --loadInputs to be specified.");
+        }
+
+        // Output parsed inputs and refOutputs for verification
+        if (!inferenceInputs.empty() || !inferenceRefOutputs.empty())
+        {
+            sample::gLogVerbose << "Parsed inputs/refOutputs (no --refPair):" << std::endl;
+            sample::gLogVerbose << "  loadInputs: {" << mapToString(inferenceInputs) << "}" << std::endl;
+            sample::gLogVerbose << "  loadRefOutputs: {" << mapToString(inferenceRefOutputs) << "}" << std::endl;
+        }
+    }
+
+    // Parse accuracy validation options
+    std::string accuracyAlgorithmString;
+    bool const algoExplicitlySet = getAndDelOption(arguments, "--accuracyAlgorithm", accuracyAlgorithmString);
+    std::unordered_map<std::string, AccuracyValidationAlgorithm> fromString{
+        {"l0", AccuracyValidationAlgorithm::kL0},
+        {"l1", AccuracyValidationAlgorithm::kL1},
+        {"l2", AccuracyValidationAlgorithm::kL2},
+        {"lInf", AccuracyValidationAlgorithm::kLInf},
+        {"cos", AccuracyValidationAlgorithm::kCosineSimilarity},
+    };
+    if (!accuracyAlgorithmString.empty() && !fromString.contains(accuracyAlgorithmString))
+    {
+        throw std::invalid_argument(std::string("Unknown accuracyAlgorithm: ") + accuracyAlgorithmString);
+    }
+    accuracyValidationAlgorithm
+        = algoExplicitlySet ? fromString[accuracyAlgorithmString] : AccuracyValidationAlgorithm::kL0;
+
+    bool const atolSet = getAndDelOption(arguments, "--atol", atol);
+    if (atol < 0)
+    {
+        throw std::invalid_argument("--atol must be non-negative.");
+    }
+    bool const rtolSet = getAndDelOption(arguments, "--rtol", rtol);
+    if (rtol < 0)
+    {
+        throw std::invalid_argument("--rtol must be non-negative.");
+    }
+    if (accuracyValidationAlgorithm != AccuracyValidationAlgorithm::kL0)
+    {
+        if (atolSet)
+        {
+            throw std::invalid_argument("--atol is only valid for L0 accuracy algorithm.");
+        }
+        if (rtolSet)
+        {
+            throw std::invalid_argument("--rtol is only valid for L0 accuracy algorithm.");
+        }
+    }
+    getAndDelOption(arguments, "--accuracyThreshold", accuracyThresholdEndToEnd);
+    if (accuracyThresholdEndToEnd < 0)
+    {
+        throw std::invalid_argument("--accuracyThreshold must be non-negative.");
+    }
+
+    getShapesInference(arguments, shapes, "--shapes");
+    setOptProfile = getAndDelOption(arguments, "--useProfile", optProfileIndex);
+
+    std::string allocationStrategyString;
+    getAndDelOption(arguments, "--allocationStrategy", allocationStrategyString);
+    if (allocationStrategyString == "static")
+    {
+        memoryAllocationStrategy = MemoryAllocationStrategy::kSTATIC;
+    }
+    else if (allocationStrategyString == "profile")
+    {
+        memoryAllocationStrategy = MemoryAllocationStrategy::kPROFILE;
+    }
+    else if (allocationStrategyString == "runtime")
+    {
+        memoryAllocationStrategy = MemoryAllocationStrategy::kRUNTIME;
+    }
+    else if (!allocationStrategyString.empty())
+    {
+        throw std::invalid_argument(std::string("Unknown allocationStrategy: ") + allocationStrategyString);
+    }
+
+    bool allowWs{false};
+    getAndDelOption(arguments, "--allowWeightStreaming", allowWs);
+    bool wsBudgetFound = getAndDelOption(arguments, "--weightStreamingBudget", weightStreamingBudget);
+    if (wsBudgetFound && !allowWs)
+    {
+        throw std::invalid_argument(
+            "The weight streaming budget can only be set with --allowWeightStreaming specified.");
+    }
+    if (allowWs && weightStreamingBudget.isDisabled())
+    {
+        sample::gLogWarning << "The engine can stream its weights but it will not at runtime because "
+                               "--weightStreamingBudget unset or set to "
+                            << WeightStreamingBudget::kDISABLE << "." << std::endl;
+    }
+#if TRT_WINML
+    getAndDelOption(arguments, "--runtimeCacheFile", runtimeCacheFile);
+    getAndDelOption(arguments, "--specializeStrategyDS", dynamicShapesKernelSpecializationStrategy);
+    bool const rtxCudaGraphStrategyOption = getAndDelOption(arguments, "--rtxCudaGraphStrategy", rtxCudaGraphStrategy);
+    if (noCudaGraphOption && rtxCudaGraphStrategyOption)
+    {
+        throw std::invalid_argument(
+            "Options --noCudaGraph and --rtxCudaGraphStrategy cannot be used together. "
+            "Use --rtxCudaGraphStrategy=disable to turn off RTX CUDA graph, or use --noCudaGraph alone.");
+    }
+#else // TRT_WINML
+    std::string debugTensorList;
+    getAndDelOption(arguments, "--saveDebugTensors", debugTensorList);
+    std::vector<std::string> fileNames{splitToStringVec(debugTensorList, ',')};
+    splitInsertKeyValue(fileNames, debugTensorFileNames);
+
+    std::string debugFormats;
+    getAndDelOption(arguments, "--saveAllDebugTensors", debugFormats);
+    dumpAlldebugTensorFormats = splitToStringVec(debugFormats, ',');
+#if TRT_BUILD_ONNX_PARSER
+    getAndDelOption(arguments, "--refitFromOnnx", refitOnnxModel);
+#endif // TRT_BUILD_ONNX_PARSER
+#endif // TRT_WINML
+}
+
+void ReportingOptions::parse(Arguments& arguments)
+{
+    getAndDelOption(arguments, "--avgRuns", avgs);
+    getAndDelOption(arguments, "--verbose", verbose);
+    getAndDelOption(arguments, "--dumpRefit", refit);
+    getAndDelOption(arguments, "--dumpOutput", output);
+    getAndDelOption(arguments, "--dumpRawBindingsToFile", dumpRawBindings);
+    getAndDelOption(arguments, "--dumpProfile", profile);
+    getAndDelOption(arguments, "--dumpLayerInfo", layerInfo);
+    getAndDelOption(arguments, "--dumpOptimizationProfile", optProfileInfo);
+    getAndDelOption(arguments, "--exportTimes", exportTimes);
+    getAndDelOption(arguments, "--exportOutput", exportOutput);
+    getAndDelOption(arguments, "--exportProfile", exportProfile);
+    getAndDelOption(arguments, "--exportLayerInfo", exportLayerInfo);
+
+    std::string percentileString;
+    getAndDelOption(arguments, "--percentile", percentileString);
+    std::vector<std::string> percentileStrings = splitToStringVec(percentileString, ',');
+    if (!percentileStrings.empty())
+    {
+        percentiles.clear();
+    }
+    for (auto const& p : percentileStrings)
+    {
+        percentiles.push_back(stringToValue<float>(p));
+    }
+
+    for (auto percentile : percentiles)
+    {
+        if (percentile < 0.F || percentile > 100.F)
+        {
+            throw std::invalid_argument(std::string("Percentile ") + std::to_string(percentile) + "is not in [0,100]");
+        }
+    }
+}
+
+bool parseHelp(Arguments& arguments)
+{
+    bool helpLong{false};
+    bool helpShort{false};
+    getAndDelOption(arguments, "--help", helpLong);
+    getAndDelOption(arguments, "-h", helpShort);
+    return helpLong || helpShort;
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void AllOptions::parse(Arguments& arguments)
+{
+    model.parse(arguments);
+    build.parse(arguments);
+    system.parse(arguments);
+    inference.parse(arguments);
+    tuning.parse(arguments);
+
+    if (build.useRuntime != RuntimeMode::kFULL && inference.timeRefit)
+    {
+        throw std::invalid_argument("--timeRefit requires --useRuntime=full.");
+    }
+
+    if (inference.optProfileIndex < static_cast<int32_t>(build.optProfiles.size()))
+    {
+        // Propagate shape profile between builder and inference
+        for (auto const& s : build.optProfiles[inference.optProfileIndex])
+        {
+            if (inference.shapes.find(s.first) == inference.shapes.end())
+            {
+                insertShapesInference(
+                    inference.shapes, s.first, s.second[static_cast<size_t>(nvinfer1::OptProfileSelector::kOPT)]);
+            }
+        }
+        for (auto const& s : inference.shapes)
+        {
+            if (build.optProfiles[inference.optProfileIndex].find(s.first)
+                == build.optProfiles[inference.optProfileIndex].end())
+            {
+                // assume min/opt/max all the same
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kMIN,
+                    s.first, s.second);
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kOPT,
+                    s.first, s.second);
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kMAX,
+                    s.first, s.second);
+            }
+        }
+    }
+
+    // Set nvtxVerbosity to be the same as build-time profilingVerbosity.
+    inference.nvtxVerbosity = build.profilingVerbosity;
+
+    reporting.parse(arguments);
+    helps = parseHelp(arguments);
+
+    // Skip validation if --help or --helpBuildRoute is specified (both short-circuit
+    // trtexec before doing real work, so model presence is not required).
+    if (!helps && !tuning.helpBuildRoute)
+    {
+        if (!build.load && model.baseModel.format == ModelFormat::kANY)
+        {
+            throw std::invalid_argument("Model missing or format not recognized");
+        }
+#if !TRT_WINML
+        if (system.DLACore >= 0 && inference.graph)
+        {
+            sample::gLogWarning << "CUDA graphs and DLA offloading are not simultaneously supported. "
+                                << "The CUDA graph option has been disabled (alternatively, you may run without the "
+                                   "`--useDLACore` option)."
+                                << std::endl;
+            inference.graph = false;
+        }
+        if (build.safe && system.DLACore >= 0)
+        {
+            build.buildDLAStandalone = true;
+        }
+#endif // !TRT_WINML
+        if (build.runtimePlatform != nvinfer1::RuntimePlatform::kSAME_AS_BUILD)
+        {
+            build.skipInference = true;
+        }
+#if !TRT_WINML
+        if (build.buildDLAStandalone)
+        {
+            build.skipInference = true;
+            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput) {
+                return !fmt.empty() && std::all_of(fmt.begin(), fmt.end(), [&](IOFormat const& ioFmt) {
+                    using TF = nvinfer1::TensorFormat;
+                    auto const f = ioFmt.formats;
+                    bool const isDLA_LINEAR{f == 1U << static_cast<int32_t>(TF::kDLA_LINEAR)};
+                    bool const isHWC4{
+                        f == 1U << static_cast<int32_t>(TF::kCHW4) || f == 1U << static_cast<int32_t>(TF::kDLA_HWC4)};
+                    bool const isCHW32{f == 1U << static_cast<int32_t>(TF::kCHW32)};
+                    bool const isCHW16{f == 1U << static_cast<int32_t>(TF::kCHW16)};
+                    return isDLA_LINEAR || (isInput && isHWC4) || isCHW32 || isCHW16;
+                });
+            };
+            if (!checkSafeDLAFormats(build.inputFormats, true) || !checkSafeDLAFormats(build.outputFormats, false))
+            {
+                throw std::invalid_argument(
+                    "I/O formats for safe DLA capability are restricted to dla_linear, hwc4, chw16, or chw32");
+            }
+            if (build.allowGPUFallback)
+            {
+                throw std::invalid_argument("GPU fallback (--allowGPUFallback) not allowed for DLA standalone mode");
+            }
+        }
+        if (system.DLACore < 0 && build.enableUInt8AsymmetricQuantizationDLA)
+        {
+            throw std::invalid_argument("--uint8AsymmetricQuantizationDLA is not supported without DLA cores.");
+        }
+        if (system.DLACore < 0 && build.reportCapabilityDLA)
+        {
+            throw std::invalid_argument("--reportCapabilityDLA is not supported without DLA cores.");
+        }
+        if (system.DLACore < 0 && build.adjustForDLA)
+        {
+            sample::gLogWarning << "--adjustForDLA was set, but no DLA cores are available. "
+                                << "The parser's behavior will be modified, but the network will run on GPU."
+                                << std::endl;
+        }
+        bool const hasRefOutputs = !inference.refPairs[0].second.empty() || inference.refPairs.size() > 1;
+        if (hasRefOutputs && inference.accuracyThresholdEndToEnd <= 0)
+        {
+            throw std::invalid_argument(
+                "--accuracyThreshold (with a positive value) is required when --loadRefOutputs or --refPair is set.");
+        }
+        if (hasRefOutputs && build.skipInference)
+        {
+            throw std::invalid_argument(
+                "--loadRefOutputs/--refPair cannot be used with --skipInference: accuracy "
+                "validation needs the inference phase to run. Note --skipInference is implicitly "
+                "enabled by --buildDLAStandalone and by a cross-platform --runtimePlatform.");
+        }
+        // Warn when using --onnx with accuracy validation,
+        // because engine builds are nondeterministic and may produce unreliable comparisons.
+        if (hasRefOutputs && !build.load)
+        {
+            sample::gLogWarning << "Accuracy validation (--loadRefOutputs/--refPair) with --onnx may produce "
+                                << "unreliable results because engine builds are nondeterministic. "
+                                << "Use --loadEngine for deterministic comparison." << std::endl;
+        }
+#endif // !TRT_WINML
+    }
+}
+
+void TaskInferenceOptions::parse(Arguments& arguments)
+{
+    getAndDelOption(arguments, "engine", engine);
+    getAndDelOption(arguments, "device", device);
+    getAndDelOption(arguments, "batch", batch);
+#if !TRT_WINML
+    getAndDelOption(arguments, "DLACore", DLACore);
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "graph", graph);
+    getAndDelOption(arguments, "persistentCacheRatio", persistentCacheRatio);
+}
+
+void SafeBuilderOptions::parse(Arguments& arguments)
+{
+#if !TRT_WINML
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, char const* argument) {
+        std::string list;
+        getAndDelOption(arguments, argument, list);
+        std::vector<std::string> formats{splitToStringVec(list, ',')};
+        for (const auto& f : formats)
+        {
+            formatsVector.push_back(stringToValue<IOFormat>(f));
+        }
+    };
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--serialized", serialized);
+    getAndDelOption(arguments, "--onnx", onnxModelFile);
+    getAndDelOption(arguments, "--help", help);
+    getAndDelOption(arguments, "-h", help);
+    getAndDelOption(arguments, "--verbose", verbose);
+    getAndDelOption(arguments, "-v", verbose);
+#if !TRT_WINML
+    getFormats(inputFormats, "--inputIOFormats");
+    getFormats(outputFormats, "--outputIOFormats");
+    getAndDelOption(arguments, "--int8", int8);
+#endif // !TRT_WINML
+    getAndDelOption(arguments, "--std", standard);
+#if !TRT_WINML
+    std::string pluginName;
+    while (getAndDelOption(arguments, "--plugins", pluginName))
+    {
+        sample::gLogWarning << "--plugins flag has been deprecated, use --staticPlugins flag instead." << std::endl;
+        plugins.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--staticPlugins", pluginName))
+    {
+        plugins.emplace_back(pluginName);
+    }
+#endif // !TRT_WINML
+    bool noBuilderCache{false};
+    getAndDelOption(arguments, "--noBuilderCache", noBuilderCache);
+    getAndDelOption(arguments, "--timingCacheFile", timingCacheFile);
+    getAndDelOption(arguments, "--avgTiming", avgTiming);
+    if (noBuilderCache)
+    {
+        timingCacheMode = TimingCacheMode::kDISABLE;
+    }
+    else if (!timingCacheFile.empty())
+    {
+        timingCacheMode = TimingCacheMode::kGLOBAL;
+    }
+    else
+    {
+        timingCacheMode = TimingCacheMode::kLOCAL;
+    }
+    getAndDelOption(arguments, "--sparsity", sparsity);
+}
+
+std::ostream& operator<<(std::ostream& os, BaseModelOptions const& options)
+{
+    os << "=== Model Options ===" << std::endl;
+
+    os << "Format: ";
+    switch (options.format)
+    {
+    case ModelFormat::kONNX:
+    {
+        os << "ONNX";
+        break;
+    }
+    case ModelFormat::kANY: os << "*"; break;
+    }
+    os << std::endl << "Model: " << options.model << std::endl;
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, ModelOptions const& options)
+{
+    os << options.baseModel;
+    switch (options.baseModel.format)
+    {
+    case ModelFormat::kONNX: // Fallthrough: No options to report for ONNX or the generic case
+    case ModelFormat::kANY: break;
+    }
+
+    os << "Output:";
+    for (auto const& o : options.outputs)
+    {
+        os << " " << o;
+    }
+    os << std::endl;
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
+{
+    switch (dtype)
+    {
+    case nvinfer1::DataType::kFLOAT:
+    {
+        os << "fp32";
+        break;
+    }
+    case nvinfer1::DataType::kHALF:
+    {
+        os << "fp16";
+        break;
+    }
+    case nvinfer1::DataType::kBF16:
+    {
+        os << "bf16";
+        break;
+    }
+    case nvinfer1::DataType::kINT8:
+    {
+        os << "int8";
+        break;
+    }
+    case nvinfer1::DataType::kINT32:
+    {
+        os << "int32";
+        break;
+    }
+    case nvinfer1::DataType::kBOOL:
+    {
+        os << "bool";
+        break;
+    }
+    case nvinfer1::DataType::kUINT8:
+    {
+        os << "uint8";
+        break;
+    }
+    case nvinfer1::DataType::kFP8:
+    {
+        os << "fp8";
+        break;
+    }
+    case nvinfer1::DataType::kINT64:
+    {
+        os << "int64";
+        break;
+    }
+    case nvinfer1::DataType::kINT4:
+    {
+        os << "int4";
+        break;
+    }
+    case nvinfer1::DataType::kFP4:
+    {
+        os << "fp4";
+        break;
+    }
+    case nvinfer1::DataType::kE8M0:
+    {
+        os << "e8m0";
+        break;
+    }
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, IOFormat const& format)
+{
+#if ENABLE_FEATURE_WEAK_TYPING
+    if (format.type.has_value())
+    {
+        switch (*format.type)
+        {
+        case nvinfer1::DataType::kFLOAT: os << "fp32:"; break;
+        case nvinfer1::DataType::kHALF: os << "fp16:"; break;
+        case nvinfer1::DataType::kBF16: os << "bf16:"; break;
+        case nvinfer1::DataType::kINT8: os << "int8:"; break;
+        case nvinfer1::DataType::kFP8: os << "fp8:"; break;
+        case nvinfer1::DataType::kINT32: os << "int32:"; break;
+        case nvinfer1::DataType::kINT64: os << "int64:"; break;
+        case nvinfer1::DataType::kBOOL: os << "bool:"; break;
+        case nvinfer1::DataType::kUINT8: os << "uint8:"; break;
+        case nvinfer1::DataType::kINT4: os << "int4:"; break;
+        default: break;
+        }
+    }
+#endif // ENABLE_FEATURE_WEAK_TYPING
+    for (int32_t f = 0; f < nvinfer1::EnumMax<nvinfer1::TensorFormat>(); ++f)
+    {
+        if ((1U << f) & format.formats)
+        {
+            if (f)
+            {
+                os << "+";
+            }
+            switch (nvinfer1::TensorFormat(f))
+            {
+            case nvinfer1::TensorFormat::kLINEAR:
+            {
+                os << "chw";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCHW2:
+            {
+                os << "chw2";
+                break;
+            }
+            case nvinfer1::TensorFormat::kHWC8:
+            {
+                os << "hwc8";
+                break;
+            }
+            case nvinfer1::TensorFormat::kHWC16:
+            {
+                os << "hwc16";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCHW4:
+            {
+                os << "chw4";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCHW16:
+            {
+                os << "chw16";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCHW32:
+            {
+                os << "chw32";
+                break;
+            }
+            case nvinfer1::TensorFormat::kDHWC8:
+            {
+                os << "dhwc8";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCDHW32:
+            {
+                os << "cdhw32";
+                break;
+            }
+            case nvinfer1::TensorFormat::kHWC:
+            {
+                os << "hwc";
+                break;
+            }
+            case nvinfer1::TensorFormat::kDHWC:
+            {
+                os << "dhwc";
+                break;
+            }
+            case nvinfer1::TensorFormat::kDLA_LINEAR:
+            {
+                os << "dla_linear";
+                break;
+            }
+            case nvinfer1::TensorFormat::kDLA_HWC4:
+            {
+                os << "dla_hwc4";
+                break;
+            }
+            }
+        }
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, GreenContextSpec const& spec)
+{
+    os << "sm:" << spec.smCount;
+    if (spec.coscheduledSmCount != 0)
+    {
+        os << ",cosched:" << spec.coscheduledSmCount;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
+{
+    switch (devType)
+    {
+    case nvinfer1::DeviceType::kGPU:
+    {
+        os << "GPU";
+        break;
+    }
+    case nvinfer1::DeviceType::kDLA:
+    {
+        os << "DLA";
+        break;
+    }
+    }
+    return os;
+}
+
+#if !TRT_WINML
+[[nodiscard]] std::string_view toStringView(nvinfer1::DLAWorkspaceAllocationStrategy strategy)
+{
+    switch (strategy)
+    {
+    case nvinfer1::DLAWorkspaceAllocationStrategy::kDEFAULT: return "default";
+    case nvinfer1::DLAWorkspaceAllocationStrategy::kSHARED_STATIC: return "sharedStatic";
+    }
+    throw std::invalid_argument("Invalid DLA workspace allocation strategy provided.");
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::DLAWorkspaceAllocationStrategy strategy)
+{
+    return os << toStringView(strategy);
+}
+#endif // !TRT_WINML
+
+#if TRT_WINML
+[[nodiscard]] std::string_view toStringView(nvinfer1::DynamicShapesKernelSpecializationStrategy strategy)
+{
+    switch (strategy)
+    {
+    case nvinfer1::DynamicShapesKernelSpecializationStrategy::kLAZY: return "lazy";
+    case nvinfer1::DynamicShapesKernelSpecializationStrategy::kEAGER: return "eager";
+    case nvinfer1::DynamicShapesKernelSpecializationStrategy::kNONE: return "none";
+    }
+    throw std::invalid_argument("Invalid kernel specialization strategy provided.");
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::DynamicShapesKernelSpecializationStrategy strategy)
+{
+    return os << toStringView(strategy);
+}
+
+[[nodiscard]] std::string_view toStringView(nvinfer1::CudaGraphStrategy strategy)
+{
+    switch (strategy)
+    {
+    case nvinfer1::CudaGraphStrategy::kDISABLED: return "disable";
+    case nvinfer1::CudaGraphStrategy::kWHOLE_GRAPH_CAPTURE: return "wholeGraph";
+    }
+    throw std::invalid_argument("Invalid CUDA graph strategy provided.");
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::CudaGraphStrategy strategy)
+{
+    return os << toStringView(strategy);
+}
+#endif // TRT_WINML
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::RuntimePlatform platform)
+{
+    switch (platform)
+    {
+    case nvinfer1::RuntimePlatform::kSAME_AS_BUILD:
+    {
+        os << "Same As Build";
+        break;
+    }
+    case nvinfer1::RuntimePlatform::kWINDOWS_AMD64:
+    {
+        os << "Windows AMD64";
+        break;
+    }
+#if HOS_RUNTIME
+    case nvinfer1::RuntimePlatform::kHOS_ARM64:
+    {
+        os << "HOS ARM64";
+        break;
+    }
+#endif
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, ShapeRange const& dims)
+{
+    int32_t i = 0;
+    for (auto const& d : dims)
+    {
+        if (!d.size())
+        {
+            break;
+        }
+        os << (i ? "+" : "") << d;
+        ++i;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, LayerDeviceTypes const& layerDeviceTypes)
+{
+    int32_t i = 0;
+    for (auto const& layerDevicePair : layerDeviceTypes)
+    {
+        os << (i++ ? ", " : "") << layerDevicePair.first << ":" << layerDevicePair.second;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, DecomposableAttentions const& decomposableAttentions)
+{
+    char const* sep = "";
+    for (auto const& attentionDecomposablePair : decomposableAttentions)
+    {
+        os << sep << attentionDecomposablePair.first << ":" << attentionDecomposablePair.second;
+        sep = ", ";
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, StringSet const& stringSet)
+{
+    int64_t i = 0;
+    for (auto const& s : stringSet)
+    {
+        os << (i ? "," : "") << s;
+        ++i;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, BuildOptions const& options)
+{
+    // if loadEngine is specified, BuildOptions are N/A
+    if (options.load)
+    {
+        os << std::endl;
+        return os;
+    }
+    // clang-format off
+    os << "=== Build Options ==="                                                                                       << std::endl <<
+          "Memory Pools: ";     printMemoryPools(os, options)                                                           << std::endl <<
+          "avgTiming: "      << options.avgTiming                                                                       << std::endl <<
+#if !TRT_WINML
+          "Precision: ";        printPrecision(os, options)                                                             << std::endl <<
+          "Layer Device Types: " << options.layerDeviceTypes                                                            << std::endl <<
+          "Decomposable Attentions: " << options.decomposableAttentions                                                            << std::endl <<
+#endif // !TRT_WINML
+          "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
+          "Strip weights: "     << boolToEnabled(options.stripWeights)                                                  << std::endl <<
+          "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
+#if !TRT_WINML
+          "ONNX Plugin InstanceNorm: " << boolToEnabled(options.pluginInstanceNorm)                                     << std::endl <<
+          "ONNX kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA flag: " << boolToEnabled(options.enableUInt8AsymmetricQuantizationDLA) << std::endl <<
+          "ONNX kREPORT_CAPABILITY_DLA flag: " << boolToEnabled(options.reportCapabilityDLA) << std::endl <<
+          "ONNX kADJUST_FOR_DLA flag: " << boolToEnabled(options.adjustForDLA) << std::endl <<
+          "ONNX kENABLE_PLUGIN_OVERRIDE flag: " << boolToEnabled(options.enablePluginOverride) << std::endl <<
+          "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
+          "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
+          "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
+          "Exclude Lean Runtime: " << boolToEnabled(options.excludeLeanRuntime)                                         << std::endl <<
+#endif // !TRT_WINML
+          "Sparsity: ";         printSparsity(os, options)                                                              << std::endl <<
+#if !TRT_WINML
+          "Safe mode: "      << boolToEnabled(options.safe)                                                             << std::endl <<
+          "Build DLA standalone loadable: " << boolToEnabled(options.buildDLAStandalone)                                << std::endl <<
+          "Allow GPU fallback for DLA: " << boolToEnabled(options.allowGPUFallback)                                     << std::endl <<
+          "DirectIO mode: "  << boolToEnabled(options.directIO)                                                         << std::endl <<
+#endif // !TRT_WINML
+          "Skip inference: "     << boolToEnabled(options.skipInference)                                                << std::endl <<
+          "Save engine: "    << (options.save ? options.engine : "")                                                    << std::endl <<
+          "Load engine: "    << (options.load ? options.engine : "")                                                    << std::endl <<
+          "Profiling verbosity: " << static_cast<int32_t>(options.profilingVerbosity)                                   << std::endl <<
+          "Tactic sources: ";   printTacticSources(os, options.enabledTactics, options.disabledTactics)                 << std::endl <<
+          "timingCacheMode: ";  printTimingCache(os, options.timingCacheMode)                                           << std::endl <<
+          "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
+          "Enable Compilation Cache: "<< boolToEnabled(!options.disableCompilationCache) << std::endl <<
+          "Enable Monitor Memory: "<< boolToEnabled(options.enableMonitorMemory) << std::endl <<
+          "CPU Only Mode: "<< boolToEnabled(options.cpuOnly) << std::endl <<
+          "errorOnTimingCacheMiss: "  << boolToEnabled(options.errorOnTimingCacheMiss)                                  << std::endl <<
+          "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
+          "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
+          "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl <<
+          "MaxTactics: " << options.maxTactics                                                                          << std::endl <<
+          "Weight Streaming: " << boolToEnabled(options.allowWeightStreaming)                                           << std::endl <<
+          "Runtime Platform: " << options.runtimePlatform                                                               << std::endl <<
+          "Debug Tensors: " << options.debugTensors                                                                     << std::endl <<
+          "Distributive Independence: " << boolToEnabled(options.distributiveIndependence)                      << std::endl <<
+          "Mark Unfused Tensors As Debug Tensors: " << boolToEnabled(options.markUnfusedTensorsAsDebugTensors)   << std::endl;
+    // clang-format on
+
+    auto printIOFormats = [](std::ostream& os, char const* direction, std::vector<IOFormat> const& formats) {
+        if (formats.empty())
+        {
+            os << direction << "s format: CHW" << std::endl;
+        }
+        else
+        {
+            for (auto const& f : formats)
+            {
+                os << direction << ": " << f << std::endl;
+            }
+        }
+    };
+
+    os << "Green Context: ";
+    if (options.greenContext)
+    {
+        os << *options.greenContext;
+    }
+    else
+    {
+        os << "Disabled";
+    }
+    os << std::endl;
+
+    printIOFormats(os, "Input(s)", options.inputFormats);
+    printIOFormats(os, "Output(s)", options.outputFormats);
+    for (size_t i = 0; i < options.optProfiles.size(); i++)
+    {
+        printShapes(os, "build", options.optProfiles[i], i);
+        if (i < options.profileGreenContexts.size() && options.profileGreenContexts[i])
+        {
+            os << "Optimization Profile " << i << " Green Context: " << *options.profileGreenContexts[i] << std::endl;
+        }
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, SystemOptions const& options)
+{
+    // clang-format off
+    os << "=== System Options ==="                                                                << std::endl <<
+
+          "Device: "  << options.device                                                           << std::endl <<
+          "DLACore: " << (options.DLACore != -1 ? std::to_string(options.DLACore) : "")           << std::endl;
+    if (options.enableStaticPlugins)
+    {
+        os << "Loaded static plugins:";
+
+        for (const auto& p : options.plugins)
+        {
+            os << " " << p;
+        }
+        os << std::endl;
+    }
+
+#if !TRT_WINML
+    os << "DLA Workspace Allocation Strategy: " << options.dlaWorkspaceAllocationStrategy << std::endl;
+
+    os << "setPluginsToSerialize:";
+
+    for (const auto& p : options.setPluginsToSerialize)
+    {
+        os << " " << p;
+    }
+    os << std::endl;
+
+    os << "dynamicPlugins:";
+
+    for (const auto& p : options.dynamicPlugins)
+    {
+        os << " " << p;
+    }
+    os << std::endl;
+
+    os << "ignoreParsedPluginLibs: " << options.ignoreParsedPluginLibs << std::endl;
+    os << std::endl;
+#endif
+    return os;
+    // clang-format on
+}
+
+std::ostream& operator<<(std::ostream& os, InferenceOptions const& options)
+{
+    // clang-format off
+    os << "=== Inference Options ==="                                     << std::endl <<
+
+          "Batch: ";
+    if (options.batch && options.shapes.empty())
+    {
+                          os << options.batch                             << std::endl;
+    }
+    else
+    {
+                          os << "Explicit"                                << std::endl;
+    }
+    printShapes(os, "inference", options.shapes, options.optProfileIndex);
+
+    std::string wsBudget{"Disabled"};
+    if (options.weightStreamingBudget.bytes == WeightStreamingBudget::kAUTOMATIC)
+    {
+        wsBudget = "Automatic";
+    }
+    else if (options.weightStreamingBudget.bytes != WeightStreamingBudget::kDISABLE)
+    {
+        wsBudget = std::to_string(options.weightStreamingBudget.bytes) + " bytes";
+    }
+    else if (options.weightStreamingBudget.percent != WeightStreamingBudget::kDISABLE)
+    {
+        wsBudget = std::to_string(options.weightStreamingBudget.percent) + "%";
+    }
+
+    os << "Iterations: "                << options.iterations                                   << std::endl <<
+          "Duration: "                  << options.duration   << "s (+ "
+                                        << options.warmup     << "ms warm up)"                  << std::endl <<
+          "Sleep time: "                << options.sleep      << "ms"                           << std::endl <<
+          "Idle time: "                 << options.idle       << "ms"                           << std::endl <<
+          "Inference Streams: "         << options.infStreams                                   << std::endl <<
+          "ExposeDMA: "                 << boolToEnabled(!options.overlap)                      << std::endl <<
+          "Data transfers: "            << boolToEnabled(options.includeTransfers)               << std::endl <<
+          "Spin-wait: "                 << boolToEnabled(options.spin)                          << std::endl <<
+          "Multithreading: "            << boolToEnabled(options.threads)                       << std::endl <<
+          "CUDA Graph: "                << boolToEnabled(options.graph)                         << std::endl <<
+          "Time Deserialize: "          << boolToEnabled(options.timeDeserialize)               << std::endl <<
+          "Time Refit: "                << boolToEnabled(options.timeRefit)                     << std::endl <<
+          "NVTX verbosity: "            << static_cast<int32_t>(options.nvtxVerbosity)          << std::endl <<
+          "Persistent Cache Ratio: "    << static_cast<float>(options.persistentCacheRatio)     << std::endl <<
+          "Optimization Profile Index: "<< options.optProfileIndex                              << std::endl <<
+          "Weight Streaming Budget: "   << wsBudget                                             << std::endl;
+#if TRT_WINML
+    os << "Runtime Cache File: "                      << options.runtimeCacheFile                          << std::endl <<
+          "Dynamic Shapes Specialization Strategy: "  << options.dynamicShapesKernelSpecializationStrategy << std::endl <<
+          "RTX CUDA Graph Strategy: "                 << options.rtxCudaGraphStrategy                      << std::endl;
+#endif // TRT_WINML
+    // clang-format on
+
+    // Accuracy validation settings
+    os << "Accuracy Algorithm: ";
+    switch (options.accuracyValidationAlgorithm)
+    {
+    case AccuracyValidationAlgorithm::kL0: os << "L0"; break;
+    case AccuracyValidationAlgorithm::kL1: os << "L1"; break;
+    case AccuracyValidationAlgorithm::kL2: os << "L2"; break;
+    case AccuracyValidationAlgorithm::kLInf: os << "LInf"; break;
+    case AccuracyValidationAlgorithm::kCosineSimilarity: os << "CosineSimilarity"; break;
+    }
+    os << std::endl;
+    if (options.accuracyValidationAlgorithm == AccuracyValidationAlgorithm::kL0)
+    {
+        os << "Absolute Tolerance (atol): " << options.atol << std::endl;
+        os << "Relative Tolerance (rtol): " << options.rtol << std::endl;
+    }
+    if (options.accuracyThresholdEndToEnd > 0)
+    {
+        os << "Accuracy Threshold: " << options.accuracyThresholdEndToEnd << std::endl;
+    }
+
+    os << "Inputs:" << std::endl;
+    ASSERT(options.refPairs.size() > 0 && "refPairs must have at least one element");
+    auto const& inferenceInputs = options.refPairs[0].first;
+    for (auto const& input : inferenceInputs)
+    {
+        os << input.first << "<-" << input.second << std::endl;
+    }
+
+    auto const& inferenceRefOutputs = options.refPairs[0].second;
+    if (!inferenceRefOutputs.empty())
+    {
+        os << "RefOutputs:" << std::endl;
+        for (auto const& refOutput : inferenceRefOutputs)
+        {
+            os << refOutput.first << "<-" << refOutput.second << std::endl;
+        }
+    }
+
+    os << "Debug Tensor Save Destinations:" << std::endl;
+    for (auto const& fileName : options.debugTensorFileNames)
+    {
+        os << fileName.first << ": " << fileName.second << std::endl;
+    }
+    os << "Dump All Debug Tensor in Formats: " << std::endl;
+    for (auto const& format : options.dumpAlldebugTensorFormats)
+    {
+        os << format << std::endl;
+    }
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, ReportingOptions const& options)
+{
+    // clang-format off
+    os << "=== Reporting Options ==="                                                     << std::endl <<
+          "Verbose: "                     << boolToEnabled(options.verbose)               << std::endl <<
+          "Averages: "                    << options.avgs << " inferences"                << std::endl <<
+          "Percentiles: "                 << joinValuesToString(options.percentiles, ",") << std::endl <<
+          "Dump refittable layers:"       << boolToEnabled(options.refit)                 << std::endl <<
+          "Dump output: "                 << boolToEnabled(options.output)                << std::endl <<
+          "Profile: "                     << boolToEnabled(options.profile)               << std::endl <<
+          "Export timing to JSON file: "  << options.exportTimes                          << std::endl <<
+          "Export output to JSON file: "  << options.exportOutput                         << std::endl <<
+          "Export profile to JSON file: " << options.exportProfile                        << std::endl;
+    // clang-format on
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, AllOptions const& options)
+{
+    os << options.model << options.build << options.system << options.inference << options.reporting << std::endl;
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, SafeBuilderOptions const& options)
+{
+    auto printIOFormats = [](std::ostream& os, char const* direction, std::vector<IOFormat> const& formats) {
+        if (formats.empty())
+        {
+            os << direction << "s format: CHW" << std::endl;
+        }
+        else
+        {
+            for (auto const& f : formats)
+            {
+                os << direction << ": " << f << std::endl;
+            }
+        }
+    };
+
+    os << "=== Build Options ===" << std::endl;
+    os << "Model ONNX: " << options.onnxModelFile << std::endl;
+
+    os << "Precision: FP16";
+    if (options.int8)
+    {
+        os << " + INT8";
+    }
+    if (options.fp8)
+    {
+        os << " + FP8";
+    }
+    if (options.int4)
+    {
+        os << " + INT4";
+    }
+    os << std::endl;
+    os << "Serialized Network: " << options.serialized << std::endl;
+
+    printIOFormats(os, "Input(s)", options.inputFormats);
+    printIOFormats(os, "Output(s)", options.outputFormats);
+    os << "Loaded static plugins:";
+    for (auto const& p : options.plugins)
+    {
+        os << " " << p;
+    }
+    os << "timingCacheMode: ";
+    printTimingCache(os, options.timingCacheMode) << std::endl;
+    os << "timingCacheFile: " << options.timingCacheFile << std::endl;
+    os << std::endl;
+    return os;
+}
+
+void BaseModelOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "  --onnx=<file>               ONNX model"                                            << std::endl;
+    // clang-format on
+}
+
+void ModelOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Model Options ==="                                                                                 << std::endl;
+    BaseModelOptions::help(os);
+    // clang-format on
+}
+
+void BuildOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Build Options ==="                                                                                                                   "\n"
+          "  --minShapes=spec                   Build with dynamic shapes using a profile with the min shapes provided"                             "\n"
+          "  --optShapes=spec                   Build with dynamic shapes using a profile with the opt shapes provided"                             "\n"
+          "  --maxShapes=spec                   Build with dynamic shapes using a profile with the max shapes provided"                             "\n"
+#if !TRT_WINML
+#if ENABLE_FEATURE_WEAK_TYPING
+          "  --inputIOFormats=spec              Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    "\n"
+          "                                     See --outputIOFormats help for the grammar of type and format list."                                "\n"
+          "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
+          "                                           inputs following the same order as network inputs ID (even if only one input"                 "\n"
+          "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
+          "  --outputIOFormats=spec             Type and format of each of the output tensors (default = all outputs in fp32:chw)"                  "\n"
+          "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
+          "                                           outputs following the same order as network outputs ID (even if only one output"              "\n"
+          "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
+        R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                              "\n"
+          "                                                 IOfmt ::= type:fmt | fmt"                                                               "\n"
+        R"(                                                 type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
+        R"(                                                 fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
+        R"(                                                            "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"             "\n"
+          "                                     When type is omitted, it is inferred from the network (requires --stronglyTyped)."                  "\n"
+#else
+          "  --inputIOFormats=spec              Memory layout of each of the input tensors (default = chw)"                                        "\n"
+          "                                     See --outputIOFormats help for the grammar of format list."                                         "\n"
+          "                                     Note: If this option is specified, please set comma-separated formats for all"                      "\n"
+          "                                           inputs following the same order as network inputs ID (even if only one input"                 "\n"
+          "                                           needs specifying IO format) or set the format once for broadcasting."                         "\n"
+          "  --outputIOFormats=spec             Memory layout of each of the output tensors (default = chw)"                                        "\n"
+          "                                     Note: If this option is specified, please set comma-separated formats for all"                      "\n"
+          "                                           outputs following the same order as network outputs ID (even if only one output"              "\n"
+          "                                           needs specifying IO format) or set the format once for broadcasting."                         "\n"
+        R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                              "\n"
+        R"(                                                 IOfmt ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
+        R"(                                                            "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"IOfmt])"           "\n"
+#endif // ENABLE_FEATURE_WEAK_TYPING
+#endif // !TRT_WINML
+          "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s)"                                      "\n"
+          "                                     Supports the following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                      "\n"
+          "                                     If none of suffixes is appended, the defualt unit is in MiB."                                       "\n"
+          "                                     Note: Also accepts decimal sizes, e.g. 0.25M. Will be rounded down to the nearest integer bytes."   "\n"
+#if !TRT_WINML
+          "                                     In particular, for dlaSRAM the bytes will be rounded down to the nearest power of 2."               "\n"
+#endif // !TRT_WINML
+        R"(                                     Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
+          "                                                      poolfmt ::= pool:size\n"
+#if !TRT_WINML
+        R"(                                                      pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
+#else
+        R"(                                                      pool ::= "workspace"|"tacticSharedMem")"  "\n"
+#endif // !TRT_WINML
+          "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)." "\n"
+          "                                     Please only assign once."                                                                           "\n"
+          "  --avgTiming=M                      Set the number of times averaged in each iteration for kernel selection (default = "
+                                                                                                                  << defaultAvgTiming << ")"        "\n"
+          "  --refit                            Mark the engine as refittable. This will allow the inspection of refittable layers "                "\n"
+          "                                     and weights within the engine."                                                                     "\n"
+          "  --stripWeights                     Strip weights from plan. This flag works with either refit or refit with identical weights. Default""\n"
+          "                                     to latter, but you can switch to the former by enabling both --stripWeights and --refit at the same""\n"
+          "                                     time."                                                                                              "\n"
+          "  --stripAllWeights                  Alias for combining the --refit and --stripWeights options. It marks all weights as refittable,"    "\n"
+          "                                     disregarding any performance impact. Additionally, it strips all refittable weights after the "     "\n"
+          "                                     engine is built."                                                                                   "\n"
+#if !TRT_WINML
+          "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
+          "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
+          "  --pluginInstanceNorm, --pi         Set `kNATIVE_INSTANCENORM` to false in the ONNX parser. This will cause the ONNX parser to use"     "\n"
+          "                                     a plugin InstanceNorm implementation over the native implementation when parsing."                  "\n"
+          "  --uint8AsymmetricQuantizationDLA   Set `kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` to true in the ONNX parser. This directs the"   "\n"
+          "                                     ONNX parser to allow UINT8 as a quantization data type and import zero point values directly"       "\n"
+          "                                     without converting to float type or all-zero values. Should only be set with DLA software version"  "\n"
+          "                                     >= 3.16."                                                                                           "\n"
+          "  --reportCapabilityDLA              Set `kREPORT_CAPABILITY_DLA` to true in the ONNX parser. This signals the ONNX parser to validate"  "\n"
+          "                                     that all nodes in the model can run on DLA. This flag is set to be OFF by default."                 "\n"
+          "  --adjustForDLA                     Set `kADJUST_FOR_DLA` to true in the ONNX parser. This signals the ONNX parser to opportunistically""\n"
+          "                                     rewrite or modify layers to make them more amenable to running on DLA. This flag is set to be OFF"  "\n"
+          "                                     by default."                                                                                        "\n"
+          "  --enablePluginOverride             Set `kENABLE_PLUGIN_OVERRIDE` to true in the ONNX parser. This allows the ONNX parser to use"       "\n"
+          "                                     a plugin implementation over the standard ONNX operator implementation when parsing."               "\n"
+        R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
+          "                                     not support building an engine."                                                                    "\n"
+        R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
+          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatible mode."                                       "\n"
+          "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
+          "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
+          "                                     valid lean runtime to use when loading the engine."     "\n"
+#endif // !TRT_WINML
+          "  --monitorMemory                    Enable memory monitor report for debugging usage. (default = disabled)"                             "\n"
+          "                                     Disables CUDA timing cache and profile streams. Only allowed when building"                       "\n"
+          "                                     a safe engine (--safe) with remote auto-tuning (--remoteConfig)."                                   "\n"
+          "                                     (default = disabled)"                                                                             "\n"
+          "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
+        R"(                                     Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
+          "                                     Note: Description about each of these options is as below"                                          "\n"
+          "                                           disable = do not enable sparse tactics in the builder (this is the default)"                  "\n"
+          "                                           enable  = enable sparse tactics in the builder (but these tactics will only be"               "\n"
+          "                                                     considered if the weights have the right sparsity pattern)"                         "\n"
+#if !TRT_WINML
+          "                                           force   = enable sparse tactics in the builder and force-overwrite the weights to have"       "\n"
+          "                                                     a sparsity pattern (even if you loaded a model yourself)"                           "\n"
+          "                                                     [Deprecated] this knob has been deprecated."                                        "\n"
+          "                                                     Please use <polygraphy surgeon prune> to rewrite the weights."                      "\n"
+          "  --noTF32                           Disable tf32 precision (default is to enable tf32, in addition to fp32)"                            "\n"
+#if ENABLE_FEATURE_WEAK_TYPING
+          "  --fp16                             Enable fp16 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --bf16                             Enable bf16 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
+          "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
+          "                                     Note: --fp16, --bf16, --int8, --fp8, --int4, --best are deprecated and superseded by strong typing.""\n"
+          "                                         The AutoCast tool (https://nvidia.github.io/Model-Optimizer/guides/8_autocast.html)"   "\n"
+          "                                         can be used to convert the network to be strongly typed."                                       "\n"
+          "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
+#else
+          "  --stronglyTyped                    [Deprecated] Strongly typed network is now enabled by default. This flag is a no-op."                "\n"
+#endif // ENABLE_FEATURE_WEAK_TYPING
+          "  --directIO                         [Deprecated] Avoid reformatting at network boundaries. (default = disabled)"                        "\n"
+#if ENABLE_FEATURE_WEAK_TYPING
+          "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
+        R"(                                     Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                        "\n"
+          "                                         none = no constraints"                                                                          "\n"
+          "                                         prefer = meet precision constraints set by --layerPrecisions/--layerOutputTypes if possible"    "\n"
+          "                                         obey = meet precision constraints set by --layerPrecisions/--layerOutputTypes or fail"          "\n"
+          "  --layerPrecisions=spec             Control per-layer precision constraints. Effective only when precisionConstraints is set to"        "\n"
+          "                                     \"obey\" or \"prefer\"."                                                                             "\n"
+          "  --layerOutputTypes=spec            Control per-layer output type constraints. Effective only when precisionConstraints is set to"      "\n"
+          "                                     \"obey\" or \"prefer\"."                                                                             "\n"
+#endif // ENABLE_FEATURE_WEAK_TYPING
+          "  --layerDeviceTypes=spec            Specify layer-specific device type."                                                                "\n"
+          "                                     The specs are read left-to-right, and later ones override earlier ones. If a layer does not have"   "\n"
+          "                                     a device type specified, the layer will opt for the default device type."                           "\n"
+        R"(                                     Per-layer device type spec ::= layerDeviceTypePair[","spec])"                                       "\n"
+        R"(                                                           layerDeviceTypePair ::= layerName":"deviceType)"                              "\n"
+        R"(                                                           deviceType ::= "GPU"|"DLA")"                                                  "\n"
+          "  --decomposableAttentions=spec      Specify decomposable attentions by comma-separated names."                                          "\n"
+        R"(                                     The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+          "                                     contain at most one wildcard ('*') character."                                                      "\n"
+          "  --safe                             Enable build safety certified engine." "\n"
+          "                                     If DLA is enabled, --buildDLAStandalone will be specified"                                          "\n"
+          "  --dumpCheckerBlob                  Write the checker blob beside the saved engine as <engine>.txt, only"                              "\n"
+          "                                     available when --safe is enabled. The blob carries the generated kernel"                            "\n"
+          "                                     sources the kernel checker analyses and the metadata that the"                                 "\n"
+          "                                     reference checker replays."                                                                          "\n"
+          "                                     --dumpKernelText is accepted as an alias."                                                           "\n"
+          "  --buildDLAStandalone               Enable build DLA standalone loadable which can be loaded by cuDLA, when this option is enabled, "   "\n"
+          "                                     --allowGPUFallback is disallowed and --skipInference is enabled by default. Additionally, "         "\n"
+#if ENABLE_FEATURE_WEAK_TYPING
+          "                                     specifying --inputIOFormats and --outputIOFormats restricts I/O data type and memory layout"        "\n"
+#else
+          "                                     specifying --inputIOFormats and --outputIOFormats restricts memory layout"                          "\n"
+#endif // ENABLE_FEATURE_WEAK_TYPING
+          "                                     (default = disabled)"                                                                               "\n"
+          "  --allowGPUFallback                 When DLA is enabled, allow GPU fallback for unsupported layers (default = disabled)"                "\n"
+          "  --consistency                      Perform consistency checking on safety certified engine"                                            "\n"
+          "  --reference                        Perform per-kernel accuracy checking on a safety certified engine."                                 "\n"
+          "                                     Requires --safe, --loadEngine, and a remote target via --remoteConfig."                            "\n"
+          "                                     Build and save the engine with --dumpCheckerBlob first, then pass that"                            "\n"
+          "                                     blob to --loadCheckerBlob: the check reads its per-kernel metadata."                               "\n"
+          "  --loadCheckerBlob=file             Read the checker blob written by --dumpCheckerBlob from this path"                                  "\n"
+          "                                     (requires --reference)."                                                                            "\n"
+#endif // !TRT_WINML
+          "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
+          "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
+#if !TRT_WINML
+          "  --asyncFileReader                  Load a serialized engine using async stream reader. Should be combined with --loadEngine."          "\n"
+#endif // !TRT_WINML
+          "  --getPlanVersionOnly               Print TensorRT version when loaded plan was created. Works without deserialization of the plan."    "\n"
+          "                                     Use together with --loadEngine. Supported only for engines created with 8.6 and forward."           "\n"
+          "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
+          "                                     tactic sources (default = all available tactics)."                                                  "\n"
+          "                                     Note: Currently only edge mask convolutions and JIT convolutions are listed as optional"             "\n"
+          "                                           tactics."                                                                                     "\n"
+        R"(                                     Tactic Sources: tactics ::= tactic[","tactics])"                                                    "\n"
+          "                                                     tactic  ::= (+|-)lib"                                                               "\n"
+        R"(                                                     lib     ::= "EDGE_MASK_CONVOLUTIONS"|"JIT_CONVOLUTIONS")"                           "\n"
+          "                                     For example, to disable edge mask convolutions: --tacticSources=-EDGE_MASK_CONVOLUTIONS"             "\n"
+          "  --noBuilderCache                   Disable timing cache in builder (default is to enable timing cache)"                                "\n"
+          "  --noCompilationCache               Disable Compilation cache in builder, and the cache is part of timing cache (default is to enable compilation cache)" "\n"
+          "  --errorOnTimingCacheMiss           Emit error when a tactic being timed is not present in the timing cache (default = false)"          "\n"
+          "  --timingCacheFile=<file>           Save/load the serialized global timing cache"                                                       "\n"
+#if !TRT_WINML
+          "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
+        R"(                                     Preview Features: features ::= feature[","features])"                                               "\n"
+          "                                                       feature  ::= (+|-)flag"                                                           "\n"
+        R"(                                                       flag     ::= "aliasedPluginIO1003")"                                              "\n"
+        R"(                                                                    |"runtimeActivationResize")"                                         "\n"
+#endif // !TRT_WINML
+          "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
+          "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
+          "                                     Valid values include integers from 0 to the maximum optimization level, which is currently 5."      "\n"
+          "  --maxTactics                       Set the maximum number of tactics to time when there is a choice of tactics. (default is -1)"       "\n"
+          "                                     Larger number of tactics allow TensorRT to spend more building time on evaluating tactics."         "\n"
+          "                                     Default value -1 means TensorRT can decide the number of tactics based on its own heuristic."       "\n"
+          "  --hardwareCompatibilityLevel=mode  Make the engine file compatible with other GPU architectures. (default = none)"                     "\n"
+        R"(                                     Hardware Compatibility Level: mode ::= "none" | "ampere+" | "sameComputeCapability")"               "\n"
+          "                                         none = no compatibility"                                                                        "\n"
+          "                                         ampere+ = compatible with Ampere and newer GPUs"                                                "\n"
+          "                                         sameComputeCapability = compatible with GPUs that have the same Compute Capability version"     "\n"
+#if TRT_WINML
+          "  --computeCapabilities=sms          Specify compute capabilities to build the engine for."                                              "\n"
+        R"(                                     Compute Capabilities: sms ::= sm[","sms])"                                                          "\n"
+        R"(                                                            sm ::= "75"|"80"|"86"|"89"|"120")"                                           "\n"
+          "  --useGpu                           Use GPU for building the engine. By default TensorRT RTX can build an engine with CPU-only."        "\n"
+          "                                     This correlates to setting computeCapability to kCurrent. This cannot be used in conjunction with"  "\n"
+          "                                     --computeCapabilities."                                                                             "\n"
+#endif // TRT_WINML
+          "  --runtimePlatform=platform         Set the target platform for runtime execution. (default = SameAsBuild)"                             "\n"
+          "                                     When this option is enabled, --skipInference is enabled by default."                                "\n"
+        R"(                                     RuntimePlatfrom: platform ::= "SameAsBuild" | "WindowsAMD64")"                                      "\n"
+          "                                         SameAsBuild = no requirement for cross-platform compatibility."                                 "\n"
+          "                                         WindowsAMD64 = set the target platform for engine execution as Windows AMD64 system"            "\n"
+#if !TRT_WINML
+          "  --tempdir=<dir>                    Overrides the default temporary directory TensorRT will use when creating temporary files."         "\n"
+          "                                     See IRuntime::setTemporaryDirectory API documentation for more information."                        "\n"
+          "  --tempfileControls=controls        Controls what TensorRT is allowed to use when creating temporary executable files."                 "\n"
+          "                                     Should be a comma-separated list with entries in the format (in_memory|temporary):(allow|deny)."    "\n"
+          "                                     in_memory: Controls whether TensorRT is allowed to create temporary in-memory executable files."    "\n"
+          "                                     temporary: Controls whether TensorRT is allowed to create temporary executable files in the"        "\n"
+          "                                                filesystem (in the directory given by --tempdir)."                                       "\n"
+          "                                     For example, to allow in-memory files and disallow temporary files:"                                "\n"
+          "                                         --tempfileControls=in_memory:allow,temporary:deny"                                              "\n"
+        R"(                                     If a flag is unspecified, the default behavior is "allow".)"                                        "\n"
+#endif // !TRT_WINML
+          "  --maxAuxStreams=N                  Set maximum number of auxiliary streams per inference stream that TRT is allowed to use to run "    "\n"
+          "                                     kernels in parallel if the network contains ops that can run in parallel, with the cost of more "   "\n"
+          "                                     memory usage. Set this to 0 for optimal memory usage. (default = using heuristics)"                 "\n"
+          "  --profile                          Build with dynamic shapes using a profile with the min/max/opt shapes provided. Can be specified"   "\n"
+          "                                         multiple times to create multiple profiles with contiguous index."                              "\n"
+          "                                     (ex: --profile=0 --minShapes=<spec> --optShapes=<spec> --maxShapes=<spec> --profile=1 ...)"         "\n"
+#if !TRT_WINML
+          "  --greenContext=spec                Build and run under a CUDA green context that trtexec creates."                                   "\n"
+          "                                     Requires CUDA Toolkit and driver 13.0 or newer. CUDA 13.1 or newer guarantees exact resource"     "\n"
+          "                                     configuration; CUDA 13.0 accepts only requests that its default resource alignment can satisfy"  "\n"
+          "                                     exactly."                                                                                       "\n"
+          "                                     Green Context: spec ::= sm:<N>[,cosched:<M>] | <N>"                                               "\n"
+          "                                         sm: Number of SMs in the partition (required)."                                               "\n"
+          "                                         cosched: Co-scheduled SM count (optional). Defaults to the architecture alignment:"            "\n"
+          "                                             2 on compute capability 7.x/8.x and Tegra; 8 on compute capability 9.0+."                  "\n"
+          "                                     Without a preceding --profile, the setting applies to the whole engine."                          "\n"
+          "                                     When placed after --profile=N, the setting applies to optimization profile N."                    "\n"
+          "                                     A profile-specific setting overrides the global setting. Profiles without one inherit the"        "\n"
+          "                                     global setting, or use standard device behavior when no global setting exists."                   "\n"
+#endif // !TRT_WINML
+#if !TRT_WINML
+          "  --allowWeightStreaming             Enable a weight streaming engine. TensorRT will disable"    "\n"
+#else // !TRT_WINML
+          "  --allowWeightStreaming             Enable a weight streaming engine. TensorRT will disable"    "\n"
+#endif // !TRT_WINML
+          "                                     weight streaming at runtime unless --weightStreamingBudget is specified."                           "\n"
+#if !TRT_WINML
+          "  --markDebug                        Specify list of names of tensors to be marked as debug tensors. Separate names with a comma"        "\n"
+          "  --markUnfusedTensorsAsDebugTensors Mark unfused tensors as debug tensors"                                                              "\n"
+#endif // !TRT_WINML
+          "  --tilingOptimizationLevel          Set the tiling optimization level. (default is " << defaultTilingOptimizationLevel << ")"           "\n"
+          "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
+          "                                     Valid values include integers from "
+                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kNONE)
+                                                << " to the maximum tiling optimization level("
+                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kFULL) << ")."                           "\n"
+          "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                "\n"
+#if !TRT_WINML
+#if HOS_WIN_BUILDER
+          "  --remoteConfig                     Set the remote target config for HOS device."                                                       "\n"
+          "                                     Must be specified with --runtimePlatform=HOSARM64."                                                 "\n"
+          "                                     Format: {peer_name}:{port_name}"                                                                    "\n"
+          "                                     Example: ABC1234567890:serverInTarget"                                                              "\n"
+          "                                     --remoteAutoTuningConfig is accepted as an alias."                                                  "\n"
+#else
+          "  --remoteConfig                     Set the remote target config. Must be specified with --safe."                                       "\n"
+          "                                     Used for remote auto-tuning and the Reference Checker (--reference)."                               "\n"
+          "                                     Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"                 "\n"
+          "                                     Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib" "\n"
+          "                                     --remoteAutoTuningConfig is accepted as an alias."                                                  "\n"
+          "  --refitFromOnnx                    Refit the loaded engine with the weights from the provided ONNX model."                              "\n"
+          "                                     The model should be identical to the one used to generate the engine."                              "\n"
+#endif // HOS_WIN_BUILDER
+#endif // !TRT_WINML
+          "  --cpuOnly                          Build the engine with CPU-only mode. No local GPU is required on the build machine."                "\n"
+          "                                     Must be specified with --remoteConfig and --safe flags."                                            "\n"
+          ;
+    // clang-format on
+    os << std::flush;
+}
+
+void SystemOptions::help(std::ostream& os, bool const enableStaticPlugins)
+{
+    // clang-format off
+    os << "=== System Options ==="                                                                         << std::endl <<
+          "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl;
+    if (enableStaticPlugins)
+    {
+        os << "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl << std::endl;
+    }
+#if !TRT_WINML
+    os << "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)" << std::endl <<
+          "  --dlaWorkspaceAllocationStrategy=spec" << std::endl <<
+          "                              Specify how DLA workspace memory is allocated "
+          "(default = default)." << std::endl <<
+          R"(                              Strategy: spec ::= "default"|"sharedStatic")" << std::endl <<
+          "                                  default: Allocate workspace separately for each DLA "
+          "module." << std::endl <<
+          "                                  sharedStatic: Share workspace among DLA modules "
+          "deserialized by the same" << std::endl <<
+          "                                      runtime for the same DLA core." << std::endl <<
+          "                                      If --useDLACore is not set, DLA core 0 is used." << std::endl <<
+          "                              Concurrent execution of engines that share DLA workspace is "
+          "unsupported." << std::endl <<
+          "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
+          "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
+          "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
+          "  --ignoreParsedPluginLibs    By default, when building a version-compatible engine, plugin libraries specified by the ONNX parser " << std::endl <<
+          "                              are implicitly serialized with the engine (unless --excludeLeanRuntime is specified) and loaded dynamically. " << std::endl <<
+          "                              Enable this flag to ignore these plugin libraries instead." << std::endl <<
+          "  --safetyPlugins             Plugin library (.so) for TensorRT auto safety to manually load safety plugins specified by the command line arguments." << std::endl <<
+          "                              Example: --safetyPlugins=/path/to/plugin_lib.so[pluginNamespace1::plugin1,pluginNamespace2::plugin2]." << std::endl <<
+          "                              The option can be specified multiple times with different plugin libraries." << std::endl;
+#endif // !TRT_WINML
+    // clang-format on
+}
+
+void InferenceOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Inference Options ==="                                                                                                << std::endl <<
+          "  --shapes=spec               Set input shapes for dynamic shapes inference inputs."                                      << std::endl <<
+        R"(                              Note: Input names can be wrapped with escaped single quotes (ex: 'Input:0').)"              << std::endl <<
+          "                              Example input shapes spec: input0:1x3x256x256, input1:1x3x128x128"                          << std::endl <<
+          "                              For scalars (0-D shapes), use input0:scalar or simply input0: with nothing after the colon."<< std::endl <<
+          "                              Each input shape is supplied as a key-value pair where key is the input name and"           << std::endl <<
+          "                              value is the dimensions (including the batch dimension) to be used for that input."         << std::endl <<
+          "                              Each key-value pair has the key and value separated using a colon (:)."                     << std::endl <<
+          "                              Multiple input shapes can be provided via comma-separated key-value pairs, and each input " << std::endl <<
+          "                              name can contain at most one wildcard ('*') character."                                     << std::endl <<
+          "  --loadInputs=spec           Load input values from files (default = generate random inputs). Input names can be "
+                                                                                       "wrapped with single quotes (ex: 'Input:0')"  << std::endl <<
+        R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
+        R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
+          "                              Consult the README for more information on generating files for custom inputs."             << std::endl <<
+          "  --loadRefOutputs=spec       Load reference output values from files for accuracy validation. Output names can be "      << std::endl <<
+          "                              wrapped with single quotes (ex: 'Output:0')."                                               << std::endl <<
+        R"(                              Output values spec ::= Oval[","spec])"                                                      << std::endl <<
+        R"(                                           Oval ::= name":"file)"                                                         << std::endl <<
+          "                              If the calculated outputs is not within the accuracy threshold, the inference result is "     << std::endl <<
+          "                              considered to be inaccurate."                                                               << std::endl <<
+          "  --iterations=N              Run at least N inference iterations (default = "               << defaultIterations << ")"  << std::endl <<
+          "  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = "
+                                                                                                            << defaultWarmUp << ")"  << std::endl <<
+          "  --duration=N                Run performance measurements for at least N seconds wallclock time (default = "
+                                                                                                          << defaultDuration << ")"  << std::endl <<
+          "                              If -1 is specified, inference will keep running unless stopped manually"                    << std::endl <<
+          "  --sleepTime=N               Delay inference start with a gap of N milliseconds between launch and compute "
+                                                                                               "(default = " << defaultSleep << ")"  << std::endl <<
+          "  --idleTime=N                Sleep N milliseconds between two continuous iterations"
+                                                                                               "(default = " << defaultIdle << ")"   << std::endl <<
+          "  --infStreams=N              Instantiate N execution contexts to run inference concurrently "
+                                                                                             "(default = " << defaultStreams << ")"  << std::endl <<
+          "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
+          "  --includeDataTransfers      Enable DMA transfers to and from device (default = disabled). Note some device-to-host"    << std::endl <<
+          "                              data transfers will remain if output dumping is enabled via the --dumpOutput or"            << std::endl <<
+          "                              --exportOutput flags."                                                                      << std::endl <<
+          "  --noDataTransfers           [Deprecated] DMA transfers are now disabled by default. This flag is a no-op."             << std::endl <<
+          "  --useManagedMemory          Use managed memory instead of separate host and device allocations (default = disabled)."   << std::endl <<
+          "  --noSpinWait                Disable spin wait and use blocking synchronization instead. This may reduce CPU usage "
+                                                                     "but increase synchronization time (default = spin wait enabled)"  << std::endl <<
+          "  --useSpinWait               [Deprecated] Spin wait is now enabled by default. This flag is a no-op."                    << std::endl <<
+          "  --threads                   Enable multithreading to drive engines with independent threads"
+                                                                                " or speed up refitting (default = disabled) "       << std::endl <<
+          "  --noCudaGraph               Disable CUDA graph capture and launch (default = CUDA graph enabled)."                      << std::endl <<
+          "  --useCudaGraph              [Deprecated] CUDA graph is now enabled by default. This flag is a no-op."                   << std::endl <<
+          "  --timeDeserialize           Time the amount of time it takes to deserialize the network and exit."                      << std::endl <<
+          "  --timeRefit                 Time the amount of time it takes to refit the engine before inference."                     << std::endl <<
+          "  --separateProfileRun        [Deprecated] Separate profile run is now always enabled. This flag is a no-op."
+                                                                                                                                    << std::endl <<
+          "  --skipInference             Exit after the engine has been built and skip inference perf measurement "
+                                                                                                             "(default = disabled)"  << std::endl <<
+#if TRT_WINML
+          "  --deferWeightsLoading       Defer GPU weight allocation until after JIT compilation. Use with --loadEngine."             << std::endl <<
+          "                              When --skipInference is also set, the runtime cache (if requested via "                       << std::endl <<
+          "                              --runtimeCacheFile) is populated without ever loading weights to GPU."                        << std::endl <<
+          "                              Otherwise weights are loaded after JIT and inference runs normally. (default = disabled)"     << std::endl <<
+#endif // TRT_WINML
+          "  --persistentCacheRatio      Set the persistentCacheLimit in ratio, 0.5 represent half of max persistent L2 size "
+                                                                                                                    "(default = 0)"  << std::endl <<
+          "  --useProfile                Set the optimization profile for the inference context "
+                                                                                   "(default = " << defaultOptProfileIndex << " )."  << std::endl <<
+          "  --allocationStrategy=spec   Specify how the internal device memory for inference is allocated."                         << std::endl <<
+        R"(                              Strategy: spec ::= "static"|"profile"|"runtime")"                                           << std::endl <<
+          "                                  static = Allocate device memory based on max size across all profiles."                 << std::endl <<
+          "                                  profile = Allocate device memory based on max size of the current profile."             << std::endl <<
+          "                                  runtime = Allocate device memory based on the actual input shapes."                     << std::endl <<
+#if !TRT_WINML
+          "  --accuracyAlgorithm=spec    Specify the algorithm for computing the accuracy loss between actual"               << std::endl <<
+          "                              and reference outputs. Lower accuracy loss is better; 0.0 = perfect match."              << std::endl <<
+        R"(                              Algorithm: spec ::= "l0"|"l1"|"l2"|"lInf"|"cos")"                                        << std::endl <<
+          "                                  l0   = L0 algorithm. Fraction of elements outside tolerance:"                        << std::endl <<
+          "                                             accuracy loss = Sum( Bool("                                               << std::endl <<
+          "                                                 |f(input[i]) - refOutput[i]| > atol + rtol * |refOutput[i]| ) ) / N"  << std::endl <<
+          "                                         where atol, rtol are the absolute and relative tolerances."                   << std::endl <<
+          "                                  l1   = L1 algorithm. Mean absolute error:"                                           << std::endl <<
+          "                                             accuracy loss = Sum( |f(input[i]) - refOutput[i]| ) / N"                  << std::endl <<
+          "                                  l2   = L2 algorithm. Mean squared error:"                                            << std::endl <<
+          "                                             accuracy loss = Sum( |f(input[i]) - refOutput[i]| ^2 ) / N"               << std::endl <<
+          "                                  lInf = LInf algorithm. Maximum absolute error:"                                      << std::endl <<
+          "                                             accuracy loss = Max( |f(input[i]) - refOutput[i]| )"                      << std::endl <<
+          "                                  cos  = Cosine similarity algorithm. 1 - cosine similarity:"                          << std::endl <<
+          "                                             accuracy loss = 1 - Sum( f(input[i]) * refOutput[i] ) /"                  << std::endl <<
+          "                                                 ( sqrt(Sum( f(input[i]) ^2 )) * sqrt(Sum( refOutput[i] ^2 )) )"       << std::endl <<
+          "  --atol=number               Absolute tolerance for element-wise accuracy comparison (only valid for L0"              << std::endl <<
+          "                              algorithm). (Default = 1e-5)"                                                            << std::endl <<
+          "  --rtol=number               Relative tolerance for element-wise accuracy comparison (only valid for L0"              << std::endl <<
+          "                              algorithm). (Default = 1e-5)"                                                            << std::endl <<
+          "  --accuracyThreshold=number    Threshold for accepting the inference result. If the computed accuracy loss"             << std::endl <<
+          "                              exceeds this threshold, the result is considered inaccurate."                              << std::endl <<
+          "  --refPair=N                 Specify a reference pair index for grouping --loadInputs and --loadRefOutputs."             << std::endl <<
+          "                              Can be specified multiple times to validate accuracy across different input/output pairs."  << std::endl <<
+        R"(                              Example: --refPair=0 --loadInputs="x:x1.dat" --loadRefOutputs="y:y1.dat")"                  << std::endl <<
+        R"(                                       --refPair=1 --loadInputs="x:x2.dat" --loadRefOutputs="y:y2.dat")"                  << std::endl <<
+          "  --saveDebugTensors          Specify list of names of tensors to turn on the debug state"                                << std::endl <<
+          "                              and filename to save raw outputs to."                                                       << std::endl <<
+          "                              These tensors must be specified as debug tensors during build time."                        << std::endl <<
+        R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
+        R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
+          "  --saveAllDebugTensors       Save all debug tensors to files. "                                                          << std::endl <<
+          "                              Including debug tensors marked by --markDebug and --markUnfusedTensorsAsDebugTensors"       << std::endl <<
+          "                              Multiple file formats can be saved simultaneously."                                         << std::endl <<
+        R"(                              Input values spec   ::= format[","format])"                                                 << std::endl <<
+        R"(                                           format ::= "summary"|"numpy"|"string"|"raw")"                                  << std::endl <<
+#endif // !TRT_WINML
+          "  --weightStreamingBudget     Set the maximum amount of GPU memory TensorRT is allowed to use for weights."               << std::endl <<
+          "                              It can take on the following values:"                                                       << std::endl <<
+          "                                  -2: (default) Disable weight streaming at runtime."                                     << std::endl <<
+          "                                  -1: TensorRT will automatically decide the budget."                                     << std::endl <<
+          "                                   0-100%: Percentage of streamable weights that reside on the GPU."                      << std::endl <<
+          "                                           0% saves the most memory but will have the worst performance."                 << std::endl <<
+          "                                           Requires the '%' character."                                                   << std::endl <<
+          "                                  >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "     << std::endl <<
+          "                                       following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                  << std::endl;
+#if TRT_WINML
+    os << "  --runtimeCacheFile=<file>   Enable and specify path to runtime cache for the inference."                                << std::endl <<
+          "  --specializeStrategyDS=spec Set the specialization strategy for dynamic shape kernels."                                 << std::endl <<
+        R"(                              Strategy: spec ::= "lazy"|"eager"|"none")"                                                  << std::endl <<
+          "                                  lazy  = Compile kernels for new shapes in the background lazily."                       << std::endl <<
+          "                                  eager = Compile kernels for new shapes eagerly in a blocking call."                     << std::endl <<
+          "                                  none  = Never compile kernels for new shapes, use previously compiled kernels."         << std::endl <<
+          "  --rtxCudaGraphStrategy=spec Set the CUDA graph capture strategy for TensorRT RTX inference phase."                       << std::endl <<
+        R"(                              Strategy: spec ::= "disable"|"wholeGraph")"                                                 << std::endl <<
+          "                                  disable:    Disable CUDA graph capture for TensorRT RTX inference phase."               << std::endl <<
+          "                                  wholeGraph: (default) Capture CUDA graphs for the entire model execution as a "         << std::endl <<
+          "                                              single graph."                                                              << std::endl <<
+          "                              Use --noCudaGraph OR --rtxCudaGraphStrategy=disable to disable RTX CUDA graph, not both."   << std::endl <<
+          "                              The RTX CUDA graph feature is recommended for TensorRT RTX inference with dynamic shapes."  << std::endl <<
+          "                              Dynamic shapes feature uses fallback kernels until the shape-specialized kernels are "      << std::endl <<
+          "                              compiled, making it complex for users to capture the most performant graph/kernels."        << std::endl <<
+          "                              The RTX CUDA graph captures the CUDA graph only after the shape-specialized kernels are "   << std::endl <<
+          "                              compiled, ensuring that only the most performant graph/kernels are captured."               << std::endl;
+#endif // TRT_WINML
+
+    // clang-format on
+}
+
+void TuningOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Tuning Options ==="                                                                                       << std::endl <<
+          "  --tuneBuildRoutes=<expr>    Run an autotuning loop over a build-route expression. The expression"           << std::endl <<
+          "                              uses '-knob=[a|b|c]' for variable knobs and '-knob=fixed' for fixed"            << std::endl <<
+          "                              values; multiple knobs are space-separated. Each iteration forks a"             << std::endl <<
+          "                              child trtexec with --setBuildRoute=<route> for full reproducibility."           << std::endl <<
+          "  --tuneBuildRouteFile=<f>    Read the same expression from a file (newline-delimited tokens)."               << std::endl <<
+          "  --tuningSearch=<spec>       Search algorithm:"                                                              << std::endl <<
+          "                                  fast  = baseline + one-off variations per knob (default)"                  << std::endl <<
+          "                                  full  = enumerate every combination (Cartesian product)"                   << std::endl <<
+          "                                  mixed = phase 1 fast scan, then exhaustive over positive knobs"            << std::endl <<
+          "  --tuningCacheFile=<f>       JSON file to which per-iteration results are appended (best-config cache)."     << std::endl <<
+          "  --tuningTimeOut=<seconds>   Stop the loop after N elapsed seconds. -1 = no timeout (default)."              << std::endl <<
+          "  --saveAllEngines            Save the engine of every iteration as <engine>.iter<N>. Requires --saveEngine." << std::endl <<
+          "  --dryRun                    Enumerate the route list and exit without building any engine."                 << std::endl <<
+          "  --continue                  Resume an interrupted tuning loop from --tuningCacheFile."                      << std::endl <<
+          "  --helpBuildRoute[=<knob>]   Print the knob database as JSON and exit. Optionally filter by knob name."      << std::endl <<
+          "  --setBuildRoute=<route>     Single-shot: build with a specific route. Equivalent to a single tuning"        << std::endl <<
+          "                              iteration; used by the parent tuning loop when forking child workers."          << std::endl;
+    // clang-format on
+}
+
+void ReportingOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Reporting Options ==="                                                                    << std::endl <<
+          "  --verbose                   Use verbose logging (default = false)"                          << std::endl <<
+          "  --avgRuns=N                 Report performance measurements averaged over N consecutive "
+                                                       "iterations (default = " << defaultAvgRuns << ")" << std::endl <<
+          "  --percentile=P1,P2,P3,...   Report performance for the P1,P2,P3,... percentages (0<=P_i<=100, 0 "
+                                        "representing max perf, and 100 representing min perf; (default"
+                                            " = " << joinValuesToString(defaultPercentiles, ",") << "%)" << std::endl <<
+          "  --dumpRefit                 Print the refittable layers and weights from a refittable "
+                                        "engine"                                                         << std::endl <<
+          "  --dumpOutput                Print the output tensor(s) of the last inference iteration "
+                                                                                  "(default = disabled)" << std::endl <<
+          "  --dumpRawBindingsToFile     Print the input/output tensor(s) of the last inference iteration to file"
+                                                                                  "(default = disabled)" << std::endl <<
+          "  --dumpProfile               Print profile information per layer (default = disabled)"       << std::endl <<
+          "  --dumpLayerInfo             Print layer information of the engine to console "
+                                                                                "(default = disabled)"   << std::endl <<
+          "  --dumpOptimizationProfile   Print the optimization profile(s) information "
+                                                                                "(default = disabled)"   << std::endl <<
+          "  --exportTimes=<file>        Write the timing results in a json file (default = disabled)"   << std::endl <<
+          "  --exportOutput=<file>       Write the output tensors to a json file (default = disabled)"   << std::endl <<
+          "  --exportProfile=<file>      Write the profile information per layer in a json file "
+                                                                              "(default = disabled)"     << std::endl <<
+          "  --exportLayerInfo=<file>    Write the layer information of the engine in a json file "
+                                                                              "(default = disabled)"     << std::endl;
+    // clang-format on
+}
+
+void TaskInferenceOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Task Inference Options ==="                                                                                           << std::endl <<
+          "  engine=<file>               Specify a serialized engine for this task"                                                  << std::endl <<
+          "  device=N                    Specify a GPU device for this task"                                                         << std::endl <<
+          "  DLACore=N                   Specify a DLACore for this task"                                                            << std::endl <<
+          "  batch=N                     Set batch size for implicit batch engines (default = "              << defaultBatch << ")"  << std::endl <<
+          "                              This option should not be used for explicit batch engines"                                  << std::endl <<
+          "  graph=1                     Use cuda graph for this task"                                                               << std::endl <<
+          "  persistentCacheRatio=[0-1]  Set the persistentCacheLimit ratio for this task                            (default = 0)"  << std::endl;
+    // clang-format on
+}
+
+void helpHelp(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Help ==="                                     << std::endl <<
+          "  --help, -h                  Print this message" << std::endl;
+    // clang-format on
+}
+
+void AllOptions::help(std::ostream& os, bool const enableStaticPlugins)
+{
+    ModelOptions::help(os);
+    os << std::endl;
+    BuildOptions::help(os);
+    os << std::endl;
+    InferenceOptions::help(os);
+    os << std::endl;
+    TuningOptions::help(os);
+    os << std::endl;
+    ReportingOptions::help(os);
+    os << std::endl;
+    SystemOptions::help(os, enableStaticPlugins);
+    os << std::endl;
+    helpHelp(os);
+}
+
+void SafeBuilderOptions::printHelp(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Mandatory ==="                                                                                                                << std::endl <<
+          "  --onnx=<file>               ONNX model"                                                                                         << std::endl <<
+          " "                                                                                                                                << std::endl <<
+          "=== Optional ==="                                                                                                                 << std::endl <<
+#if !TRT_WINML
+#if ENABLE_FEATURE_WEAK_TYPING
+          "  --inputIOFormats=spec       Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    << std::endl <<
+          "                              See --outputIOFormats help for the grammar of type and format list."                                << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
+          "                                    inputs following the same order as network inputs ID (even if only one input"                 << std::endl <<
+          "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
+          "  --outputIOFormats=spec      Type and format of each of the output tensors (default = all outputs in fp32:chw)"                  << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
+          "                                    outputs following the same order as network outputs ID (even if only one output"              << std::endl <<
+          "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
+        R"(                              IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
+          "                                          IOfmt ::= type:fmt | fmt"                                                               << std::endl <<
+        R"(                                          type  ::= "fp32"|"fp16"|"int32"|"int8")"                                                << std::endl <<
+        R"(                                          fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
+        R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"               << std::endl <<
+          "                              When type is omitted, it is inferred from the network (requires --stronglyTyped)."                  << std::endl <<
+#else
+          "  --inputIOFormats=spec       Memory layout of each of the input tensors (default = chw)"                                        << std::endl <<
+          "                              See --outputIOFormats help for the grammar of format list."                                          << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated formats for all"                       << std::endl <<
+          "                                    inputs following the same order as network inputs ID (even if only one input"                  << std::endl <<
+          "                                    needs specifying IO format) or set the format once for broadcasting."                          << std::endl <<
+          "  --outputIOFormats=spec      Memory layout of each of the output tensors (default = chw)"                                        << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated formats for all"                       << std::endl <<
+          "                                    outputs following the same order as network outputs ID (even if only one output"               << std::endl <<
+          "                                    needs specifying IO format) or set the format once for broadcasting."                          << std::endl <<
+        R"(                              IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
+        R"(                                          IOfmt ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
+        R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"IOfmt])"             << std::endl <<
+#endif // ENABLE_FEATURE_WEAK_TYPING
+          "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
+#endif // !TRT_WINML
+          "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
+          "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<
+#if !TRT_WINML
+          "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)"                          << std::endl <<
+#endif
+          "  --verbose or -v             Use verbose logging (default = false)"                                                              << std::endl <<
+          "  --help or -h                Print this message"                                                                                 << std::endl <<
+          "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<
+          "  --timingCacheFile=<file>    Save/load the serialized global timing cache"                                                       << std::endl <<
+          "  --sparsity=spec             Control sparsity (default = disabled). "                                                            << std::endl <<
+#if !TRT_WINML
+        R"(                              Sparsity: spec ::= "disable", "enable", "force")"                                                   << std::endl <<
+#else // !TRT_WINML
+        R"(                              Sparsity: spec ::= "disable", "enable")"                                                   << std::endl <<
+#endif // !TRT_WINML
+          "                              Note: Description about each of these options is as below"                                          << std::endl <<
+          "                                    disable = do not enable sparse tactics in the builder (this is the default)"                  << std::endl <<
+          "                                    enable  = enable sparse tactics in the builder (but these tactics will only be"               << std::endl <<
+          "                                              considered if the weights have the right sparsity pattern)"                         << std::endl <<
+#if !TRT_WINML
+          "                                    force   = enable sparse tactics in the builder and force-overwrite the weights to have"       << std::endl <<
+          "                                              a sparsity pattern"                                                                 << std::endl <<
+#endif // !TRT_WINML
+          "  --avgTiming=M               Set the number of times averaged in each iteration for kernel selection (default = "                << std::endl <<
+          ""                                                                                               << defaultAvgTiming << ")"        << std::endl <<
+          ""                                                                                                                                 << std::endl;
+    // clang-format on
+}
+
+} // namespace sample

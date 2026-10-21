@@ -144,11 +144,17 @@ private:
     nvinfer1::PluginFieldCollection mFCToSerialize;
     std::string mNamespace;
 
-    // cuFFT plan cache, keyed on the runtime shape. Guarded because TensorRT may
-    // call onShapeChange/getWorkspaceSize from different threads.
+    //! Guards \c mPlanCache, \c mCurrentPlan, and \c mCurrentWorkspaceSize.
+    //! TensorRT may call \c getWorkspaceSize and \c onShapeChange concurrently.
+    //! Entries in \c mPlanCache are never removed for the lifetime of this \c FFTPlugin
+    //! instance; because \c std::map nodes have stable addresses, a \c cufftHandle*
+    //! extracted from the map remains valid after the mutex is released.
     mutable std::mutex mCacheMutex;
+    //! \see mCacheMutex
     mutable std::map<FFTPlanKey, FFTPlanContext> mPlanCache;
+    //! cuFFT plan for the most recently configured shape. \see mCacheMutex
     mutable cufftHandle* mCurrentPlan{nullptr};
+    //! Workspace size for \c mCurrentPlan. \see mCacheMutex
     mutable size_t mCurrentWorkspaceSize{0};
 
     // Device input 0 is the signal; output 0 is the transform result. For the

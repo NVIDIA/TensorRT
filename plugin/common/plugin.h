@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,14 +20,18 @@
 #include "common/checkMacrosPlugin.h"
 #include "cublasWrapper.h"
 #include "cudnnWrapper.h"
+#include <concepts>
 #include <cstring>
 #include <cuda_runtime.h>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 // Enumerator for status
@@ -82,6 +86,16 @@ protected:
 std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> createPluginCudnnWrapper(
     void* executionContextIdentifier, char const* callerPluginName);
 std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> createPluginCublasWrapper(void* executionContextIdentifier);
+
+//! Deleter that releases device memory allocated with cudaMalloc.
+struct CudaDeleter
+{
+    //! Frees \p buf.
+    void operator()(void* buf)
+    {
+        PLUGIN_CUASSERT(cudaFree(buf));
+    }
+};
 } // namespace pluginInternal
 
 namespace plugin
@@ -104,6 +118,21 @@ OutType read(BufferType const*& buffer)
     OutType val{};
     std::memcpy(&val, static_cast<void const*>(buffer), sizeof(OutType));
     buffer += sizeof(OutType);
+    return val;
+}
+
+//! Read a value of type OutType from the front of \p buffer and advance \p buffer past it. Unlike the
+//! pointer overload, this validates that \p buffer holds enough bytes and throws PluginError if it does
+//! not, so callers need no separate remaining-length check before each read.
+//! \return The value read from the front of \p buffer.
+template <typename OutType>
+OutType read(std::span<std::byte const>& buffer)
+{
+    static_assert(std::is_trivially_copyable_v<OutType>, "read<> requires a trivially copyable type.");
+    PLUGIN_VALIDATE(buffer.size() >= sizeof(OutType));
+    OutType val{};
+    std::memcpy(&val, buffer.data(), sizeof(OutType));
+    buffer = buffer.subspan(sizeof(OutType));
     return val;
 }
 
@@ -137,7 +166,9 @@ inline int32_t getSmVersion()
     int32_t device{-1};
     PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
     auto const cc = DeviceComputeCapability::forDevice(device);
-    return getTrtSmVersionDec(cc.major, cc.minor);
+    auto const smVersion = getTrtSmVersionDec(cc.major, cc.minor);
+    // SM88 reuses SM87 plugin cubins on T238.
+    return smVersion == 88 ? 87 : smVersion;
 }
 
 // Check that all required field names are present in the PluginFieldCollection.
@@ -165,6 +196,30 @@ struct CudaBind
         }
     }
 };
+
+//! Owns \p T in device memory. Unlike CudaBind, this is movable. Use UniqueDevicePtr<T[]> for arrays.
+template <typename T>
+using UniqueDevicePtr = std::unique_ptr<T, pluginInternal::CudaDeleter>;
+
+//! \return an uninitialized device array of \p count elements, e.g. makeUniqueDevice<float[]>(42).
+template <typename T>
+requires(std::is_unbounded_array_v<T>) [[nodiscard]] UniqueDevicePtr<T> makeUniqueDevice(size_t count)
+{
+    void* ptr{nullptr};
+    PLUGIN_CUASSERT(cudaMalloc(&ptr, count * sizeof(std::remove_extent_t<T>)));
+    return UniqueDevicePtr<T>{static_cast<std::remove_extent_t<T>*>(ptr)};
+}
+
+//! \return a device array holding the size and values of \p host.
+template <typename T, std::ranges::contiguous_range R>
+requires(std::is_unbounded_array_v<T>&& std::same_as<std::remove_extent_t<T>, std::ranges::range_value_t<R>>)
+    [[nodiscard]] UniqueDevicePtr<T> makeUniqueDevice(R const& host)
+{
+    auto const hostSpan = std::span<std::remove_extent_t<T> const>(host);
+    auto device = makeUniqueDevice<T>(hostSpan.size());
+    PLUGIN_CUASSERT(cudaMemcpy(device.get(), hostSpan.data(), hostSpan.size_bytes(), cudaMemcpyHostToDevice));
+    return device;
+}
 
 // Convert a 64-bit dimension to a 32-bit dimension.
 // Throw exception if it doesn't fit.

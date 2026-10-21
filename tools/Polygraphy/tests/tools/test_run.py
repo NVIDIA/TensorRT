@@ -32,12 +32,18 @@ from polygraphy.json import load_json, save_json
 from tests.helper import ROOT_DIR, get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
+# INT8 mode and the INT8 calibration APIs were removed in TensorRT 11.
+skip_if_trt_11 = pytest.mark.skipif(
+    mod.version(trt.__version__) >= mod.version("11.0"),
+    reason="INT8 mode and calibration were removed in TRT 11",
+)
+
 
 class TestGen:
     def test_polygraphy_run_gen_script(self, poly_run):
         with util.NamedTemporaryFile(mode="w") as f:
             poly_run([f"--gen-script={f.name}", ONNX_MODELS["identity"].path])
-            with open(f.name, "r") as script:
+            with open(f.name) as script:
                 print(script.read())
             env = copy.deepcopy(os.environ)
             env.update({"PYTHONPATH": ROOT_DIR})
@@ -75,7 +81,12 @@ class TestTrt:
                 (
                     "nvinfer_plugin.dll"
                     if sys.platform.startswith("win")
-                    else "libnvinfer_plugin.so"
+                    # TRT 11 pip wheels ship only the major-versioned soname.
+                    else (
+                        f"libnvinfer_plugin.so.{trt.__version__.split('.')[0]}"
+                        if mod.version(trt.__version__) >= mod.version("11.0")
+                        else "libnvinfer_plugin.so"
+                    )
                 ),
             ]
         )
@@ -91,7 +102,7 @@ class TestTrt:
         )
 
     def test_layerwise_outputs(self, poly_run):
-        with util.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile(suffix=".json") as outfile0:
             poly_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -110,7 +121,7 @@ class TestTrt:
             assert "identity_out_2" in result
 
     def test_exclude_outputs_with_layerwise(self, poly_run):
-        with util.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile(suffix=".json") as outfile0:
             poly_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -129,6 +140,7 @@ class TestTrt:
             assert len(result) == 1
             assert "identity_out_0" in result
 
+    @skip_if_trt_11
     def test_int8(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--int8"])
 
@@ -272,6 +284,7 @@ class TestTrt:
 
         poly_run(cmd)
 
+    @skip_if_trt_11
     def test_int8_calibration_cache(self, poly_run):
         with util.NamedTemporaryFile() as outpath:
             cmd = [
@@ -285,6 +298,7 @@ class TestTrt:
             poly_run(cmd)
             assert is_file_non_empty(outpath.name)
 
+    @skip_if_trt_11
     @pytest.mark.parametrize(
         "base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"]
     )
@@ -353,6 +367,10 @@ class TestTrt:
             assert is_file_non_empty(outpath.name)
             poly_run(["--trt", outpath.name, "--model-type=engine"])
 
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("11.0"),
+        reason="--save/--load-tactics rely on the algorithm selector API, removed in TRT 11",
+    )
     def test_tactic_replay(self, poly_run):
         with util.NamedTemporaryFile() as tactic_replay:
             poly_run(
@@ -374,13 +392,16 @@ class TestTrt:
             )
 
     def test_tactic_sources(self, poly_run):
+        # EDGE_MASK_CONVOLUTIONS / JIT_CONVOLUTIONS are the tactic sources that
+        # survive on every supported TRT version (CUBLAS/CUBLAS_LT/CUDNN were
+        # removed in TRT 11).
         poly_run(
             [
                 ONNX_MODELS["identity"].path,
                 "--trt",
                 "--tactic-sources",
-                "CUBLAS",
-                "CUBLAS_LT",
+                "EDGE_MASK_CONVOLUTIONS",
+                "JIT_CONVOLUTIONS",
             ]
         )
 
@@ -389,6 +410,7 @@ class TestTrt:
             [ONNX_MODELS["identity"].path, "--trt", "--pool-limit", "workspace:32M"]
         )
 
+    @skip_if_trt_11
     def test_data_loader_script_calibration(self, poly_run):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
@@ -496,7 +518,7 @@ class TestOnnxrt:
         )
 
     def test_onnx_rt_layerwise_outputs(self, poly_run):
-        with util.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile(suffix=".json") as outfile0:
             poly_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -515,7 +537,7 @@ class TestOnnxrt:
             assert "identity_out_2" in result
 
     def test_onnx_rt_exclude_outputs_with_layerwise(self, poly_run):
-        with util.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile(suffix=".json") as outfile0:
             poly_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -547,16 +569,30 @@ class TestOther:
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--iterations=0"])
 
     def test_subprocess_sanity(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--use-subprocess"])
+        # --use-subprocess requires --sequential-runners (streaming runs in one process).
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--use-subprocess",
+                "--sequential-runners",
+            ]
+        )
 
-    def test_exit_status_on_fail_comparison(self, poly_run, tmp_path):
-        OUTFILE0 = os.path.join(tmp_path, "outputs0.json")
+    @pytest.mark.parametrize(
+        "save_name",
+        # --load-outputs reads back either a single file or a per-iteration directory (default).
+        ["outputs0.json", "golden"],
+    )
+    def test_exit_status_on_fail_comparison(self, poly_run, tmp_path, save_name):
+        # An accuracy mismatch against a saved reference run must yield a non-zero exit status.
+        outputs = os.path.join(tmp_path, save_name)
         poly_run(
             [
                 ONNX_MODELS["identity"].path,
                 "--onnxrt",
                 "--save-outputs",
-                OUTFILE0,
+                outputs,
                 "--seed=1",
             ]
         )
@@ -565,7 +601,7 @@ class TestOther:
                 ONNX_MODELS["identity"].path,
                 "--onnxrt",
                 "--load-outputs",
-                OUTFILE0,
+                outputs,
                 "--seed=2",
             ],
             expect_error=True,
@@ -615,15 +651,62 @@ class TestOther:
         )
 
     def test_index_comparison(self, poly_run):
-        poly_run(
+        # Two identical runners with top-1 postprocessing and indices comparison must match fully.
+        status = poly_run(
             [
                 ONNX_MODELS["identity"].path,
+                "--onnxrt",
                 "--onnxrt",
                 "--postprocess",
                 "top-1",
                 "--compare-func=indices",
             ]
         )
+        out = status.stdout + status.stderr
+        assert "PASSED | Difference is within index tolerance" in out
+        assert "Accuracy Summary" in out
+        assert "Pass Rate: 100.00%" in out
+
+    def test_postprocess_func_script(self, poly_run):
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(
+                dedent(
+                    """
+                    def postprocess_outputs(iter_result):
+                        raise RuntimeError("postprocess hook invoked")
+                    """
+                )
+            )
+            f.flush()
+            os.fsync(f.fileno())
+
+            status = poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--postprocess-func-script",
+                    f.name,
+                ],
+                expect_error=True,
+            )
+            assert "postprocess hook invoked" in status.stderr
+
+    @pytest.mark.parametrize(
+        "compare_func",
+        ["l2", "cosine_similarity", "psnr", "snr"],
+    )
+    def test_atomic_compare_funcs(self, poly_run, compare_func):
+        # Each single-metric comparison function passes its threshold for two identical runners.
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--compare",
+                compare_func,
+            ]
+        )
+        assert "Accuracy Summary" in status.stdout + status.stderr
 
     @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "quantile"])
     def test_check_error_stat(self, poly_run, check_error_stat):
@@ -636,6 +719,49 @@ class TestOther:
                 check_error_stat,
             ]
         )
+
+    def test_check_average(self, poly_run):
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--check-error-stat",
+                "mean",
+                "--check-average",
+            ]
+        )
+        assert "Accuracy Summary" in status.stdout + status.stderr
+        # Average mode summarizes per-output; per-iteration mode would emit "Pass Rate".
+        assert "Pass Rate" not in status.stdout + status.stderr
+
+    def test_check_average_rejects_elemwise(self, poly_run):
+        # Regression test: --check-average must be rejected when 'simple' uses the default
+        # 'elemwise' stat (which has no scalar to average). The validation reads check_error_stat
+        # from another argument group, so it must run after all parsing; exercising the real tool
+        # here guards against that ordering bug.
+        status = poly_run(
+            [ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--check-average"],
+            expect_error=True,
+        )
+        assert (
+            "--check-average is not supported with check_error_stat='elemwise'"
+            in status.stdout + status.stderr
+        )
+
+    def test_check_average_rejects_indices(self, poly_run):
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--check-average",
+                "--compare",
+                "indices",
+            ],
+            expect_error=True,
+        )
+        assert "does not produce averageable metrics" in status.stdout + status.stderr
 
     def test_save_load_outputs(self, poly_run, tmp_path):
         OUTFILE0 = os.path.join(tmp_path, "outputs0.json")
@@ -678,8 +804,38 @@ class TestOther:
             "Difference is within tolerance" in status.stdout + status.stderr
         )  # Make sure it actually compared stuff.
 
+    def test_save_accuracy_results_and_recheck(
+        self, poly_run, poly_check_accuracy, tmp_path
+    ):
+        # Save two runs, compare them while saving the accuracy results, then re-check those results
+        # against new thresholds with `check accuracy` -- without re-running inference.
+        OUTFILE0 = os.path.join(tmp_path, "outputs0.json")
+        OUTFILE1 = os.path.join(tmp_path, "outputs1.json")
+        ACC = os.path.join(tmp_path, "accuracy.json")
+        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", OUTFILE0])
+        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", OUTFILE1])
+
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--load-outputs",
+                OUTFILE0,
+                OUTFILE1,
+                "--check-error-stat",
+                "max",
+                "--save-accuracy-results",
+                ACC,
+            ]
+        )
+        assert os.path.exists(ACC)
+
+        # The two runs are identical, so any tolerance passes.
+        poly_check_accuracy([ACC, "--check-error-stat", "max", "--atol", "1e-8"])
+
     def test_save_load_inputs(self, poly_run):
-        with util.NamedTemporaryFile() as infile0, util.NamedTemporaryFile() as infile1:
+        with util.NamedTemporaryFile(
+            suffix=".json"
+        ) as infile0, util.NamedTemporaryFile(suffix=".json") as infile1:
             poly_run(
                 [
                     ONNX_MODELS["identity"].path,
@@ -753,3 +909,278 @@ class TestPluginRef:
     @pytest.mark.parametrize("model", ["identity", "instancenorm"])
     def test_ref_implementations(self, poly_run, model):
         poly_run([ONNX_MODELS[model].path, "--pluginref", "--onnxrt", "--trt"])
+
+
+class TestStreamData:
+    def test_gen_script(self, poly_run):
+        with util.NamedTemporaryFile(mode="w") as f:
+            poly_run(
+                [
+                    f"--gen-script={f.name}",
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--onnxrt",
+                    "--validate",
+                ]
+            )
+            with open(f.name) as script_file:
+                script = script_file.read()
+            # Streaming (the default) emits run(..., streaming=True) feeding compare_accuracy.
+            assert "streaming=True" in script
+            assert "Comparator.compare_accuracy(" in script
+            # In streaming mode, --validate wraps the runs in a lazy validation pass-through.
+            assert "Comparator.validate(" in script
+
+    def test_postprocess_applies_to_loaded_outputs(self, poly_run, tmp_path):
+        # --postprocess must apply to --load-outputs goldens too, not just the live run:
+        # top-1 + indices comparison only matches if the loaded golden is also reduced to indices.
+        golden = os.path.join(tmp_path, "golden")
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--iterations",
+                "3",
+                "--save-outputs",
+                golden,
+            ]
+        )
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--load-outputs",
+                golden,
+                "--postprocess",
+                "top-1",
+                "--compare-func",
+                "indices",
+            ]
+        )
+        assert "Pass Rate: 100.00%" in status.stdout + status.stderr
+
+    @pytest.mark.parametrize("extra_save_args", [[], ["--sequential-runners"]])
+    def test_save_writes_per_iteration_directory(
+        self, poly_run, tmp_path, extra_save_args
+    ):
+        # An extensionless --save-* path writes one <i>.json per iteration in both the streaming
+        # and --sequential-runners paths (both should produce the same directory layout).
+        in_dir = os.path.join(tmp_path, "inputs")
+        out_dir = os.path.join(tmp_path, "outputs")
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                *extra_save_args,
+                "--iterations",
+                "3",
+                "--save-inputs",
+                in_dir,
+                "--save-outputs",
+                out_dir,
+            ]
+        )
+        assert sorted(os.listdir(in_dir)) == [
+            "0000000000.json",
+            "0000000001.json",
+            "0000000002.json",
+        ]
+        assert sorted(os.listdir(out_dir)) == [
+            "0000000000.json",
+            "0000000001.json",
+            "0000000002.json",
+        ]
+
+    def test_sequential_runners_load_outputs_rejects_directory(
+        self, poly_run, tmp_path
+    ):
+        # With --sequential-runners, --load-outputs reads a materialized run (RunResults.load), so a
+        # per-iteration directory is rejected at runtime. (Streaming accepts it; see round-trip.)
+        out_dir = os.path.join(tmp_path, "outputs")
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--iterations",
+                "3",
+                "--save-outputs",
+                out_dir,
+            ]
+        )
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--sequential-runners",
+                "--load-outputs",
+                out_dir,
+            ],
+            expect_error=True,
+        )
+        assert "directory" in (status.stdout + status.stderr).lower()
+
+    def test_gen_script_does_not_inspect_disk(self, poly_run, tmp_path):
+        # --gen-script must not inspect disk state: the files-only contract for a --sequential-runners
+        # --load-outputs directory is enforced at runtime, not during script generation.
+        existing_dir = os.path.join(tmp_path, "some_dir")
+        os.makedirs(existing_dir)
+        gen_script = tmp_path / "gen.py"
+        poly_run(
+            [
+                f"--gen-script={gen_script}",
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--sequential-runners",
+                "--load-outputs",
+                existing_dir,
+            ]
+        )
+        assert gen_script.stat().st_size > 0
+
+    @pytest.mark.parametrize(
+        "extra_args, expected",
+        [
+            (["--use-subprocess"], "--use-subprocess requires --sequential-runners"),
+            (["--warm-up", "2"], "--warm-up requires --sequential-runners"),
+        ],
+        ids=["use-subprocess", "warm-up"],
+    )
+    def test_streaming_rejects_sequential_only_args(
+        self, poly_run, extra_args, expected
+    ):
+        # These flags are not supported in the default streaming mode; they require
+        # --sequential-runners. The guard fires on streaming mode regardless of runner count.
+        status = poly_run(
+            [ONNX_MODELS["identity"].path, "--onnxrt", *extra_args],
+            expect_error=True,
+        )
+        assert expected in status.stdout + status.stderr
+
+    def test_allows_load_and_save_outputs(self, poly_run, tmp_path):
+        # Loading a reference run while saving the live run to a different path is allowed
+        # (only overlapping load/save paths are rejected).
+        golden = os.path.join(tmp_path, "golden")
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--save-outputs",
+                golden,
+            ]
+        )
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--load-outputs",
+                golden,
+                "--save-outputs",
+                os.path.join(tmp_path, "newsave"),
+            ]
+        )
+        assert "Accuracy Summary" in status.stdout + status.stderr
+
+    @pytest.mark.parametrize("load_is_file_inside", [False, True])
+    def test_rejects_load_overlapping_save_path(
+        self, poly_run, tmp_path, load_is_file_inside
+    ):
+        # A load path that is the same directory as a save path -- or a file directly inside it --
+        # is rejected, since the per-iteration save directory (which must be empty) would conflict
+        # with the data being loaded.
+        save_dir = tmp_path / "data"
+        if load_is_file_inside:
+            save_dir.mkdir()
+            (save_dir / "0.json").write_text("{}")
+            load_path = str(save_dir / "0.json")
+        else:
+            load_path = str(save_dir)
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--load-inputs",
+                load_path,
+                "--save-inputs",
+                str(save_dir),
+            ],
+            expect_error=True,
+        )
+        assert "overlaps the save path" in status.stdout + status.stderr
+
+    def test_multiple_compare_funcs_distinct_in_script(self, poly_run, tmp_path):
+        gen_script = tmp_path / "gen.py"
+        poly_run(
+            [
+                f"--gen-script={gen_script}",
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--compare",
+                "simple",
+                "distance_metrics",
+                "--check-error-stat",
+                "mean",
+                "--l2-threshold",
+                "0.0",
+            ]
+        )
+        script = gen_script.read_text()
+        # Each compare function must be its own variable so they don't alias each other.
+        # 'distance_metrics' expands into the atomic L2 + cosine-similarity functions.
+        assert "simple_compare_func = SimpleCompareFunc(" in script
+        assert "l2_compare_func = L2CompareFunc(" in script
+        assert "cosine_similarity_compare_func = CosineSimilarityCompareFunc(" in script
+        assert (
+            "compare_func=[simple_compare_func, l2_compare_func, cosine_similarity_compare_func]"
+            in script
+        )
+
+    def test_multiple_compare_funcs_all_applied(self, poly_run):
+        # distance_metrics with an impossible cosine threshold must fail the run, even though the
+        # 'simple' comparison passes -- proving both compare functions actually take effect.
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--compare",
+                "distance_metrics",
+                "simple",
+                "--cosine-similarity-threshold",
+                "2.0",
+            ],
+            expect_error=True,
+        )
+        assert "FAILED" in status.stdout + status.stderr
+
+    def test_fail_fast_stops_mid_stream(self, poly_run, tmp_path):
+        # A mismatch on the first iteration with --fail-fast must produce a non-zero exit and a
+        # FAILED marker without waiting for subsequent iterations to complete.
+        golden = os.path.join(tmp_path, "golden")
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--save-outputs",
+                golden,
+                "--seed=1",
+            ]
+        )
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--load-outputs",
+                golden,
+                "--seed=2",
+                "--check-error-stat",
+                "mean",
+                "--atol=0",
+                "--rtol=0",
+                "--fail-fast",
+            ],
+            expect_error=True,
+        )
+        assert "FAILED" in status.stdout + status.stderr

@@ -337,7 +337,8 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
 
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(nbThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], gieModelStream.data(), engineFileSize, *recorders[0], true),
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraphWithSo(
+                      graphs[0], gieModelStream.data(), engineFileSize, nullptr, *recorders[0], true),
         *recorders[0]);
 
     for (int32_t i = 1; i < nbThreads; ++i)

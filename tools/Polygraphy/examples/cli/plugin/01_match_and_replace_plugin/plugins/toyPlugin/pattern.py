@@ -1,6 +1,8 @@
 from polygraphy import mod
+
 gs = mod.lazy_import("onnx_graphsurgeon>=0.5.0")
-from typing import List,Dict
+from typing import List, Dict
+
 
 def get_plugin_pattern():
     """
@@ -16,7 +18,7 @@ def get_plugin_pattern():
     in_1 = pattern.variable()
     a_out = pattern.add("Anode", "A", inputs=[in_0])
     b_out = pattern.add("Bnode", "B", inputs=[in_1])
-    check_function = lambda node : node.attrs["x"] < 2.0
+    check_function = lambda node: node.attrs["x"] < 2.0
     c_out = pattern.add("Cnode", "C", inputs=[a_out, b_out], check_func=check_function)
     d_out = pattern.add("Dnode", "D", inputs=[c_out])
     e_out = pattern.add("Enode", "E", inputs=[c_out])
@@ -24,7 +26,8 @@ def get_plugin_pattern():
 
     return pattern
 
-def get_matching_subgraphs(graph) -> List[Dict[str,str]]:
+
+def get_matching_subgraphs(graph) -> List[Dict[str, str]]:
     gp = get_plugin_pattern()
     matches = gp.match_all(graph)
     ans = []
@@ -34,15 +37,13 @@ def get_matching_subgraphs(graph) -> List[Dict[str,str]]:
         output_tensors = list(set([op_tensor.name for op_tensor in m.outputs]))
 
         attrs = {"ToyX": int(m.get("Cnode").attrs["x"]) * 2}
-        ioa = {
-            'inputs':input_tensors,
-            'outputs':output_tensors,
-            'attributes':attrs
-        }
+        ioa = {"inputs": input_tensors, "outputs": output_tensors, "attributes": attrs}
         ans.append(ioa)
     return ans
 
-def get_plugin_metadata() -> Dict[str,str]:
-    return {'name':'toyPlugin',
-            'op':'CustomToyPlugin',
-            }
+
+def get_plugin_metadata() -> Dict[str, str]:
+    return {
+        "name": "toyPlugin",
+        "op": "CustomToyPlugin",
+    }

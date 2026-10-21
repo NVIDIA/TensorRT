@@ -86,9 +86,9 @@ DimsExprs ScatterElementsPluginV2::getOutputDimensions(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 3);
-        PLUGIN_VALIDATE(inputs);
-        PLUGIN_VALIDATE(index <= kOUTPUT_TENSOR_IDX);
+        PLUGIN_ASSERT(nbInputs == 3);
+        PLUGIN_ASSERT(inputs);
+        PLUGIN_ASSERT(index <= kOUTPUT_TENSOR_IDX);
         // both outputs are of the same size
         DimsExprs out(inputs[kDATA_TENSOR_IDX]);
         return out;
@@ -136,7 +136,7 @@ bool ScatterElementsPluginV2::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut && pos < (nbInputs + nbOutputs));
+        PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
 
         if (inOut[pos].format != PluginFormat::kLINEAR)
         {
@@ -180,7 +180,7 @@ void ScatterElementsPluginV2::configurePlugin(
 {
     try
     {
-        PLUGIN_VALIDATE(nbInputs == 3);
+        PLUGIN_ASSERT(nbInputs == 3);
     }
     catch (std::exception const& e)
     {

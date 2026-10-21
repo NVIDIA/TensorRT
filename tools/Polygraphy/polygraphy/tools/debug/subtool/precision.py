@@ -209,9 +209,12 @@ class Precision(BaseCheckerSubtool):
             self.layer_marker = BisectMarker(len(network), args.direction)
 
         self.original_precisions = {}
-        for index, layer in enumerate(network):
-            if layer.precision_is_set:
-                self.original_precisions[index] = layer.precision
+        try:
+            for index, layer in enumerate(network):
+                if layer.precision_is_set:
+                    self.original_precisions[index] = layer.precision
+        except AttributeError:
+            trt_util.fail_unavailable("layer precision in polygraphy debug precision")
 
     def mark_layers(self, network, indices):
         EXCLUDE_LAYER_NAMES = ["CONSTANT"]
@@ -222,11 +225,14 @@ class Precision(BaseCheckerSubtool):
         ]
 
         # First, reset, since changes from the previous call will persist.
-        for index, layer in enumerate(network):
-            if index in self.original_precisions:
-                layer.precision = self.original_precisions[index]
-            else:
-                layer.reset_precision()
+        try:
+            for index, layer in enumerate(network):
+                if index in self.original_precisions:
+                    layer.precision = self.original_precisions[index]
+                else:
+                    layer.reset_precision()
+        except AttributeError:
+            trt_util.fail_unavailable("layer precision in polygraphy debug precision")
 
         marked_indices = set()
         for index in indices:
@@ -252,7 +258,12 @@ class Precision(BaseCheckerSubtool):
                 G_LOGGER.extra_verbose(
                     f"Running layer in higher precision: {trt_util.str_from_layer(layer, index)}"
                 )
-                layer.precision = self.precision
+                try:
+                    layer.precision = self.precision
+                except AttributeError:
+                    trt_util.fail_unavailable(
+                        "layer precision in polygraphy debug precision"
+                    )
                 marked_indices.add(index)
 
         G_LOGGER.verbose(

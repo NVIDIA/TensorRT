@@ -29,14 +29,18 @@
 //! pick up the definitions here.
 
 #include "NvInfer.h"
+#if TRT_BUILD_ONNX_PARSER
 #include "NvOnnxParser.h"
+#endif
 #include "logger.h"
 
 extern nvinfer1::IBuilder* createBuilder();
 extern nvinfer1::IRuntime* createRuntime();
 extern nvinfer1::IRefitter* createRefitter(nvinfer1::ICudaEngine& engine);
+#if TRT_BUILD_ONNX_PARSER
 extern nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network);
 extern nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter);
+#endif
 
 #if !defined(DEFINE_TRT_ENTRYPOINTS)
 #define DEFINE_TRT_ENTRYPOINTS 0
@@ -84,6 +88,7 @@ nvinfer1::IRefitter* createRefitter(nvinfer1::ICudaEngine& engine)
 #endif
 }
 
+#if TRT_BUILD_ONNX_PARSER
 nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network)
 {
 #if DEFINE_TRT_ONNX_PARSER_ENTRYPOINT
@@ -101,6 +106,7 @@ nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter)
     return {};
 #endif
 }
+#endif // TRT_BUILD_ONNX_PARSER
 
 #endif // DEFINE_TRT_ENTRYPOINTS
 

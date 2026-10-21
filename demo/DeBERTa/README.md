@@ -93,7 +93,10 @@ git submodule update --init --recursive
 # build OSS (only required for pre-8.4.3 TensorRT versions)
 cd $TRT_OSSPATH
 mkdir -p build && cd build
-cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
+cmake .. -DCMAKE_PREFIX_PATH=$TRT_ROOT \
+    -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`/out \
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=`pwd`/out \
+    -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=`pwd`/out
 make -j$(nproc)
 
 # polygraphy bin location & trtexec bin location

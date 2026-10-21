@@ -31,6 +31,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <concepts>
 namespace nvinfer1::plugin
 {
 
@@ -170,8 +171,7 @@ __device__ SizeType32 calc_bucket(T x, SizeType32 start_bit, unsigned mask, bool
     return (twiddle_in(x, select_min) >> start_bit) & mask;
 }
 
-template <typename I>
-constexpr inline std::enable_if_t<std::is_integral<I>::value, bool> is_a_power_of_two(I val) noexcept
+[[nodiscard]] constexpr bool is_a_power_of_two(std::integral auto val) noexcept
 {
     return ((val - 1) & val) == 0;
 }

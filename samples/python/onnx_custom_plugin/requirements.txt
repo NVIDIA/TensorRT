@@ -8,4 +8,5 @@ pywin32; platform_system == "Windows"
 pyyaml==6.0.3
 requests==2.32.4
 tqdm==4.66.4
-numpy==1.26.4
+numpy==1.26.4; python_version<"3.13"
+numpy==2.2.3; python_version>="3.13"

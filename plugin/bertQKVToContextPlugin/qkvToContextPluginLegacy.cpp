@@ -357,7 +357,7 @@ void QKVToContextPluginDynamicLegacy::attachToContext(
     {
         mCublasWrapper = createPluginCublasWrapper(allocator);
         mCublas = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(mCublas != nullptr);
+        PLUGIN_ASSERT(mCublas != nullptr);
     }
     catch (std::exception const& e)
     {
@@ -439,7 +439,7 @@ char const* QKVToContextPluginDynamicLegacy::getPluginNamespace() const noexcept
 int32_t QKVToContextPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
     PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
@@ -868,7 +868,7 @@ void QKVToContextVarSeqlenPluginLegacy::attachToContext(
     {
         mCublasWrapper = createPluginCublasWrapper(allocator);
         mCublas = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(mCublas != nullptr);
+        PLUGIN_ASSERT(mCublas != nullptr);
     }
     catch (std::exception const& e)
     {
@@ -944,7 +944,7 @@ int32_t QKVToContextVarSeqlenPluginLegacy::enqueue(nvinfer1::PluginTensorDesc co
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     if (mUseVarSeqlen)
     {

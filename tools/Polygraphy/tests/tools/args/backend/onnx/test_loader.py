@@ -55,6 +55,30 @@ class TestOnnxLoaderArgs:
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
 
+    def test_mark_types(self):
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
+        arg_group.parse_args(
+            [
+                ONNX_MODELS["identity_identity"].path,
+                "--onnx-outputs-by-type",
+                "Identity",
+            ]
+        )
+        model = arg_group.load_onnx()
+        assert len(model.graph.output) == 2
+
+    def test_wildcard(self):
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
+        arg_group.parse_args(
+            [ONNX_MODELS["identity_identity"].path, "--onnx-outputs", "*"]
+        )
+        model = arg_group.load_onnx()
+        assert len(model.graph.output) == 2
+
     @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
     @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
     def test_setting_upper_bounds(self, global_upper_bound, specified_upper_bound):
@@ -175,22 +199,30 @@ class TestOnnxSaveArgs:
             OnnxSaveArgs(),
             deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
         )
-        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
-            # External data must be a relative path
-            rpath_name = os.path.basename(data.name)
-            arg_group.parse_args(
-                [
-                    "-o",
-                    path.name,
-                    "--save-external-data",
-                    rpath_name,
-                    "--external-data-size-threshold=0",
-                ]
-            )
-            arg_group.save_onnx(model)
+        # `data` uses delete=False because saving overwrites (removes and rewrites) the external
+        # data file, so the NamedTemporaryFile must not also try to unlink it on exit.
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(
+            dir=".", delete=False
+        ) as data:
+            try:
+                # External data must be a relative path
+                rpath_name = os.path.basename(data.name)
+                arg_group.parse_args(
+                    [
+                        "-o",
+                        path.name,
+                        "--save-external-data",
+                        rpath_name,
+                        "--external-data-size-threshold=0",
+                    ]
+                )
+                arg_group.save_onnx(model)
 
-            assert is_file_non_empty(path.name)
-            assert is_file_non_empty(data.name)
+                assert is_file_non_empty(path.name)
+                assert is_file_non_empty(data.name)
+            finally:
+                if os.path.exists(data.name):
+                    os.remove(data.name)
 
     def test_size_threshold(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
@@ -198,21 +230,28 @@ class TestOnnxSaveArgs:
             OnnxSaveArgs(),
             deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
         )
-        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
-            rpath_name = os.path.basename(data.name)
-            arg_group.parse_args(
-                [
-                    "-o",
-                    path.name,
-                    "--save-external-data",
-                    rpath_name,
-                    "--external-data-size-threshold=1024",
-                ]
-            )
-            arg_group.save_onnx(model)
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(
+            dir=".", delete=False
+        ) as data:
+            try:
+                rpath_name = os.path.basename(data.name)
+                arg_group.parse_args(
+                    [
+                        "-o",
+                        path.name,
+                        "--save-external-data",
+                        rpath_name,
+                        "--external-data-size-threshold=1024",
+                    ]
+                )
+                arg_group.save_onnx(model)
 
-            assert is_file_non_empty(path.name)
-            assert is_file_empty(data.name)
+                assert is_file_non_empty(path.name)
+                # No tensor exceeds the size threshold, so no external data is written.
+                assert not os.path.exists(data.name) or is_file_empty(data.name)
+            finally:
+                if os.path.exists(data.name):
+                    os.remove(data.name)
 
     def test_no_all_tensors_to_one_file(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)

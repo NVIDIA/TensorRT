@@ -193,10 +193,10 @@ DimsExprs SkipLayerNormInterleavedPluginBaseLegacy::getOutputDimensions(
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(outputIndex >= 0 && outputIndex < getNbOutputs());
-        PLUGIN_VALIDATE(inputs[0].nbDims == inputs[1].nbDims);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < getNbOutputs());
+        PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
         return inputs[0];
     }
     catch (std::exception const& e)
@@ -211,10 +211,10 @@ bool SkipLayerNormInterleavedPluginBaseLegacy::supportsFormatCombination(
 {
     try
     {
-        PLUGIN_VALIDATE(inOut != nullptr);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == getNbOutputs());
-        PLUGIN_VALIDATE(pos >= 0 && pos < (nbInputs + nbOutputs));
+        PLUGIN_ASSERT(inOut != nullptr);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == getNbOutputs());
+        PLUGIN_ASSERT(pos >= 0 && pos < (nbInputs + nbOutputs));
 
         PluginTensorDesc const& desc = inOut[pos];
         return desc.type == DataType::kINT8 && desc.format == TensorFormat::kCHW32;
@@ -232,19 +232,19 @@ void SkipLayerNormInterleavedPluginBaseLegacy::configurePlugin(DynamicPluginTens
     try
     {
         // Validate input arguments
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(nbOutputs == getNbOutputs());
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(DataType::kINT8 == inputs[0].desc.type);
-        PLUGIN_VALIDATE(DataType::kINT8 == inputs[1].desc.type);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
+        PLUGIN_ASSERT(nbOutputs == getNbOutputs());
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(DataType::kINT8 == inputs[0].desc.type);
+        PLUGIN_ASSERT(DataType::kINT8 == inputs[1].desc.type);
 
         auto const& inDims0 = inputs[0].desc.dims;
         auto const& inDims1 = inputs[1].desc.dims;
         TRT_UNUSED inDims1;
 
-        PLUGIN_VALIDATE(inDims0.nbDims == inDims1.nbDims);
-        PLUGIN_VALIDATE(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+        PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
+        PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
         mParamWordsize = getElementSize(kPARAM_TYPE);
 
@@ -273,7 +273,7 @@ int32_t SkipLayerNormInterleavedPluginHFaceLegacy::enqueue(PluginTensorDesc cons
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         // Input shape: 1x(hxd)xtotalx1
         auto const iDesc = inputDesc[0];
@@ -313,7 +313,7 @@ int32_t SkipLayerNormInterleavedPluginMTronLegacy::enqueue(PluginTensorDesc cons
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         // Input shape: 1x(hxd)xtotalx1
         auto const iDesc = inputDesc[0];
@@ -321,7 +321,7 @@ int32_t SkipLayerNormInterleavedPluginMTronLegacy::enqueue(PluginTensorDesc cons
         auto const oDesc = outputDesc[0];
         auto const pDesc = outputDesc[1];
         checkDescs(iDesc, sDesc, oDesc);
-        PLUGIN_VALIDATE(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
+        PLUGIN_ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
 
         int32_t const ld = iDesc.dims.d[1];
         int32_t const total = iDesc.dims.d[2];

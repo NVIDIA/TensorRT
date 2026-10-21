@@ -31,7 +31,7 @@ class TestWheel:
 
         # Newer versions of setuptools break pytest-virtualenv
         virtualenv.run(
-            [virtualenv.python, "-m", "pip", "install", "setuptools"]
+            [virtualenv.python, "-m", "pip", "install", "setuptools", "build", "wheel"]
         )
 
         virtualenv.run(["make", "install"], cwd=ROOT_DIR)
@@ -42,8 +42,20 @@ class TestWheel:
         assert poly_pkg.version == polygraphy.__version__
 
         # Check that we only package things we actually want.
-        # If tests are packaged, they'll end up in a higher-level directory.
-        assert not os.path.exists(os.path.join(poly_pkg.source_path, "tests"))
+        # Unwanted directories (tests, examples, ci_scripts, etc.) would end up
+        # as top-level entries in site-packages if accidentally included.
+        UNEXPECTED_TOP_LEVEL = [
+            "tests",
+            "examples",
+            "ci_scripts",
+            "docs",
+            "how-to",
+            "bin",
+        ]
+        for name in UNEXPECTED_TOP_LEVEL:
+            assert not os.path.exists(
+                os.path.join(poly_pkg.source_path, name)
+            ), f"Packaging accidentally included '{name}/' — check pyproject.toml packages.find"
 
         EXCLUDE_FILES = ["__pycache__"]
         all_poly_files = glob.glob(

@@ -19,6 +19,7 @@
 #define TRT_GRID_ANCHOR_PLUGIN_H
 #include "common/kernels/kernel.h"
 #include "common/plugin.h"
+#include <span>
 #include <string>
 #include <vector>
 
@@ -33,7 +34,7 @@ public:
 
     GridAnchorGenerator(void const* data, size_t length, char const* version);
 
-    ~GridAnchorGenerator() override;
+    ~GridAnchorGenerator() override = default;
 
     int32_t getNbOutputs() const noexcept override;
 
@@ -82,16 +83,24 @@ protected:
     std::string mPluginName;
 
 private:
-    Weights copyToDevice(void const* hostData, size_t count) noexcept;
+    //! Copies \p deviceData into \p hostBuffer, advancing it past them.
+    void serializeFloatsFromDevice(char*& hostBuffer, std::span<float const> deviceData) const noexcept;
 
-    void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const noexcept;
+    //! \return an owning device array holding \p numFloats floats read from \p hostBuffer.
+    //! Advances \p hostBuffer past them. Takes a byte pointer because the serialized buffer has no
+    //! guaranteed float alignment.
+    [[nodiscard]] UniqueDevicePtr<float[]> deserializeFloatsToDevice(char const*& hostBuffer, size_t numFloats);
 
-    Weights deserializeToDevice(char const*& hostBuffer, size_t count) noexcept;
+    //! Sizes every per-layer member to mNumLayers.
+    void resizeForLayers();
 
-    int32_t mNumLayers;
+    int32_t mNumLayers{};
     std::vector<GridAnchorParameters> mParam;
-    int32_t* mNumPriors;
-    Weights *mDeviceWidths, *mDeviceHeights;
+    //! Backs mParam[i].aspectRatios, which GridAnchorParameters exposes as a raw pointer.
+    std::vector<std::vector<float>> mAspectRatios;
+    std::vector<int32_t> mNumPriors;
+    //! Prior box widths and heights, mNumPriors[i] floats each.
+    std::vector<UniqueDevicePtr<float[]>> mDeviceWidths, mDeviceHeights;
     std::string mPluginNamespace;
 };
 

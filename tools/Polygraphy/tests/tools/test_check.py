@@ -302,7 +302,7 @@ class TestLint:
             }
             assert expected_entry in output_json["lint_entries"]
 
-    @pytest.mark.script_launch_mode("subprocess")
+    #    @pytest.mark.script_launch_mode("subprocess")
     def test_custom_op(self, poly_check):
         """
         Test that a custom-op is handled correctly.
@@ -442,3 +442,91 @@ class TestLint:
             "polygraphy_unnamed_node_0",
         ]
         assert sorted(names) == sorted(expected_names)
+
+
+def _save_accuracy_results(path, compare_func):
+    # Build a small 2-runner, 1-iteration comparison (out differs by 2.0) and save the results.
+    from tests.comparator._helpers import _compare_accuracy
+
+    _compare_accuracy(
+        {"r0": {"out": [0.0, 0.0]}, "r1": {"out": [0.0, 2.0]}}, compare_func
+    ).save(path)
+
+
+class TestCheckAccuracy:
+    def test_rethreshold_pass(self, poly_check_accuracy):
+        from polygraphy.comparator import SimpleCompareFunc
+
+        with util.NamedTemporaryFile(suffix=".json") as f:
+            _save_accuracy_results(
+                f.name, SimpleCompareFunc(check_error_stat="max", atol=1.0)
+            )
+            # max_absdiff is 2.0; a loose atol passes.
+            poly_check_accuracy(
+                [f.name, "--check-error-stat", "max", "--atol", "5.0", "--rtol", "0.0"]
+            )
+
+    def test_rethreshold_fail(self, poly_check_accuracy):
+        from polygraphy.comparator import SimpleCompareFunc
+
+        with util.NamedTemporaryFile(suffix=".json") as f:
+            _save_accuracy_results(
+                f.name, SimpleCompareFunc(check_error_stat="max", atol=1.0)
+            )
+            # A tight atol fails (non-zero exit).
+            poly_check_accuracy(
+                [f.name, "--check-error-stat", "max", "--atol", "0.5", "--rtol", "0.0"],
+                expect_error=True,
+            )
+
+    def test_elemwise_save_rethreshold_to_scalar_stat(self, poly_check_accuracy):
+        # A simple/elemwise (default) save re-thresholds against an explicit statistic.
+        from polygraphy.comparator import SimpleCompareFunc
+
+        with util.NamedTemporaryFile(suffix=".json") as f:
+            _save_accuracy_results(f.name, SimpleCompareFunc(atol=1.0))
+            poly_check_accuracy(
+                [f.name, "--check-error-stat", "max", "--atol", "5.0", "--rtol", "0.0"]
+            )
+
+    def test_elemwise_as_new_stat_errors(self, poly_check_accuracy):
+        # Choosing elemwise as the new stat has no scalar to threshold -> clear error.
+        from polygraphy.comparator import SimpleCompareFunc
+
+        with util.NamedTemporaryFile(suffix=".json") as f:
+            _save_accuracy_results(
+                f.name, SimpleCompareFunc(check_error_stat="max", atol=1.0)
+            )
+            status = poly_check_accuracy(
+                [f.name, "--check-error-stat", "elemwise"], expect_error=True
+            )
+            assert "elemwise" in status.stderr
+
+    def test_field_mismatch_errors(self, poly_check_accuracy):
+        # Saved L2 results cannot be re-thresholded with a PSNR function.
+        from polygraphy.comparator import L2CompareFunc
+
+        with util.NamedTemporaryFile(suffix=".json") as f:
+            _save_accuracy_results(f.name, L2CompareFunc(l2_threshold=0.5))
+            status = poly_check_accuracy(
+                [f.name, "--compare", "psnr"], expect_error=True
+            )
+            assert "compare-func-script" in status.stderr
+
+    def test_compare_func_script(self, poly_check_accuracy):
+        # A custom comparison function supplied via --compare-func-script can re-threshold saved
+        # results: its averaging protocol is reachable through the InvokeFromScript wrapper. The
+        # saved l2_norm is 2.0, so a threshold of 5.0 passes.
+        from polygraphy.comparator import L2CompareFunc
+
+        script = (
+            "from polygraphy.comparator import L2CompareFunc\n"
+            "compare_outputs = L2CompareFunc(l2_threshold=5.0)\n"
+        )
+        with util.NamedTemporaryFile(suffix=".json") as acc, util.NamedTemporaryFile(
+            suffix=".py"
+        ) as scr:
+            _save_accuracy_results(acc.name, L2CompareFunc(l2_threshold=0.5))
+            with open(scr.name, "w") as f:
+                f.write(script)
+            poly_check_accuracy([acc.name, "--compare-func-script", scr.name])

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.plugin.subtool import Match, ListPlugins, Replace
+from polygraphy.tools.plugin.subtool import Match, ListPlugins, Replace, Autotune
 
 
 class Plugin(Tool):
@@ -31,4 +31,5 @@ class Plugin(Tool):
             Match(),
             ListPlugins(),
             Replace(),
+            Autotune(),
         ]

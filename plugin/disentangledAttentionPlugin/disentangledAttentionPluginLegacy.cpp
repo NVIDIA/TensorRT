@@ -80,8 +80,8 @@ nvinfer1::DimsExprs DisentangledAttentionPluginLegacy::getOutputDimensions(
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(index == 0); // Only one output
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(index == 0); // Only one output
         return inputs[0];
     }
     catch (std::exception const& e)
@@ -200,32 +200,32 @@ void DisentangledAttentionPluginLegacy::configurePlugin(nvinfer1::DynamicPluginT
     try
     {
         // inputs
-        PLUGIN_VALIDATE(nbInputs == 3); // 3 inputs
+        PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
 
         // check for valid input dimensions
-        PLUGIN_VALIDATE(in[0].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[1].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[2].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
 
         // check BN (batch_size * num_heads) dimension consistency
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
 
         // check S (sequence_length) dimension consistency
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
 
         // check K (2 * span) dimension consistency for in[1] and in[2]
-        PLUGIN_VALIDATE(in[1].desc.dims.d[2] == 2 * mSpan);
-        PLUGIN_VALIDATE(in[2].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[1].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
 
         // Outputs (same dimension as in[0])
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(out[0].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
     }
     catch (std::exception const& e)
     {
@@ -260,7 +260,7 @@ void DisentangledAttentionPluginLegacy::setPluginNamespace(char const* libNamesp
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -310,7 +310,7 @@ void DisentangledAttentionPluginCreatorLegacy::setPluginNamespace(char const* li
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

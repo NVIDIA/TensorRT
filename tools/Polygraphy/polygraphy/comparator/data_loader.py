@@ -21,7 +21,9 @@ from polygraphy import constants, func, mod, util
 from polygraphy.comparator.struct import RunResults
 from polygraphy.datatype import DataType
 from polygraphy.exception import DataTypeConversionException, PolygraphyException
-from polygraphy.json import save_json
+
+# Internal helpers (not part of the public polygraphy.json API).
+from polygraphy.json.serde import iterate_from_files, iterate_json_list
 from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
@@ -125,8 +127,6 @@ class DataLoader:
         seed=None,
         iterations=None,
         input_metadata=None,
-        int_range=None,
-        float_range=None,
         val_range=None,
         data_loader_backend_module=None,
     ):
@@ -159,21 +159,6 @@ class DataLoader:
                     A string denoting what module to use to construct the input data arrays. Currently supports
                     "numpy" and "torch".
                     Defaults to "numpy".
-
-            int_range (Tuple[int]):
-                    [DEPRECATED - Use val_range instead]
-                    A tuple containing exactly 2 integers, indicating the minimum and maximum integer values (inclusive)
-                    the data loader should generate. If either value in the tuple is None, the default will be used
-                    for that value.
-                    If None is provided instead of a tuple, then the default values will be used for both the
-                    minimum and maximum.
-            float_range (Tuple[float]):
-                    [DEPRECATED - Use val_range instead]
-                    A tuple containing exactly 2 floats, indicating the minimum and maximum float values (inclusive)
-                    the data loader should generate. If either value in the tuple is None, the default will be used
-                    for that value.
-                    If None is provided instead of a tuple, then the default values will be used for both the
-                    minimum and maximum.
         """
 
         def default_tuple(tup, default):
@@ -193,22 +178,6 @@ class DataLoader:
             data_loader_backend_module, "numpy"
         )
 
-        self._int_range_set = int_range is not None
-        if self._int_range_set:
-            mod.warn_deprecated(
-                "The int_range parameter in DataLoader", "val_range", remove_in="0.50.0"
-            )
-        self._int_range = default_tuple(int_range, (1, 25))
-
-        self._float_range_set = float_range is not None
-        if self._float_range_set:
-            mod.warn_deprecated(
-                "The float_range parameter in DataLoader",
-                "val_range",
-                remove_in="0.50.0",
-            )
-        self._float_range = default_tuple(float_range, (-1.0, 1.0))
-
         self.input_metadata = None
         self.default_val_range = default_tuple(val_range, (0.0, 1.0))
         self.val_range = util.default(val_range, self.default_val_range)
@@ -224,18 +193,11 @@ class DataLoader:
             seed=self.seed,
             iterations=self.iterations,
             input_metadata=self.user_input_metadata or None,
-            int_range=self._int_range,
-            float_range=self._float_range,
             val_range=self.val_range,
             data_loader_backend_module=self.data_loader_backend_module,
         )[0]
 
     def _get_range(self, name, cast_type):
-        if cast_type == int and self._int_range_set:
-            return self._int_range
-        elif cast_type == float and self._float_range_set:
-            return self._float_range
-
         tup = util.value_or_from_dict(self.val_range, name, self.default_val_range)
         return tuple(cast_type(val) for val in tup)
 
@@ -342,7 +304,9 @@ class DataLoader:
 
         buffers = OrderedDict()
         # Expand wildcards to inputs in user_input_metadata
-        inp_to_user_inp, unmatched_user_inps = util.match_keys(list(self.user_input_metadata), list(self.input_metadata))
+        inp_to_user_inp, unmatched_user_inps = util.match_keys(
+            list(self.user_input_metadata), list(self.input_metadata)
+        )
         # Warn about unused metadata
         if unmatched_user_inps:
             for name in unmatched_user_inps:
@@ -416,12 +380,198 @@ class DataLoader:
         return buffers
 
 
+@mod.export()
+class StreamingDataLoader:
+    """
+    A data loader that lazily yields previously-saved inputs from disk, one iteration at a time.
+    It can be used anywhere a data loader is accepted (e.g. ``Comparator.run``).
+
+    Memory usage stays constant when each iteration is a separate file (a directory of
+    per-iteration files, or many single-feed_dict files). A single file containing a JSON list of
+    feed_dicts is loaded in full before its iterations are yielded.
+    """
+
+    def __init__(self, paths, allow_dirs=True):
+        """
+        Args:
+            paths (Union[str, os.PathLike, Sequence]):
+                    One or more paths to load (a single path may be given directly instead of a
+                    one-element sequence). Each path may be a file -- if it contains a JSON list,
+                    each element is one iteration; otherwise the whole file is a single iteration --
+                    or a directory whose ``*.json`` files (in index order) are each one iteration.
+            allow_dirs (bool):
+                    Whether a directory path is permitted. When False, a directory raises an error
+                    instead of being treated as a run of per-iteration files. Defaults to True.
+        """
+        self.paths = paths
+        self.allow_dirs = allow_dirs
+
+    def __repr__(self):
+        return util.make_repr(
+            "StreamingDataLoader", self.paths, allow_dirs=self.allow_dirs
+        )[0]
+
+    def __iter__(self):
+        yield from iterate_from_files(
+            self.paths,
+            lambda path: iterate_json_list(path, description="input data"),
+            allow_dirs=self.allow_dirs,
+        )
+
+
+def coerce_buffer(buffer, name, dtype, shape):
+    """
+    Casts and reshapes a single input buffer to match the expected data type and shape, warning on
+    each conversion and erroring if the buffer cannot be made to match.
+
+    Args:
+        buffer (Union[numpy.ndarray, torch.Tensor, DeviceView]): The input buffer.
+        name (str): The input name (for logging).
+        dtype (DataType): The expected data type.
+        shape (Sequence[int]): The expected shape.
+
+    Returns:
+        The coerced buffer.
+    """
+    buffer_dtype = util.array.dtype(buffer)
+    if dtype != buffer_dtype:
+        G_LOGGER.warning(
+            f"Input tensor: {name} | Buffer dtype ({buffer_dtype}) does not match expected input dtype ({dtype}), attempting to cast."
+        )
+
+        try:
+            np_type = DataType.to_dtype(dtype, "numpy")
+        except Exception:
+            pass
+        else:
+            type_info = None
+            if dtype.is_integral:
+                type_info = np.iinfo(np_type)
+            elif dtype.is_floating:
+                type_info = np.finfo(np_type)
+
+            if type_info is not None and util.array.any(
+                (buffer < type_info.min) | (buffer > type_info.max)
+            ):
+                G_LOGGER.warning(
+                    f"Some values in this input are out of range of {dtype}. Unexpected behavior may ensue!"
+                )
+        buffer = util.array.cast(buffer, dtype)
+
+    buffer_shape = util.array.shape(buffer)
+    if not util.is_valid_shape_override(buffer_shape, shape):
+        G_LOGGER.warning(
+            f"Input tensor: {name} | Buffer shape ({buffer_shape}) does not match expected input shape ({shape})."
+            f" Attempting to transpose/reshape."
+        )
+        buffer = util.try_match_shape(buffer, shape)
+
+    if util.array.dtype(buffer) != dtype or not util.is_valid_shape_override(
+        util.array.shape(buffer), shape
+    ):
+        G_LOGGER.critical(
+            f"Input tensor: {name} | Cannot reuse input data due to mismatch in shape or data type.\n"
+            f"Note: Provided input: [dtype={util.array.dtype(buffer)}, shape={util.array.shape(buffer)}], "
+            f"Requested input: [dtype={dtype}, shape={shape}]"
+        )
+    return buffer
+
+
+def coerce_feed_dict(feed_dict, input_metadata, fallback=None):
+    """
+    Coerces the buffers in a feed_dict to match the provided input metadata, matching input names
+    (allowing for minor differences) and casting/reshaping buffers as needed.
+
+    Shared by ``DataLoaderCache`` and streaming inference so that inputs loaded from disk or
+    produced by a custom data loader can be adapted to a runner's expected inputs.
+
+    Args:
+        feed_dict (OrderedDict[str, Union[numpy.ndarray, torch.Tensor, DeviceView]]):
+                A mapping of input names to buffers.
+        input_metadata (TensorMetadata):
+                The expected input metadata (data type and shape per input).
+        fallback (Callable(str) -> buffer):
+                An optional callback invoked with an input name when its buffer is missing or
+                cannot be coerced; it should return a replacement buffer (e.g. regenerated from a
+                data loader). If omitted, such a failure is fatal.
+
+    Returns:
+        OrderedDict[str, Union[numpy.ndarray, torch.Tensor, DeviceView]]:
+                A new feed_dict whose buffers match ``input_metadata``.
+    """
+    coerced = OrderedDict()
+    for index, (name, (dtype, shape)) in enumerate(input_metadata.items()):
+        try:
+            matched_name = util.find_str_in_iterable(name, feed_dict.keys(), index)
+            if matched_name is None:
+                G_LOGGER.critical(
+                    f"Input tensor: {name} | Does not exist in the provided input data."
+                )
+            if matched_name != name:
+                G_LOGGER.warning(
+                    f"Input tensor: {name} | Buffer name ({matched_name}) does not match expected input name ({name})."
+                )
+            coerced[name] = coerce_buffer(feed_dict[matched_name], name, dtype, shape)
+        except PolygraphyException:
+            if fallback is None:
+                raise
+            G_LOGGER.warning(
+                f"Could not use the provided buffer for input: {name}. Attempting to reload it from "
+                f"the data loader (this only works if the data loader supports random access).\n"
+                f"Please refer to warnings above for details on why the buffer didn't work. "
+            )
+            try:
+                coerced[name] = fallback(name)
+            except Exception:
+                G_LOGGER.critical(
+                    f"Input tensor: {name} | Could not use the provided input and could not reload "
+                    f"a replacement from the data loader.\n"
+                    f"Inputs loaded from files (--load-inputs) are read as-is; if "
+                    f"the runners run different models, use a data loader that can generate "
+                    f"matching inputs."
+                )
+    return coerced
+
+
+def _is_feed_dict(obj):
+    # RunResults exposes items() but is a run *output*, not a feed_dict.
+    if isinstance(obj, RunResults):
+        return False
+    try:
+        for name, _ in obj.items():
+            if not isinstance(name, str):
+                return False
+    except Exception:
+        return False
+    return True
+
+
+def check_feed_dict(obj, source="data loader"):
+    """
+    Raises (via ``G_LOGGER.critical``) with an actionable hint if ``obj`` is not a recognizable
+    feed_dict. Used to validate objects produced by a data loader before they are fed to a runner.
+    """
+    if _is_feed_dict(obj):
+        return
+    # Only hint about `data merge` for RunResults; suggesting it for other objects would mislead.
+    hint = (
+        "\nHint: This is a `RunResults` object (e.g. generated with `--save-outputs`). Use the "
+        "`data merge` tool to convert it to a feed_dict-compatible format."
+        if isinstance(obj, RunResults)
+        else ""
+    )
+    G_LOGGER.critical(
+        f"The {source} returned an object that cannot be recognized as a feed_dict "
+        f"(Dict[str, Union[np.ndarray, torch.Tensor, DeviceView]]):"
+        f"\nNote: The object was:\n{obj}.{hint}"
+    )
+
+
 # Caches data loaded by a DataLoader for use across multiple runners.
 class DataLoaderCache:
-    def __init__(self, data_loader, save_inputs_path=None):
+    def __init__(self, data_loader):
         self.data_loader = data_loader
         self.cache = []  # List[OrderedDict[str, numpy.ndarray]]
-        self.save_inputs_path = save_inputs_path
 
     @func.constantmethod
     def __len__(self):
@@ -438,91 +588,18 @@ class DataLoaderCache:
         if iteration >= len(self.cache):
             raise IndexError()
 
-        # Attempts to match existing input buffers to the requested input_metadata
-        def coerce_cached_input(index, name, dtype, shape):
-            cached_feed_dict = self.cache[iteration]
-            cached_name = util.find_str_in_iterable(
-                name, cached_feed_dict.keys(), index
-            )
-            if cached_name is None:
-                G_LOGGER.critical(
-                    f"Input tensor: {name} | Does not exist in the data loader cache."
-                )
+        # If a cached buffer can't be coerced to the requested input_metadata, reload that input
+        # from the data loader (only works if the data loader supports random access).
+        reloaded = {}
 
-            if cached_name != name:
-                G_LOGGER.warning(
-                    f"Input tensor: {name} | Buffer name ({cached_name}) does not match expected input name ({name})."
-                )
+        def reload_input(name):
+            if "feed_dict" not in reloaded:
+                reloaded["feed_dict"] = self.data_loader[iteration]
+            return reloaded["feed_dict"][name]
 
-            buffer = cached_feed_dict[cached_name]
-
-            if dtype != util.array.dtype(buffer):
-                G_LOGGER.warning(
-                    f"Input tensor: {name} | Buffer dtype ({util.array.dtype(buffer)}) does not match expected input dtype ({dtype}), attempting to cast. "
-                )
-
-                try:
-                    np_type = DataType.to_dtype(dtype, "numpy")
-                except:
-                    pass
-                else:
-                    type_info = None
-                    if dtype.is_integral:
-                        type_info = np.iinfo(np_type)
-                    elif dtype.is_floating:
-                        type_info = np.finfo(np_type)
-
-                    if type_info is not None and util.array.any(
-                        (buffer < type_info.min) | (buffer > type_info.max)
-                    ):
-                        G_LOGGER.warning(
-                            f"Some values in this input are out of range of {dtype}. Unexpected behavior may ensue!"
-                        )
-                buffer = util.array.cast(buffer, dtype)
-
-            if not util.is_valid_shape_override(util.array.shape(buffer), shape):
-                G_LOGGER.warning(
-                    f"Input tensor: {name} | Buffer shape ({util.array.shape(buffer)}) does not match expected input shape ({shape}). "
-                    f"Attempting to transpose/reshape. "
-                )
-                buffer = util.try_match_shape(buffer, shape)
-
-            if util.array.dtype(buffer) != dtype or not util.is_valid_shape_override(
-                util.array.shape(buffer), shape
-            ):
-                G_LOGGER.critical(
-                    f"Input tensor: {name} | Cannot reuse input data due to mismatch in shape or data type.\n"
-                    f"Note: Cached input: [dtype={util.array.dtype(buffer)}, shape={util.array.shape(buffer)}], "
-                    f"Requested input: [dtype={dtype}, shape={shape}]"
-                )
-            return buffer
-
-        feed_dict = OrderedDict()
-
-        # Reload from data loader if needed
-        data_loader_feed_dict = None
-
-        for index, (name, (dtype, shape)) in enumerate(self.input_metadata.items()):
-            try:
-                buffer = coerce_cached_input(
-                    index, name, DataType.from_dtype(dtype), shape
-                )
-            except PolygraphyException:
-                G_LOGGER.warning(
-                    f"Could not use buffer previously cached from data loader for input: {name}. Attempting to reload inputs from the data loader.\nNote that this will only work if the data loader supports random access.\nPlease refer to warnings above for details on why the previously generated input buffer didn't work. "
-                )
-                try:
-                    if data_loader_feed_dict is None:
-                        data_loader_feed_dict = self.data_loader[iteration]
-                    buffer = data_loader_feed_dict[name]
-                except:
-                    G_LOGGER.critical(
-                        "Could not reload inputs from data loader. Are the runners running the same model? "
-                        "If not, please rewrite the data loader to support random access."
-                    )
-            feed_dict[name] = buffer
-
-        return feed_dict
+        return coerce_feed_dict(
+            self.cache[iteration], self.input_metadata, fallback=reload_input
+        )
 
     def set_input_metadata(self, input_metadata):
         """
@@ -541,29 +618,7 @@ class DataLoaderCache:
             G_LOGGER.verbose("Loading inputs from data loader")
             self.cache = list(self.data_loader)
 
-            def _is_feed_dict(inp):
-                if isinstance(inp, RunResults):
-                    return False
-
-                try:
-                    for name, _ in inp.items():
-                        if not isinstance(name, str):
-                            return False
-                except:
-                    return False
-                else:
-                    return True
-
             if not self.cache:
                 G_LOGGER.warning("Data loader did not yield any input data.")
-            elif not _is_feed_dict(self.cache[0]):
-                G_LOGGER.critical(
-                    f"Data loader returned an object that cannot be recognized as a feed_dict (Dict[str, Union[np.ndarray, torch.Tensor, DeviceView]]):"
-                    f"\nNote: The object was:\n{self.cache[0]}.\n"
-                    f"\nHint: If this is a `RunReults` object (e.g. generated with `--save-outputs`), try using the "
-                    f"`data to-input` tool to convert it to a feed_dict compatible format. "
-                )
-
-            # Only save inputs the first time the cache is generated
-            if self.save_inputs_path is not None:
-                save_json(self.cache, self.save_inputs_path, "inference input data")
+            else:
+                check_feed_dict(self.cache[0])

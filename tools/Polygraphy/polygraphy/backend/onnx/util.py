@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import copy
+import fnmatch
 from collections import OrderedDict
 
 from polygraphy import mod, util
@@ -50,6 +51,10 @@ def all_tensor_names(model, include_inputs=None):
         for node in model.graph.node
         if node.op_type != "Constant"
         for output in node.output
+        # Skip empty-name outputs, which ONNX uses to denote unused optional
+        # outputs of multi-output ops (e.g. LSTM). They are not real tensors and
+        # marking them would create untyped graph outputs that break inference.
+        if output
     ]
     if include_inputs:
         all_outputs += [inp.name for inp in model.graph.input]
@@ -64,12 +69,31 @@ def _check_has_tensors(model, outputs):
     )
 
 
+def _expand_wildcard_patterns(names, candidates):
+    """Expand fnmatch wildcard patterns in `names` against `candidates`."""
+    result = []
+    for name in names:
+        if any(c in name for c in ("*", "?", "[", "]")):
+            matches = fnmatch.filter(candidates, name)
+            if not matches:
+                G_LOGGER.warning(f"No tensors matched wildcard pattern: '{name}'")
+            result.extend(matches)
+        else:
+            result.append(name)
+    return result
+
+
 def mark_outputs(model, outputs):
     # Clear the old outputs
     while model.graph.output:
         model.graph.output.pop()
 
+    outputs = _expand_wildcard_patterns(outputs, all_tensor_names(model))
     outputs = util.unique_list(outputs)
+    if not outputs:
+        G_LOGGER.critical(
+            "No outputs were selected. Please check your wildcard patterns."
+        )
     _check_has_tensors(model, outputs)
 
     value_info_map = {t.name: t for t in model.graph.value_info}
@@ -91,7 +115,54 @@ def mark_layerwise(model):
     return model
 
 
+def mark_by_op_type(model, op_types):
+    """
+    Mark outputs of all nodes whose op_type matches any of the given types (case-insensitive).
+
+    If a requested op type is not found in the model, logs a non-critical error and shows
+    similar op types using difflib.
+
+    Args:
+        model (onnx.ModelProto): The ONNX model to modify.
+        op_types (Sequence[str]): Op type names to match.
+
+    Returns:
+        onnx.ModelProto: The model with matched node outputs marked.
+    """
+    import difflib
+
+    all_op_types = {node.op_type for node in model.graph.node}
+    lower_to_canonical = {t.lower(): t for t in all_op_types}
+
+    outputs = []
+    for requested in op_types:
+        canonical = lower_to_canonical.get(requested.lower())
+        if canonical is None:
+            similar = difflib.get_close_matches(
+                requested, all_op_types, n=5, cutoff=0.6
+            )
+            hint = (
+                f" Did you mean one of: {similar}?"
+                if similar
+                else f" Available op types: {sorted(all_op_types)}"
+            )
+            G_LOGGER.error(
+                f"No ONNX nodes of op type '{requested}' were found in the model.{hint}"
+            )
+        else:
+            for node in model.graph.node:
+                if node.op_type == canonical:
+                    for out in node.output:
+                        if out:
+                            outputs.append(out)
+
+    if outputs:
+        model = mark_outputs(model, outputs)
+    return model
+
+
 def unmark_outputs(model, outputs):
+    outputs = _expand_wildcard_patterns(outputs, all_tensor_names(model))
     outputs = util.unique_list(outputs)
     _check_has_tensors(model, outputs)
 
@@ -162,10 +233,10 @@ def get_output_metadata(graph):
 
 def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
     """
-    Converts an ONNX Graph to a human-readable representation
+    Converts an ONNX model to a human-readable string representation.
 
     Args:
-        graph (onnx.GraphProto): The onnx graph.
+        model (onnx.ModelProto): The ONNX model.
         show_layers (bool): Whether to display per-layer information.
         show_attrs (bool): Whether to display per-layer attributes.
         show_weights (bool): Whether to display the value of weights.
@@ -173,179 +244,20 @@ def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
     Returns:
         str
     """
+    from polygraphy.tools.inspect.subtool.model.extractors import graph_data_from_onnx
+    from polygraphy.tools.inspect.subtool.model.text import str_from_graph_data
+
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
     show_weights = util.default(show_weights, False)
 
-    def get_opset():
-        default_opset = "Unknown"
-        other_opsets = {}
-        for info in model.opset_import:
-            if not info.domain:
-                default_opset = info.version
-            else:
-                other_opsets[info.domain] = info.version
-        return default_opset, other_opsets
-
-    default_opset, other_opsets = get_opset()
-    onnx_str = ""
-    onnx_str += f"Name: {model.graph.name} | ONNX Opset: {default_opset}"
-    if other_opsets:
-        onnx_str += f" | Other Opsets: {other_opsets}"
-    onnx_str += "\n\n"
-
-    onnx_str += str_from_onnx_graph(
-        model.graph,
-        tensors={},
+    graph_data = graph_data_from_onnx(model, show_weights=show_weights)
+    return str_from_graph_data(
+        graph_data,
         show_layers=show_layers,
         show_attrs=show_attrs,
         show_weights=show_weights,
     )
-    return onnx_str
-
-
-def str_from_onnx_graph(
-    graph, tensors, show_layers, show_attrs, show_weights, indent_level=0
-):
-    input_metadata = get_input_metadata(graph)
-    output_metadata = get_output_metadata(graph)
-    initializer_metadata = get_tensor_metadata(graph.initializer)
-
-    # Subgraph inputs should remain separate from each other, hence copy the tensors map
-    tensors = copy.copy(tensors)
-    tensors.update(get_tensor_metadata(graph.value_info))
-    tensors.update(initializer_metadata)
-    tensors.update(input_metadata)
-    tensors.update(output_metadata)
-
-    graph_type = "Graph" if indent_level == 0 else "Subgraph"
-
-    onnx_str = ""
-    if show_attrs and graph.doc_string:
-        onnx_str += f"---- Docstring ----\n{graph.doc_string}\n\n"
-
-    onnx_str += (
-        f"---- {len(input_metadata)} {graph_type} Input(s) ----\n{input_metadata}\n\n"
-    )
-    onnx_str += f"---- {len(output_metadata)} {graph_type} Output(s) ----\n{output_metadata}\n\n"
-
-    onnx_str += f"---- {len(initializer_metadata)} Initializer(s) ----\n"
-    if show_weights:
-        for init in graph.initializer:
-            onnx_str += f"Initializer | {init.name} [dtype={get_dtype(init)}, shape={get_shape(init)}] | Values:\n{util.indent_block(str(get_values(init)))}\n\n"
-        if not graph.initializer:
-            onnx_str += "{}\n\n"
-    elif show_layers:
-        onnx_str += str(initializer_metadata)
-        onnx_str += "\n\n"
-    else:
-        onnx_str += "\n"
-
-    def get_names_and_meta(names):
-        names_lst = []
-        metadata = TensorMetadata()
-        for name in names:
-            dtype, shape = tensors.get(name, (None, None))
-            if name in initializer_metadata:
-                name = f"Initializer | {name}"
-            names_lst.append(name)
-            metadata.add(name=name, dtype=dtype, shape=shape)
-        return names_lst, metadata
-
-    # Maps values from the AttributeType enum to their string representations, e.g., {1: "FLOAT"}
-    ATTR_TYPE_MAPPING = dict(
-        zip(
-            onnx.AttributeProto.AttributeType.values(),
-            onnx.AttributeProto.AttributeType.keys(),
-        )
-    )
-
-    # Maps an ONNX attribute to the corresponding Python property
-    ONNX_PYTHON_ATTR_MAPPING = {
-        "FLOAT": "f",
-        "INT": "i",
-        "STRING": "s",
-        "TENSOR": "t",
-        "GRAPH": "g",
-        "FLOATS": "floats",
-        "INTS": "ints",
-        "STRINGS": "strings",
-    }
-
-    def attrs_to_dict(attrs):
-        attr_dict = OrderedDict()
-        for attr in attrs:
-
-            def process_attr(attr_str: str):
-                processed = getattr(attr, ONNX_PYTHON_ATTR_MAPPING[attr_str])
-                if attr_str == "STRING":
-                    processed = processed.decode()
-                elif attr_str == "TENSOR":
-                    tensor_str = f"Tensor: [dtype={get_dtype(processed)}, shape={get_shape(processed)}]"
-                    if show_weights:
-                        tensor_str += " | Values:\n" + util.indent_block(
-                            str(get_values(processed))
-                        )
-                    processed = tensor_str
-                elif attr_str == "GRAPH":
-                    processed = "\n" + str_from_onnx_graph(
-                        processed,
-                        tensors,
-                        indent_level=indent_level + 2,
-                        show_layers=show_layers,
-                        show_attrs=show_attrs,
-                        show_weights=show_weights,
-                    )
-                elif attr_str == "FLOATS" or attr_str == "INTS":
-                    # Proto hacky list to normal Python list
-                    processed = [p for p in processed]
-                elif attr_str == "STRINGS":
-                    processed = [p.decode() for p in processed]
-                return processed
-
-            if attr.type in ATTR_TYPE_MAPPING:
-                attr_str = ATTR_TYPE_MAPPING[attr.type]
-                if attr_str in ONNX_PYTHON_ATTR_MAPPING:
-                    attr_dict[attr.name] = process_attr(attr_str)
-                else:
-                    G_LOGGER.warning(
-                        f"Attribute of type {attr_str} is currently unsupported. Skipping attribute."
-                    )
-            else:
-                G_LOGGER.warning(
-                    f"Attribute type: {attr.type} was not recognized. Was the graph generated with a newer IR version than the installed `onnx` package? Skipping attribute."
-                )
-        return attr_dict
-
-    onnx_str += f"---- {len(graph.node)} Node(s) ----\n"
-    if show_layers:
-        for index, node in enumerate(graph.node):
-            input_names, input_meta = get_names_and_meta(node.input)
-            output_names, output_meta = get_names_and_meta(node.output)
-
-            onnx_str += util.str_from_layer(
-                "Node",
-                index,
-                node.name,
-                node.op_type,
-                input_names,
-                input_meta,
-                output_names,
-                output_meta,
-            )
-
-            if show_attrs:
-                attrs = attrs_to_dict(node.attribute)
-                if attrs:
-                    onnx_str += util.indent_block("---- Attributes ----") + "\n"
-                for key, val in attrs.items():
-                    attr_str = ""
-                    if node.name:
-                        attr_str += f"{node.name}."
-                    onnx_str += util.indent_block(f"{attr_str}{key} = {val}") + "\n"
-            onnx_str += "\n"
-
-    return util.indent_block(onnx_str, indent_level)
 
 
 ##

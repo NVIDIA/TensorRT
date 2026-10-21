@@ -125,7 +125,7 @@ int32_t MultiscaleDeformableAttnPluginLegacy::enqueue(nvinfer1::PluginTensorDesc
     nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
     void* /* workSpace */, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+    PLUGIN_ASSERT(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     int32_t const batch = inputDesc[0].dims.d[0];
     int32_t spatial_size = inputDesc[0].dims.d[1];

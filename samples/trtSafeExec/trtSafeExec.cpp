@@ -23,6 +23,7 @@
 #include "safeErrorRecorder.h"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -64,9 +65,9 @@ public:
     int32_t warmUp{1};
     int32_t device{0};
     int32_t streams{1};
-    float idle{0.F};
-    float duration{3.F};
-    float sleep{2.F};
+    std::chrono::duration<float, std::milli> idle{0.F};
+    std::chrono::duration<float> duration{3.F};
+    std::chrono::duration<float, std::milli> sleep{2.F};
     float percentile{99.F};
     bool spin{false};
     bool verbose{false};
@@ -263,9 +264,9 @@ SafePerformanceResult getSafePerformanceResult(TimingMetrics const& times, int32
     SafePerformanceResult result;
     result.min = newTimes[0][metricIndex];
     result.max = newTimes[newTimes.size() - 1][metricIndex];
-    result.mean = std::accumulate(newTimes.begin(), newTimes.end(), 0.F,
-                      [metricIndex](float acc, TimingMetric& a) { return acc + a[metricIndex]; })
-        / newTimes.size();
+    result.mean = std::accumulate(newTimes.begin(), newTimes.end(), 0.F, [metricIndex](float acc, TimingMetric& a) {
+        return acc + a[metricIndex];
+    }) / newTimes.size();
     size_t const medianIndex = newTimes.size() / 2ULL;
     result.median = newTimes.size() % 2ULL
         ? newTimes[medianIndex][metricIndex]
@@ -495,7 +496,7 @@ bool parseSafetyPluginLibrary(
 }
 
 // Use template to allow volume for either nvinfer1::Dims or nvinfer2::safe::PhysicalDims
-template<typename TDims>
+template <typename TDims>
 int64_t volume(TDims const& dims, TDims const& strides, uint64_t bytesPerComponent)
 {
     if (dims.nbDims == 0 || strides.nbDims == 0)
@@ -559,15 +560,15 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         }
         else if (auto const value = loggedParseString(arg, "idleTime"))
         {
-            args.idle = stof(*value);
+            args.idle = std::chrono::duration<float, std::milli>(stof(*value));
         }
         else if (auto const value = loggedParseString(arg, "duration"))
         {
-            args.duration = stof(*value);
+            args.duration = std::chrono::duration<float>(stof(*value));
         }
         else if (auto const value = loggedParseString(arg, "sleepTime"))
         {
-            args.sleep = stof(*value);
+            args.sleep = std::chrono::duration<float, std::milli>(stof(*value));
         }
         else if (loggedParseBool(arg, "spin"))
         {
@@ -588,8 +589,8 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         else if (loggedParseBool(arg, "useCudaGraph"))
         {
             // Deprecated: CUDA graph is now enabled by default.
-            safeLogWarning(*gSafeRecorder,
-                "--useCudaGraph is deprecated (now enabled by default). Use --noCudaGraph to disable.");
+            safeLogWarning(
+                *gSafeRecorder, "--useCudaGraph is deprecated (now enabled by default). Use --noCudaGraph to disable.");
         }
         else if (loggedParseBool(arg, "noCudaGraph"))
         {
@@ -683,16 +684,16 @@ Perf measurement params:
   --warmUp=N         Run N iterations before actual perf measurement (default = )"
               << defArgs.warmUp << R"()
   --idleTime=F       Sleep F milliseconds between two continuous iterations (default = )"
-              << defArgs.idle << R"()
+              << defArgs.idle.count() << R"()
   --percentile=P     For each iteration, report the percentile time at P percentage
                      (0<=P<=100, with 0 representing min, and 100 representing max; default = )"
               << defArgs.percentile << R"(%)
   --noCudaGraph      Disable CUDA graph capture and launch (default = CUDA graph enabled)
   --useCudaGraph     [Deprecated] CUDA graph is now enabled by default. This flag is a no-op.
   --duration=F       Run performance measurements for at least F seconds of wallclock time (default = )"
-              << defArgs.duration << R"(s)
+              << defArgs.duration.count() << R"(s)
   --sleepTime=F      Delay inference start with a gap of F msec between launch and compute (default = )"
-              << defArgs.sleep << R"()
+              << defArgs.sleep.count() << R"()
   --separateProfileRun
                      [Deprecated] Separate profile run is now always enabled. This flag is a no-op.
 
@@ -1035,7 +1036,7 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
     // GPU, host and enqueue times
     TimingMetrics totalTimes;
     using floatDurationMS = std::chrono::duration<float, std::milli>;
-    floatDurationMS const maxDurationMs = floatDurationMS(args.duration * 1000);
+    floatDurationMS const maxDurationMs = args.duration;
     floatDurationMS durationMs{0};
 
     for (int32_t i = 0; i < nbIterations || durationMs.count() < maxDurationMs.count(); i++)
@@ -1118,7 +1119,7 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
             totalEnqueueTime += enqueueTime;
 
             // Mimic waiting for user input data (default = 0)
-            std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(args.idle));
+            std::this_thread::sleep_for(args.idle);
         }
 
         if (isProfileRun)
@@ -1250,7 +1251,7 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(numThreads);
     std::vector<void*> scratchs(numThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], blob.data(), blob.size(), *recorders[0],
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraphWithSo(graphs[0], blob.data(), blob.size(), nullptr, *recorders[0],
                       !args.useScratchMemory, &nvinfer2::safe::getSafeMemAllocator()),
         *recorders[0]);
     SAFE_API_CALL(graphs[0]->setIOProfile(args.ioProfile), *recorders[0]);

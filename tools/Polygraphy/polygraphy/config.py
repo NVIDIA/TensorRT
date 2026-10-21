@@ -31,7 +31,7 @@ bool: Whether Polygraphy will automatically install required Python packages at 
 This can be configured by setting the 'POLYGRAPHY_AUTOINSTALL_DEPS' environment variable.
 """
 
-ASK_BEFORE_INSTALL = bool(os.environ.get("POLYGRAPHY_ASK_BEFORE_INSTALL", "0" != "0"))
+ASK_BEFORE_INSTALL = bool(os.environ.get("POLYGRAPHY_ASK_BEFORE_INSTALL", "0") != "0")
 """
 bool: Whether Polygraphy should ask before automatically installing required Python packages.
 Has no effect if AUTOINSTALL_DEPS is not enabled.

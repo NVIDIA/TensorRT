@@ -29,6 +29,7 @@ from polygraphy.mod.importer import _version_ok
 
 common_backend = mod.lazy_import("polygraphy.backend.common")
 
+
 class TestImporter:
     def test_import_from_script(self):
         script = dedent(
@@ -90,11 +91,13 @@ class TestImporter:
                     msg2_msg.write(module2_script)
                     msg2_msg.flush()
                     os.fsync(msg2_msg.fileno())
-                    
-                    for msg_module in ['msg1', 'msg2']:
-                        msg_loc = os.path.join(tempdir,msg_module,'msg.py')
-                        msg = common_backend.invoke_from_script(msg_loc, "print_message")
-                        assert msg==msg_module
+
+                    for msg_module in ["msg1", "msg2"]:
+                        msg_loc = os.path.join(tempdir, msg_module, "msg.py")
+                        msg = common_backend.invoke_from_script(
+                            msg_loc, "print_message"
+                        )
+                        assert msg == msg_module
 
     def test_import_non_existent(self):
         script = dedent(
@@ -161,25 +164,21 @@ class TestImporter:
             ]
         )
 
-    @pytest.mark.parametrize(
-        "mod_check", ["mod.has_mod('colored')", "colored.is_installed()"]
-    )
-    def test_has_mod(self, poly_venv, mod_check):
+    def test_has_mod(self, poly_venv):
         assert "colored" not in poly_venv.installed_packages()
         poly_venv.run(
             [
                 poly_venv.python,
                 "-c",
-                f"from polygraphy import mod; colored = mod.lazy_import('colored'); assert not {mod_check}",
+                "from polygraphy import mod; colored = mod.lazy_import('colored'); assert not colored.is_installed()",
             ]
         )
 
         poly_venv.run([poly_venv.python, "-m", "pip", "install", "colored==1.4.0"])
-        # Make sure `has_mod` doesn't actually import the package.
         poly_venv.run(
             [
                 poly_venv.python,
                 "-c",
-                "from polygraphy import mod; import sys; assert mod.has_mod('colored'); assert 'colored' not in sys.modules; import colored; assert 'colored' in sys.modules",
+                "from polygraphy import mod; import sys; colored = mod.lazy_import('colored'); assert colored.is_installed(); assert 'colored' not in sys.modules; import colored; assert 'colored' in sys.modules",
             ]
         )

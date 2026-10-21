@@ -41,7 +41,10 @@ onnx = mod.lazy_import("onnx")
 yaml = mod.lazy_import("yaml", pkg_name="pyyaml")
 common_backend = mod.lazy_import("polygraphy.backend.common")
 
-def default_replace_with_plugin(graph, input_tensors: list, output_tensors: list, attrs=None, op=None):
+
+def default_replace_with_plugin(
+    graph, input_tensors: list, output_tensors: list, attrs=None, op=None
+):
     """
     replaces a subgraph (set of nodes) with a single plugin node
     default method to be used when the plugin does not specify a custom replacement method
@@ -72,9 +75,12 @@ def default_replace_with_plugin(graph, input_tensors: list, output_tensors: list
             out_tensor.inputs.remove(node)
 
     # Insert the new node
-    new_node = graph.layer(op=op, inputs=input_tensors, outputs=output_tensors, attrs=attrs)
+    new_node = graph.layer(
+        op=op, inputs=input_tensors, outputs=output_tensors, attrs=attrs
+    )
     graph.cleanup().toposort()
     return new_node[0].inputs[0]
+
 
 class Replace(Tool):
     # Polygraphy will use the docstring of the tool child class to generate
@@ -82,7 +88,7 @@ class Replace(Tool):
     """
     Replace a subgraph in an onnx model with a plugin.
     """
-    GRAPH_PATTERN_FILE_NAME="pattern.py"
+    GRAPH_PATTERN_FILE_NAME = "pattern.py"
 
     def __init__(self):
         super().__init__(name="replace")
@@ -107,16 +113,21 @@ class Replace(Tool):
             model_file=args.model_file,
             plugin_dir=args.plugin_dir,
             output=args.output,
-            config=args.config
+            config=args.config,
         )
+
     def replace_plugin(self, model_file, plugin_dir, output=None, config=None):
-        graph = gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx()) if self.arg_groups else gs.import_onnx(onnx.load(model_file))
+        graph = (
+            gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx())
+            if self.arg_groups
+            else gs.import_onnx(onnx.load(model_file))
+        )
 
         tensor_map = graph.tensors()
-        config_yaml = config or os.path.join(os.path.dirname(model_file), "config.yaml")            
-        
+        config_yaml = config or os.path.join(os.path.dirname(model_file), "config.yaml")
+
         plugin_dir = os.path.abspath(plugin_dir)
-        
+
         with open(config_yaml, "r") as stream:
             in_yaml = yaml.safe_load_all(stream)
 
@@ -124,13 +135,14 @@ class Replace(Tool):
                 plugin_name = plugin["name"]
                 plugin_op = plugin["op"]
                 G_LOGGER.ultra_verbose(f"replacing {plugin_name}...")
-                plugin_pattern_loc = os.path.join(plugin_dir, plugin_name, self.GRAPH_PATTERN_FILE_NAME)
-                # if the plugin provides a custom replacement method, use that                    
+                plugin_pattern_loc = os.path.join(
+                    plugin_dir, plugin_name, self.GRAPH_PATTERN_FILE_NAME
+                )
+                # if the plugin provides a custom replacement method, use that
                 replace_fn = default_replace_with_plugin
                 try:
                     replace_fn = mod.import_from_script(
-                        plugin_pattern_loc,
-                        "replace_with_plugin"
+                        plugin_pattern_loc, "replace_with_plugin"
                     )
                 except:
                     pass
@@ -139,17 +151,29 @@ class Replace(Tool):
                 for instance in plugin["instances"]:
                     attrs = instance.get("attributes", None)
                     if replace_fn(
-                            graph=graph,
-                            input_tensors=[tensor_map[ip_tensor_name] for ip_tensor_name in instance["inputs"]],
-                            output_tensors=[tensor_map[op_tensor_name] for op_tensor_name in instance["outputs"]],
-                            attrs=attrs,
-                            op=plugin_op
+                        graph=graph,
+                        input_tensors=[
+                            tensor_map[ip_tensor_name]
+                            for ip_tensor_name in instance["inputs"]
+                        ],
+                        output_tensors=[
+                            tensor_map[op_tensor_name]
+                            for op_tensor_name in instance["outputs"]
+                        ],
+                        attrs=attrs,
+                        op=plugin_op,
                     ):
                         replace_cnt += 1
-                G_LOGGER.info(f"replaced {replace_cnt} instances of {plugin_name} plugin")
-                if replace_cnt != len(plugin['instances']):
-                    G_LOGGER.warning(f"Warning: not all instances of {plugin_name} were replaced!")
+                G_LOGGER.info(
+                    f"replaced {replace_cnt} instances of {plugin_name} plugin"
+                )
+                if replace_cnt != len(plugin["instances"]):
+                    G_LOGGER.warning(
+                        f"Warning: not all instances of {plugin_name} were replaced!"
+                    )
 
-        output_onnx = output or os.path.join(os.path.dirname(model_file), "replaced.onnx")
+        output_onnx = output or os.path.join(
+            os.path.dirname(model_file), "replaced.onnx"
+        )
 
         onnx.save(gs.export_onnx(graph), output_onnx)

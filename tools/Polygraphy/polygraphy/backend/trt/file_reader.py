@@ -22,6 +22,7 @@ from polygraphy.logger import G_LOGGER
 
 trt = lazy_import_trt()
 
+
 @mod.export()
 def FileReader(
     filepath,
@@ -31,15 +32,18 @@ def FileReader(
     Class that supplies data to TensorRT from a stream. This may help reduce memory usage during deserialization.
 
     Args:
-        filepath (str): 
+        filepath (str):
                 The path to the serialized file.
 
     """
-    BaseClass = util.default(BaseClass, trt.IStreamReader)
+    if BaseClass is None:
+        # IStreamReader was renamed to IStreamReaderV2 in TensorRT 11. The reader
+        # below implements seek(), which IStreamReaderV2 requires.
+        BaseClass = getattr(trt, "IStreamReader", None) or trt.IStreamReaderV2
 
     class FileReaderClass(BaseClass):
         """
-        Class that supplies data to TensorRT from a stream. This may help reduce memory usage during deserialization. 
+        Class that supplies data to TensorRT from a stream. This may help reduce memory usage during deserialization.
         """
 
         def __init__(self):
@@ -51,14 +55,17 @@ def FileReader(
             if not Path(self.filepath).exists():
                 G_LOGGER.error(f"File at {self.filepath} does not exist!")
 
-            self.mode = 'rb'
+            self.mode = "rb"
             self.file = open(self.filepath, self.mode)
             if not self.file:
                 G_LOGGER.error(f"Failed to open file at {self.filepath}!")
 
             self.make_func = FileReader
 
-        def read(self, size: int) -> bytes:
+        def read(self, size: int, stream=None) -> bytes:
+            # IStreamReaderV2 (TensorRT 11) passes a CUDA stream handle as a
+            # second argument; we read from the host file and ignore it. The
+            # default keeps IStreamReader (older TRT), which calls read(size).
             return self.file.read(size)
 
         def seek(self, offset: int, whence: int = 0) -> int:

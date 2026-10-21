@@ -15,24 +15,22 @@
 # limitations under the License.
 #
 
-############################# GENERATE C++ PROTO FILES ###################################
-add_custom_target(parsers DEPENDS nvonnxparser)
+if(NOT MSVC)
+    # Since we repackage protobuf (and abseil) into libnvonnxparser_static.a, we need to re-namespace them.
+    # This works by doing a global string replacement on the namespaces.
+    add_definitions(
+        -Dgoogle=google_trtrepack
+        -Dabsl=absl_trtrepack
+    )
+endif() # NOT MSVC
 
-add_definitions("-D_PROTOBUF_INSTALL_DIR=${Protobuf_INSTALL_DIR}")
-add_compile_options("-Dgoogle=google_trtrepack")
-set(TENSORRT_ROOT ${PROJECT_SOURCE_DIR})
-set(TENSORRT_BUILD ${TRT_OUT_DIR})
+if(BUILD_PARSERS AND NOT TARGET protobuf::libprotobuf-lite)
+    include(${TensorRT_SOURCE_DIR}/third_party/protobuf.cmake)
+    set(ONNX_USE_LITE_PROTO ON CACHE INTERNAL "Forces the onnx parser to use libprotobuf-lite")
+endif()
 
-# Write the libs out to the top-level of the build directory.
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${TENSORRT_BUILD})
-message(NOTICE "CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
-
-# Write the libs out to the top-level of the build directory.
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${TENSORRT_BUILD})
-message(NOTICE "CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}")
-
-include_directories(
-   ${Protobuf_INCLUDE_DIR}
-)
+set(TENSORRT_ROOT ${TensorRT_SOURCE_DIR})
+set(TENSORRT_INCLUDE_DIR "${TensorRT_SOURCE_DIR}/include")
+set(TENSORRT_PYTHON_INCLUDE_DIR "${TensorRT_SOURCE_DIR}/include/impl")
 
 add_subdirectory(onnx)

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 include_guard()
 
 # This is set and immediately overwritten intentionally. It's here to document the public repo, and to provide the boilerplate we'd use if we ever ship it publicly:

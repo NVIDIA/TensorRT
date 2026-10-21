@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import sys
 
 from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.comparator import RunResults
+from polygraphy.comparator import AccuracyResults, RunResults, StreamingDataLoader
 from polygraphy.comparator import util as comp_util
-from polygraphy.json import load_json
+from polygraphy.json import load_json, serde
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.base import Tool
 
@@ -39,7 +40,9 @@ class Data(Tool):
     def add_parser_args(self, parser):
         parser.add_argument(
             "path",
-            help="Path to a file containing input or output data from Polygraphy",
+            help="Path to input or output data saved from Polygraphy. This may be a single file, "
+            "or a directory of per-iteration JSON files (as written by an extensionless "
+            "--save-inputs/--save-outputs).",
         )
         parser.add_argument(
             "-a",
@@ -82,10 +85,6 @@ class Data(Tool):
             linewidth=sys.maxsize if args.line_width == -1 else args.line_width,
         )
 
-        # Note: It's important we have encode/decode JSON methods registered
-        # for the types we care about, e.g. RunResults. Importing the class should generally guarantee this.
-        data = load_json(args.path)
-
         def meta_from_iter_result(iter_result):
             meta = TensorMetadata()
             for name, arr in iter_result.items():
@@ -123,7 +122,7 @@ class Data(Tool):
             results_str = ""
             results_str += f"==== Run Results ({len(results)} runners) ====\n\n"
 
-            max_runner_width = max(len(runner_name) for runner_name in results.keys())
+            max_runner_width = max([len(runner_name) for runner_name in results.keys()], default=0)
             for runner_name, iters in results.items():
                 results_str += f"---- {runner_name:<{max_runner_width}} ({len(iters)} iterations) ----\n"
                 results_str += str_from_iters(iters) + "\n"
@@ -138,8 +137,65 @@ class Data(Tool):
             inputs_str = util.indent_block(inputs_str, level=0).strip()
             G_LOGGER.info(inputs_str)
 
+        def display_accuracy_results(accuracy_results):
+            # Saved accuracy comparison results: per comparison function, per runner pair, the stored
+            # per-output metrics and pass/fail verdict. Thresholds are stored, so this needs no
+            # comparison function.
+            out_str = (
+                f"==== Accuracy Results ({len(accuracy_results)} comparison(s)) ====\n"
+            )
+            for result in accuracy_results:
+                out_str += f"\n---- Aggregation: {result.aggregation} ----\n"
+                for runner_pair, iterations in result.items():
+                    matched, _, total = result.stats(runner_pair)
+                    out_str += util.indent_block(
+                        f"\n{runner_pair[0]} vs. {runner_pair[1]} | "
+                        f"{matched}/{total} iteration(s) matched\n",
+                        0,
+                    )
+                    for index, iteration in enumerate(iterations):
+                        out_str += util.indent_block(f"\n-- Iteration: {index}", 1)
+                        for output_name, output_result in iteration.items():
+                            verdict = "PASSED" if bool(output_result) else "FAILED"
+                            line = f"\n{output_name} | {verdict}"
+                            if not isinstance(output_result, bool):
+                                metrics = ", ".join(
+                                    f"{field}={value:.5g}"
+                                    for field, value in output_result.metric_values().items()
+                                    if value is not None
+                                )
+                                if metrics:
+                                    line += f" | {metrics}"
+                            out_str += util.indent_block(line, 2)
+                        if not args.all:
+                            break
+                    out_str += "\n"
+            G_LOGGER.info(util.indent_block(out_str, level=0).strip())
+
+        # Note: It's important we have encode/decode JSON methods registered for the types we care
+        # about, e.g. RunResults. Importing the class should generally guarantee this.
+        #
+        # A directory holds one JSON file per iteration (as written by an extensionless
+        # --save-inputs/--save-outputs); stream it back with the same readers `run` uses. Peek the
+        # first file to tell saved runner results (a RunResults) from saved input feed_dicts -- the
+        # same distinction made for a single file below.
+        if os.path.isdir(args.path):
+            iter_files = serde.list_iteration_files(args.path)
+            if not iter_files:
+                G_LOGGER.critical(
+                    f"No per-iteration '*.json' files found in directory: {args.path}"
+                )
+            if isinstance(load_json(iter_files[0]), RunResults):
+                display_results(RunResults.concat(RunResults.load_streaming(args.path)))
+            else:
+                display_inputs(list(StreamingDataLoader(args.path)))
+            return
+
+        data = load_json(args.path)
         if isinstance(data, RunResults):
             display_results(data)
+        elif isinstance(data, AccuracyResults):
+            display_accuracy_results(data)
         else:
             if not util.is_sequence(data):
                 data = [data]

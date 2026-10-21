@@ -24,6 +24,7 @@
     ((i) *dim.y * dim.z + (j) *dim.z + (k)) // caveat: must use brackets around var name! otherwise IND(i,j+3,k,dim) =
                                             // (i*dim.y*dim.z + j+3*dim.z + k)...
 
+#include <concepts>
 namespace nvinfer1
 {
 namespace plugin
@@ -32,11 +33,7 @@ namespace plugin
 using namespace nvinfer1;
 
 // template specialization for double/float
-template <typename TDataType,
-    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, double>
-            || std::is_same_v<std::decay_t<TDataType>, float>,
-        TDataType>* dummy
-    = nullptr>
+template <std::floating_point TDataType>
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
 {
@@ -44,11 +41,8 @@ __forceinline__ __device__ void compute_attention(
 }
 
 // template specialization for half
-template <typename TDataType,
-    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, __half>
-            || std::is_same_v<std::decay_t<TDataType>, half>,
-        TDataType>* dummy
-    = nullptr>
+template <typename TDataType>
+    requires(std::is_same_v<std::decay_t<TDataType>, __half> || std::is_same_v<std::decay_t<TDataType>, half>)
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
 {
@@ -62,11 +56,8 @@ __forceinline__ __device__ void compute_attention(
 }
 
 // template specialization for int8
-template <typename TDataType,
-    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, int8_t>
-            || std::is_same_v<std::decay_t<TDataType>, uint8_t>,
-        TDataType>* dummy
-    = nullptr>
+template <typename TDataType>
+    requires(std::is_same_v<std::decay_t<TDataType>, int8_t> || std::is_same_v<std::decay_t<TDataType>, uint8_t>)
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
 {

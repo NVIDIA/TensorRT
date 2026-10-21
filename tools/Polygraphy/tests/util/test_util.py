@@ -26,7 +26,9 @@ import pytest
 
 from polygraphy import util
 from polygraphy.backend.trt import engine_from_network, network_from_onnx_bytes
-from polygraphy.util import util as util_internal  # For accessing and testing private functions in util.py
+from polygraphy.util import (
+    util as util_internal,
+)  # For accessing and testing private functions in util.py
 from tests.models.meta import ONNX_MODELS
 
 VOLUME_CASES = [
@@ -338,7 +340,9 @@ class TestGetNumBytes:
     def test_should_get_given_IHostMemory(self) -> None:
         """Test that _get_num_bytes returns the correct number of bytes when given `IHostMemory`."""
         # Precondition.
-        contents = engine_from_network(network_from_onnx_bytes(ONNX_MODELS["identity"].loader)).serialize()
+        contents = engine_from_network(
+            network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
+        ).serialize()
 
         # Under test.
         num_bytes = util_internal._get_num_bytes(contents)
@@ -353,7 +357,8 @@ class TestGetNumBytes:
 
         # Under test and postcondition.
         with pytest.raises(
-            TypeError, match=f"`contents` is {invalid_contents}, which is not bytes-like. Cannot get number of bytes."
+            TypeError,
+            match=f"`contents` is {invalid_contents}, which is not bytes-like. Cannot get number of bytes.",
         ):
             util_internal._get_num_bytes(invalid_contents)
 
@@ -407,7 +412,9 @@ class TestSaveFile:
     def test_should_save_IHostMemory_to_path(self) -> None:
         """Test that `save_file` should save an `IHostMemory` to a path."""
         # Precondition.
-        contents = engine_from_network(network_from_onnx_bytes(ONNX_MODELS["identity"].loader)).serialize()
+        contents = engine_from_network(
+            network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
+        ).serialize()
         with util.NamedTemporaryFile("wb+") as f:
             dest = f.name
 

@@ -29,6 +29,10 @@ versions:
           input: float16
       - combination3:
           input: bfloat16
+    # Golden-IO covers fp32 only. torch.fft has no reduced-precision kernel, so an fp16/bf16
+    # golden is an fp32 reference rounded to the output dtype and frozen — cross-architecture
+    # cuFFT drift then risks flakiness against a fixed target. The plugin's fp16/bf16 numerics
+    # are instead verified against a live torch.fft reference by test_dft_importer_e2e[fp16/bf16].
     configs:
       config1:
         input_types:
@@ -42,22 +46,22 @@ versions:
             - 1
       config2:
         input_types:
-          input: float16
+          input: float32
         attribute_options:
           inverse:
-            - 0
+            - 1
           onesided:
             - 0
           ndims:
             - 1
       config3:
         input_types:
-          input: bfloat16
+          input: float32
         attribute_options:
           inverse:
             - 0
           onesided:
-            - 0
+            - 1
           ndims:
             - 1
       config4:
@@ -67,7 +71,7 @@ versions:
           inverse:
             - 1
           onesided:
-            - 0
+            - 1
           ndims:
             - 1
       config5:
@@ -77,9 +81,19 @@ versions:
           inverse:
             - 0
           onesided:
-            - 1
+            - 0
           ndims:
-            - 1
+            - 2
+      config6:
+        input_types:
+          input: float32
+        attribute_options:
+          inverse:
+            - 0
+          onesided:
+            - 0
+          ndims:
+            - 3
     outputs:
       - output
     attributes:
@@ -110,8 +124,4 @@ versions:
     golden_io_path: "plugin/FFTPlugin_PluginGoldenIO.json"
     abs_tol: 1e-2
     rel_tol: 1e-2
-    bf16_rtol: 5e-2
-    bf16_atol: 5e-2
-    fp16_rtol: 5e-2
-    fp16_atol: 5e-2
 ...

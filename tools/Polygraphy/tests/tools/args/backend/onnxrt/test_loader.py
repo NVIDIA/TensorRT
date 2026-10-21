@@ -17,6 +17,7 @@
 
 import onnxruntime as onnxrt
 from polygraphy.tools.args import ModelArgs, OnnxLoadArgs, OnnxrtSessionArgs
+from polygraphy.tools.script import Script
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
@@ -35,3 +36,28 @@ class TestOnnxrtSessionArgs:
         assert sess
         assert isinstance(sess, onnxrt.InferenceSession)
         assert sess.get_providers() == ["CPUExecutionProvider"]
+
+    def test_graph_optimization_level_script(self):
+        arg_group = ArgGroupTestHelper(
+            OnnxrtSessionArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
+        arg_group.parse_args(
+            [ONNX_MODELS["identity"].path, "--graph-optimization-level", "ORT_ENABLE_EXTENDED"]
+        )
+        assert arg_group.graph_optimization_level == "ORT_ENABLE_EXTENDED"
+
+        script = Script()
+        arg_group.add_to_script(script)
+        assert "onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED" in str(script)
+
+    def test_graph_optimization_level_session(self):
+        arg_group = ArgGroupTestHelper(
+            OnnxrtSessionArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
+        arg_group.parse_args(
+            [ONNX_MODELS["identity"].path, "--graph-optimization-level", "ORT_ENABLE_EXTENDED"]
+        )
+        sess = arg_group.load_onnxrt_session()
+        assert sess._sess_options.graph_optimization_level == onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED

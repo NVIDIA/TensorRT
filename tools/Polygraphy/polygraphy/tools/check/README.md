@@ -1,4 +1,4 @@
-# Inspect
+# Check
 
 ## Table of Contents
 
@@ -17,6 +17,9 @@ The `check` tool can be used to check and validate for various use-cases.
 
 - [EXPERIMENTAL] `lint` can be used to validate ONNX models and catch exceptions/warnings over independent nodes
     in the graph in a JSON format.
+
+- `accuracy` re-checks accuracy results saved by `polygraphy run --save-accuracy-results` against
+    different thresholds, without re-running inference.
 
 ## Usage
 

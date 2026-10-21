@@ -16,9 +16,12 @@
 #
 
 import base64
+import copy
 import functools
+import glob
 import io
 import json
+import os
 from collections import OrderedDict
 
 from polygraphy import constants, mod, util
@@ -242,7 +245,13 @@ def try_register_common_json(func):
                     arr = load("latin-1")  # For backwards compatibility
                 if isinstance(arr, np.ndarray):
                     return arr
-                return list(arr.values())[0]  # For backwards compatibility
+                # For backwards compatibility with NPZ archives
+                values = list(arr.values())
+                if not values:
+                    G_LOGGER.critical(
+                        "Array payload is empty or invalid (NPZ archive contains no arrays)."
+                    )
+                return values[0]
 
             NUMPY_REGISTRATION_SUCCESS = True
 
@@ -265,7 +274,7 @@ def try_register_common_json(func):
             def decode(dct):
                 data = base64.b64decode(dct["tensor"].encode(), validate=True)
                 infile = io.BytesIO(data)
-                return torch.load(infile)
+                return torch.load(infile, weights_only=True)
 
             TORCH_REGISTRATION_SUCCESS = True
 
@@ -346,6 +355,159 @@ def load_json(src, description=None):
         object: The object, or `None` if nothing could be read.
     """
     return from_json(util.load_file(src, mode="r", description=description))
+
+
+# Width of the zero-padded index in per-iteration file names (e.g. ``0000000000.json``). Fixed so
+# that lexical ordering of the file names matches numeric index ordering; wide enough that no real
+# dataset reaches it.
+ITERATION_FILE_INDEX_WIDTH = 10
+
+
+def list_iteration_files(dir_path):
+    """
+    Lists the ``*.json`` files in a directory in lexical order. Per-iteration files are written with
+    zero-padded indices (see ``ITERATION_FILE_INDEX_WIDTH``), so lexical order matches index order.
+    """
+    return sorted(glob.glob(os.path.join(glob.escape(dir_path), "*.json")))
+
+
+def is_single_file(path):
+    """
+    Whether a path refers to a single file (has a file extension) rather than a per-iteration
+    directory. Depends only on the path string, not on what exists on disk.
+    """
+    return path is not None and os.path.splitext(path)[1] != ""
+
+
+class IterationWriter:
+    """
+    Writes a sequence of per-iteration objects, the writing inverse of ``iterate_from_files``.
+    A path with a file extension is a single file; an extensionless path is a directory of
+    zero-padded ``<index>.json`` files (e.g. ``0000000000.json``, so lexical order matches index
+    order), which must be empty or not yet exist (existing files are never overwritten).
+
+    Append each iteration's object with ``append`` and finalize with ``flush`` (or use as a
+    context manager). Directory mode writes each object immediately, keeping memory constant;
+    single-file mode accumulates the objects and combines them on ``flush`` (so prefer a directory
+    for large datasets).
+    """
+
+    def __init__(self, path, combine=None, copy_on_accumulate=False, description=None):
+        """
+        Args:
+            path (str): The destination file or directory. If None, writing is disabled.
+            combine (Callable[[list], object]):
+                    Combines the accumulated objects into the single object written in single-file
+                    mode. Defaults to the list of objects.
+            copy_on_accumulate (bool):
+                    Whether to deep-copy objects retained for single-file output. Needed when the
+                    caller reuses buffers between iterations (as in streaming inference).
+                    Defaults to False.
+            description (str): A description of what is being saved, used for logging.
+        """
+        self.path = path
+        self.single_file = is_single_file(path)
+        self._combine = combine if combine is not None else (lambda items: items)
+        self._copy = copy_on_accumulate
+        self._description = description
+        self._accumulated = []
+        self._index = 0
+        if path is not None:
+            desc = self._description or "data"
+            if self.single_file:
+                G_LOGGER.info(f"Saving {desc} to a single file: {path}")
+            else:
+                G_LOGGER.info(
+                    f"Saving {desc} to a directory of per-iteration files: {path}"
+                )
+                # Per-iteration files are written by index, so never overwrite existing content.
+                if os.path.exists(path):
+                    if not os.path.isdir(path):
+                        G_LOGGER.critical(
+                            f"Cannot save {desc} to '{path}': a file already exists there, but an "
+                            f"extensionless path is a directory of per-iteration files. Use a path "
+                            f"with a file extension to save a single file, or a different directory."
+                        )
+                    if os.listdir(path):
+                        G_LOGGER.critical(
+                            f"Cannot save {desc} to '{path}': the directory is not empty. "
+                            f"Per-iteration files require an empty or new directory (so nothing is "
+                            f"overwritten). Use a different path, or remove its contents first."
+                        )
+                os.makedirs(path, exist_ok=True)
+
+    def append(self, item):
+        if self.path is None:
+            return
+        if self.single_file:
+            self._accumulated.append(copy.deepcopy(item) if self._copy else item)
+        else:
+            save_json(
+                item,
+                os.path.join(
+                    self.path, f"{self._index:0{ITERATION_FILE_INDEX_WIDTH}d}.json"
+                ),
+                description=self._description,
+            )
+            self._index += 1
+
+    def flush(self):
+        # single_file is only True when path has an extension, so path is not None.
+        if self.single_file:
+            save_json(
+                self._combine(self._accumulated),
+                self.path,
+                description=self._description,
+            )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.flush()
+
+
+def iterate_from_files(paths, load_file, allow_dirs=True):
+    """
+    Lazily yields per-iteration objects from one or more file/directory paths. The shared traversal
+    behind ``StreamingDataLoader`` and ``RunResults.load_streaming``. Memory stays constant when
+    each iteration is its own file (a directory of per-iteration files); a single file is loaded in
+    full by ``load_file`` before its iterations are yielded.
+
+    Args:
+        paths (Union[str, Sequence[str]]): A path, or sequence of paths. A directory's iterations
+                are its ``*.json`` files (in index order); a file is split by ``load_file``.
+        load_file (Callable[[str], Iterator]): A generator yielding the iterations in a single file.
+        allow_dirs (bool): Whether a directory path is permitted (see ``StreamingDataLoader``).
+    """
+    # A single str/os.PathLike is treated as one path, not iterated character-by-character.
+    if isinstance(paths, (str, os.PathLike)):
+        paths = [paths]
+    for path in paths:
+        if os.path.isdir(path):
+            if not allow_dirs:
+                G_LOGGER.critical(
+                    f"Could not load '{path}': it is a directory, but a file was expected. To read "
+                    f"a directory of per-iteration files, use the streaming reader (e.g. "
+                    f"--load-inputs/--load-outputs, or StreamingDataLoader/RunResults.load_streaming)."
+                )
+            for file_path in list_iteration_files(path):
+                yield from load_file(file_path)
+        else:
+            yield from load_file(path)
+
+
+def iterate_json_list(path, description=None):
+    """
+    Loads a single JSON file and yields its iterations: each element if the file holds a JSON list,
+    otherwise the single decoded object. Used by ``StreamingDataLoader``, where a file may hold
+    either one feed_dict or a list of feed_dicts.
+    """
+    obj = load_json(path, description=description)
+    if isinstance(obj, list):
+        yield from obj
+    else:
+        yield obj
 
 
 @mod.export()

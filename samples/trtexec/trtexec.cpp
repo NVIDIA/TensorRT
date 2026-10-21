@@ -27,10 +27,10 @@
 #include <cctype>
 #include <cerrno>
 #include <chrono>
-#include <cstring>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -38,7 +38,7 @@
 #include <memory>
 #include <optional>
 #include <sys/stat.h>
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !TRT_WINML
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -46,7 +46,9 @@
 #include <vector>
 
 #include "NvInfer.h"
+#if !TRT_WINML
 #include "NvInferPlugin.h"
+#endif
 
 #include "buffers.h"
 #include "common.h"
@@ -90,12 +92,12 @@ bool initNvinfer()
 {
 #if !TRT_STATIC
     static LibraryPtr libnvinferPtr{};
-    auto fetchPtrs = [](DynamicLibrary* l) {
-        pCreateInferRuntimeInternal = l->symbolAddress<void*(void*, int32_t)>("createInferRuntime_INTERNAL");
+    auto fetchPtrs = [](DynamicLibrary& l) {
+        pCreateInferRuntimeInternal = l.symbolAddress<void*(void*, int32_t)>("createInferRuntime_INTERNAL");
         try
         {
             pCreateInferRefitterInternal
-                = l->symbolAddress<void*(void*, void*, int32_t)>("createInferRefitter_INTERNAL");
+                = l.symbolAddress<void*(void*, void*, int32_t)>("createInferRefitter_INTERNAL");
         }
         catch (const std::exception& e)
         {
@@ -104,7 +106,7 @@ bool initNvinfer()
 
         if (gUseRuntime == RuntimeMode::kFULL)
         {
-            pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
+            pCreateInferBuilderInternal = l.symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
         }
     };
     return initLibrary(libnvinferPtr, getRuntimeLibraryName(gUseRuntime), fetchPtrs);
@@ -120,10 +122,10 @@ bool initNvonnxparser()
 {
 #if !TRT_STATIC
     static LibraryPtr libnvonnxparserPtr{};
-    auto fetchPtrs = [](DynamicLibrary* l) {
-        pCreateNvOnnxParserInternal = l->symbolAddress<void*(void*, void*, int)>("createNvOnnxParser_INTERNAL");
+    auto fetchPtrs = [](DynamicLibrary& l) {
+        pCreateNvOnnxParserInternal = l.symbolAddress<void*(void*, void*, int)>("createNvOnnxParser_INTERNAL");
         pCreateNvOnnxRefitterInternal
-            = l->symbolAddress<void*(void*, void*, int)>("createNvOnnxParserRefitter_INTERNAL");
+            = l.symbolAddress<void*(void*, void*, int)>("createNvOnnxParserRefitter_INTERNAL");
     };
     return initLibrary(libnvonnxparserPtr, kNVONNXPARSER_LIBNAME, fetchPtrs);
 #else
@@ -253,9 +255,26 @@ constexpr int32_t kCONTINUE_MAIN{-1};
 //! with CUDA graphs disabled. On TRT-Enterprise, the existing context is reused and the profiler is attached in place.
 bool prepareProfileRun(InferenceEnvironmentBase& iEnv, InferenceOptions& infOpts, SystemOptions const& sysOpts)
 {
+#if TRT_WINML
+    InferenceEnvironmentStd& stdEnv = static_cast<InferenceEnvironmentStd&>(iEnv);
+    if (infOpts.rtxCudaGraphStrategy != CudaGraphStrategy::kDISABLED)
+    {
+        sample::gLogWarning << "Disabling RTX CUDA graph for the profile run to avoid obscuring per-layer timings."
+                            << std::endl;
+        infOpts.rtxCudaGraphStrategy = CudaGraphStrategy::kDISABLED;
+    }
+    stdEnv.contexts.clear();
+    stdEnv.bindings.clear();
+    if (!setUpInference(iEnv, infOpts, sysOpts))
+    {
+        sample::gLogError << "Inference set up failed for profile run" << std::endl;
+        return false;
+    }
+#else
     IExecutionContext& ctx = *static_cast<InferenceEnvironmentStd&>(iEnv).contexts.front();
     ctx.setProfiler(iEnv.profiler.get());
     ctx.setEnqueueEmitsProfile(false);
+#endif
     return true;
 }
 
@@ -268,6 +287,12 @@ bool prepareProfileRun(InferenceEnvironmentBase& iEnv, InferenceOptions& infOpts
 //! linked in, so this returns EXIT_FAILURE with a diagnostic.
 int32_t printBuildRouteHelp(std::string const& knobName)
 {
+#if !ENABLE_FEATURE_GLOBAL_PERF_TUNER
+    (void) knobName;
+    sample::gLogError << "--helpBuildRoute requires a build with ENABLE_FEATURE_GLOBAL_PERF_TUNER. "
+                      << "Rebuild TensorRT with the global perf tuner feature enabled." << std::endl;
+    return EXIT_FAILURE;
+#else
     std::unique_ptr<IBuilder> builder{createBuilder()};
     if (!builder)
     {
@@ -315,9 +340,8 @@ int32_t printBuildRouteHelp(std::string const& knobName)
 
     // Database stores names with a leading '-'; accept the user's input both with and without
     // the dash by comparing the unprefixed substrings.
-    auto stripDash = [](std::string const& s) -> std::string {
-        return (!s.empty() && s.front() == '-') ? s.substr(1) : s;
-    };
+    auto stripDash
+        = [](std::string const& s) -> std::string { return (!s.empty() && s.front() == '-') ? s.substr(1) : s; };
     std::string const wantedKnob = stripDash(knobName);
 
     nlohmann::ordered_json filteredOptions = nlohmann::ordered_json::array();
@@ -344,6 +368,7 @@ int32_t printBuildRouteHelp(std::string const& knobName)
     filtered["tuner_options"] = std::move(filteredOptions);
     std::cout << filtered.dump(/*indent=*/2) << std::endl;
     return EXIT_SUCCESS;
+#endif // ENABLE_FEATURE_GLOBAL_PERF_TUNER
 }
 
 // \param quiet If true, suppress option banner printing (used by child workers to avoid
@@ -351,7 +376,11 @@ int32_t printBuildRouteHelp(std::string const& knobName)
 int32_t parseArgs(Logger::TestAtom& sampleTest, Arguments& args, AllOptions& options, bool quiet = false)
 {
     // For DLA pre-procssing
+#if TRT_WINML && !TRT_WINML_PLUGIN
+    bool const kENABLE_STATIC_PLUGINS = false;
+#else
     bool const kENABLE_STATIC_PLUGINS = true;
+#endif // TRT_WINML && !TRT_WINML_PLUGIN
     options.system.enableStaticPlugins = kENABLE_STATIC_PLUGINS;
 
     // Start parsing
@@ -403,7 +432,7 @@ int32_t parseArgs(Logger::TestAtom& sampleTest, Arguments& args, AllOptions& opt
         return EXIT_SUCCESS;
     }
 
-#if defined(_WIN32)
+#if defined(_WIN32) || TRT_WINML
     if (options.tuning.helpBuildRoute || !options.build.buildRoute.empty())
     {
         sample::gLogError << "--helpBuildRoute and --setBuildRoute are not supported on Windows." << std::endl;
@@ -436,18 +465,32 @@ int32_t runOnceBuildAndInfer(
     {
         sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
     }
+#if TRT_WINML
+    std::string const jitInVersion = " RTX";
+#else
     std::string const jitInVersion;
     if (!options.build.cpuOnly)
     {
         setCudaDevice(options.system.device, sample::gLogInfo);
     }
+#endif /* TRT_WINML */
     sample::gLogInfo << std::endl;
     sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
                      << NV_TENSORRT_PATCH << jitInVersion << std::endl;
 
     // Record specified runtime
     gUseRuntime = options.build.useRuntime;
+#if TRT_WINML && TRT_WINML_PLUGIN
+    std::vector<LibraryPtr> pluginLibs;
+    for (auto const& pluginPath : options.system.plugins)
+    {
+        sample::gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
+        pluginLibs.emplace_back(loadLibrary(pluginPath));
+    }
+#endif // TRT_WINML && TRT_WINML_PLUGIN
 
+#if !TRT_WINML
+#if !ENABLE_WOA
 #if !TRT_STATIC
     LibraryPtr nvinferPluginLib{};
 #endif /* TRT_STATIC */
@@ -479,7 +522,8 @@ int32_t runOnceBuildAndInfer(
         throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
     }
 #if ENABLE_UNIFIED_BUILDER
-    auto safetyPluginRegistry = sample::safe::getSafePluginRegistry(*gSafeRecorder);
+    auto safetyPluginRegistry
+        = sample::safe::getSafePluginRegistry(*gSafeRecorder, options.build.getSafeRuntimeSettings());
     ASSERT(safetyPluginRegistry != nullptr);
 
     // getSafePluginRegistry() mutates the singleton's stored ISafeRecorder on every call. The ONNX parser calls it
@@ -512,6 +556,7 @@ int32_t runOnceBuildAndInfer(
         }
     }
 #endif // ENABLE_UNIFIED_BUILDER
+#endif // !ENABLE_WOA
     if (options.build.safe && !sample::hasSafeRuntime())
     {
         sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -524,7 +569,21 @@ int32_t runOnceBuildAndInfer(
         options.build.consistency = false;
     }
 
+    if (!options.build.safe && options.build.reference)
+    {
+        sample::gLogInfo << "Skipping reference checker on non-safety mode." << std::endl;
+        options.build.reference = false;
+    }
 
+#if ENABLE_FEATURE_WEAK_TYPING
+    if (options.build.safe)
+    {
+        sample::gLogInfo << "StronglyTyped is enabled by default on safety mode." << std::endl;
+        options.build.stronglyTyped = true;
+    }
+#endif // ENABLE_FEATURE_WEAK_TYPING
+
+#endif // !TRT_WINML
 
     // Windows does not have setenv call
 #if !defined(_WIN32)
@@ -551,6 +610,19 @@ int32_t runOnceBuildAndInfer(
         new BuildEnvironment(options.build.safe, options.build.versionCompatible, options.system.DLACore,
             options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath, sampleTest.getCmdline()));
 
+    if (!bEnv->greenContexts.initialize(options.build, options.system.device, sample::gLogError))
+    {
+        sample::gLogError << "CUDA green context set up failed" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+#if !TRT_WINML
+    bEnv->engine.setDLAWorkspaceAllocationStrategy(options.system.dlaWorkspaceAllocationStrategy);
+#endif // !TRT_WINML
+
+#if TRT_WINML
+    bEnv->engine.setDeferredWeightsLoading(options.build.deferWeightsLoading);
+#endif // TRT_WINML
 
     bool buildPass
         = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError, postConfigHook);
@@ -567,9 +639,56 @@ int32_t runOnceBuildAndInfer(
         return EXIT_SUCCESS;
     }
 
+#if TRT_WINML
+    if (options.build.deferWeightsLoading)
+    {
+        // Force engine deserialization (already deferred via the runtime flag set above)
+        // and drive JIT compilation by creating a one-shot execution context. If
+        // --runtimeCacheFile was supplied, the runtime cache is populated from this JIT pass.
+        auto* engineForDeferredJit = bEnv->engine.get();
+        if (engineForDeferredJit == nullptr
+            || !sample::populateRuntimeCacheForDeferredJit(*engineForDeferredJit, options.inference))
+        {
+            sample::gLogError << "Deferred JIT compilation failed." << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+        }
 
+        if (options.build.skipInference)
+        {
+            sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
+            return sample::gLogger.reportPass(sampleTest);
+        }
+
+        // Inference requested: bring weights onto the GPU before falling through to the
+        // standard setUpInference / runInference path.
+        bool const weightsOk
+            = sample::loadDeferredWeightsFromEngineFile(*engineForDeferredJit, options.build.engine, sample::gLogError);
+        if (!weightsOk)
+        {
+            sample::gLogError << "Loading deferred weights failed." << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+        }
+    }
+    else if (options.build.skipInference)
+    {
+        if (options.build.runtimePlatform == nvinfer1::RuntimePlatform::kSAME_AS_BUILD)
+        {
+            printLayerInfo(options.reporting, bEnv->engine.get(), nullptr);
+            printOptimizationProfileInfo(options.reporting, bEnv->engine.get());
+        }
+        sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
+        return EXIT_SUCCESS;
+    }
+
+    setCudaDevice(options.system.device, sample::gLogInfo);
+#endif
+
+#if !TRT_WINML || TRT_WINML_PLUGIN
+#if !ENABLE_WOA
     // dynamicPlugins may have been updated by getEngineBuildEnv above
     bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
+#endif // !ENABLE_WOA
+#endif // !TRT_WINML || TRT_WINML_PLUGIN
     // When some options are enabled, engine deserialization is not supported on the platform that the engine was
     // built.
     bool const supportDeserialization = !options.build.safe && !options.build.buildDLAStandalone
@@ -621,6 +740,13 @@ int32_t runOnceBuildAndInfer(
         return EXIT_SUCCESS;
     }
 
+#if TRT_WINML
+    if (options.build.safe)
+    {
+        sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
+        return EXIT_FAILURE;
+    }
+#endif
     std::unique_ptr<InferenceEnvironmentBase> iEnv;
 
     if (!options.build.safe)
@@ -630,13 +756,14 @@ int32_t runOnceBuildAndInfer(
     else
     {
 #if ENABLE_UNIFIED_BUILDER
-        iEnv = std::make_unique<InferenceEnvironmentSafe>(*bEnv);
+        iEnv = std::make_unique<InferenceEnvironmentSafe>(*bEnv, options.build.getSafeRuntimeSettings());
 #else
         sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
         return EXIT_FAILURE;
 #endif
     }
 
+#if !TRT_WINML || TRT_WINML_PLUGIN
     // We avoid re-loading some dynamic plugins while deserializing
     // if they were already serialized with `setPluginsToSerialize`.
     std::vector<std::string> dynamicPluginsNotSerialized;
@@ -651,6 +778,7 @@ int32_t runOnceBuildAndInfer(
     }
 
     iEnv->engine.setDynamicPlugins(dynamicPluginsNotSerialized);
+#endif /* TRT_WINML || TRT_WINML_PLUGIN */
     // Delete build environment.
     bEnv.reset();
 
@@ -662,6 +790,7 @@ int32_t runOnceBuildAndInfer(
         }
         return EXIT_SUCCESS;
     }
+#if !TRT_WINML
     if (options.build.safe && options.system.DLACore >= 0)
     {
         sample::gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
@@ -670,8 +799,10 @@ int32_t runOnceBuildAndInfer(
                          << std::endl;
         return EXIT_FAILURE;
     }
+#endif /* TRT_WINML */
     bool const profilerEnabled = options.reporting.profile || !options.reporting.exportProfile.empty();
 
+#if !TRT_WINML
     bool const layerInfoEnabled = options.reporting.layerInfo || !options.reporting.exportLayerInfo.empty();
     if (iEnv->safe && (profilerEnabled || layerInfoEnabled))
     {
@@ -681,6 +812,7 @@ int32_t runOnceBuildAndInfer(
                           << std::endl;
         return EXIT_FAILURE;
     }
+#endif /* !TRT_WINML */
     if (!setUpInference(*iEnv, options.inference, options.system))
     {
         sample::gLogError << "Inference set up failed" << std::endl;
@@ -696,7 +828,7 @@ int32_t runOnceBuildAndInfer(
     std::vector<InferenceTrace> trace;
     sample::gLogInfo << "Starting inference" << std::endl;
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !TRT_WINML
     // Load ALL reference outputs for accuracy validation (if provided)
     // This loads all refPairs upfront since they will be used in the inner loop
     if (!options.build.safe)
@@ -776,8 +908,8 @@ int32_t runOnceBuildAndInfer(
         std::ofstream out(options.tuning.tuningResultFile);
         if (!out)
         {
-            sample::gLogError << "Cannot open --tuningResultFile for writing: "
-                              << options.tuning.tuningResultFile << std::endl;
+            sample::gLogError << "Cannot open --tuningResultFile for writing: " << options.tuning.tuningResultFile
+                              << std::endl;
         }
         else
         {
@@ -796,7 +928,11 @@ int32_t runOnceBuildAndInfer(
 
 int sample::trtexecMain(int argc, char** argv, PostConfigCallback const& postConfigHook)
 {
+#if TRT_WINML
+    std::string const sampleName = "TensorRT-RTX.tensorrt_rtx";
+#else
     std::string const sampleName = "TensorRT.trtexec";
+#endif
 
     auto sampleTest = sample::gLogger.defineTest(sampleName, argc, argv);
 
@@ -838,11 +974,20 @@ int sample::trtexecMain(int argc, char** argv, PostConfigCallback const& postCon
 // implementation is needed.
 // ============================================================================
 
-#if defined(_WIN32)
+#if defined(_WIN32) || TRT_WINML
 
 int32_t sample::runTuningLoop(int32_t /*argc*/, char** /*argv*/)
 {
     sample::gLogError << "--tuneBuildRoutes is not supported on Windows (no fork())." << std::endl;
+    return EXIT_FAILURE;
+}
+
+#elif !ENABLE_FEATURE_GLOBAL_PERF_TUNER
+
+int32_t sample::runTuningLoop(int32_t /*argc*/, char** /*argv*/)
+{
+    sample::gLogError << "--tuneBuildRoutes requires a build with ENABLE_FEATURE_GLOBAL_PERF_TUNER. "
+                      << "Rebuild TensorRT with the global perf tuner feature enabled." << std::endl;
     return EXIT_FAILURE;
 }
 
@@ -871,8 +1016,7 @@ IterationResult readChildResult(std::string const& jsonPath)
     if (!in)
     {
         r.crashed = true;
-        r.errorMessage = "missing tuning result file " + jsonPath
-            + " (child likely crashed before writing)";
+        r.errorMessage = "missing tuning result file " + jsonPath + " (child likely crashed before writing)";
         return r;
     }
     try
@@ -1142,9 +1286,9 @@ void emitDryRunListing(TuningContext const& ctx)
 //! nested lambda.
 struct PhaseState
 {
-    AllOptions const& options;                           //!< Parsed options for this run.
-    Logger::TestAtom const& sampleTest;                  //!< For TASK_BEGIN/END/ABORT banners.
-    pid_t const ppid{};                                  //!< Parent PID, used in temp filenames.
+    AllOptions const& options;                             //!< Parsed options for this run.
+    Logger::TestAtom const& sampleTest;                    //!< For TASK_BEGIN/END/ABORT banners.
+    pid_t const ppid{};                                    //!< Parent PID, used in temp filenames.
     std::chrono::steady_clock::time_point const startTime; //!< Loop start, for --tuningTimeOut.
     int32_t const argc{};                                  //!< Parent argv (passed verbatim to children).
     char** const argv{};                                   //!< Parent argv (passed verbatim to children).
@@ -1188,7 +1332,8 @@ std::string makeIterationEnginePath(PhaseState const& state, char const* phaseLa
 bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* phaseLabel,
     std::vector<MixedSearchKnobResult>* positiveKnobs, double* baselineGpuTimeMsOut, int64_t skipUntil)
 {
-    sample::gLogInfo << "Tuning " << phaseLabel << ": " << phaseCtx.totalCount.toString() << " iterations." << std::endl;
+    sample::gLogInfo << "Tuning " << phaseLabel << ": " << phaseCtx.totalCount.toString() << " iterations."
+                     << std::endl;
     double baselineGpuTimeMs = std::numeric_limits<double>::infinity();
     for (BigInt i{0}; i < phaseCtx.totalCount; ++i)
     {
@@ -1199,20 +1344,21 @@ bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* p
         }
         if (state.options.tuning.timeout > 0)
         {
-            auto const elapsedS = std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - state.startTime).count();
+            auto const elapsedS
+                = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - state.startTime)
+                      .count();
             if (elapsedS >= state.options.tuning.timeout)
             {
-                sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout
-                                 << "s); stopping early." << std::endl;
+                sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout << "s); stopping early."
+                                 << std::endl;
                 return false;
             }
         }
 
         std::string const route = phaseCtx.getPathAtIndex(i);
         std::string const enginePath = makeIterationEnginePath(state, phaseLabel, i);
-        std::string const jsonPath = "/tmp/trtexec_tuning_" + std::to_string(state.ppid)
-            + "_iter" + i.toString() + ".json";
+        std::string const jsonPath
+            = "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter" + i.toString() + ".json";
 
         sample::gLogger.reportTaskBegin(state.sampleTest, i.toString(), route);
 
@@ -1236,8 +1382,9 @@ bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* p
         }
         else
         {
-            sample::gLogWarning << "Iteration [" << i.toString() << "] failed: "
-                                << (result.errorMessage.empty() ? "(no message)" : result.errorMessage) << std::endl;
+            sample::gLogWarning << "Iteration [" << i.toString()
+                                << "] failed: " << (result.errorMessage.empty() ? "(no message)" : result.errorMessage)
+                                << std::endl;
             sample::gLogger.reportTaskAbort(state.sampleTest, i.toString(), route);
         }
         // For mixed-mode phase 1, collect knobs that beat the baseline.
@@ -1294,7 +1441,11 @@ int32_t finalizeBestEngine(PhaseState const& state, BigInt const& totalCount)
 int32_t sample::runTuningLoop(int32_t argc, char** argv)
 {
     std::string const sampleName =
+#if TRT_WINML
+        "TensorRT-RTX.tensorrt_rtx";
+#else
         "TensorRT.trtexec";
+#endif
     auto sampleTest = sample::gLogger.defineTest(sampleName, argc, argv);
     sample::gLogger.reportTestStart(sampleTest);
 
@@ -1369,21 +1520,21 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
     std::vector<MixedSearchKnobResult> positiveKnobs;
     double phase1BaselineMs{std::numeric_limits<double>::infinity()};
     bool const isMixed = options.tuning.tuningSearchAlgorithm == TuningSearchAlgorithm::kMIXED;
-    bool const phase1Completed
-        = runOnePhase(state, ctx, "phase1", isMixed ? &positiveKnobs : nullptr, &phase1BaselineMs, resume.resumeFromIter);
+    bool const phase1Completed = runOnePhase(
+        state, ctx, "phase1", isMixed ? &positiveKnobs : nullptr, &phase1BaselineMs, resume.resumeFromIter);
 
     if (phase1Completed && isMixed && positiveKnobs.size() > 1)
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size()
-                         << " positive knobs identified; entering phase 2." << std::endl;
+        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knobs identified; entering phase 2."
+                         << std::endl;
         TuningContext const phase2Ctx = buildMixedPhase2Context(ctx, positiveKnobs);
         // Phase 2 always starts fresh (no resume mid-phase-2).
         (void) runOnePhase(state, phase2Ctx, "phase2", nullptr, nullptr, 0);
     }
     else if (isMixed)
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size()
-                         << " positive knob(s); skipping phase 2 (need >1)." << std::endl;
+        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knob(s); skipping phase 2 (need >1)."
+                         << std::endl;
     }
 
     // 7. Promote the best iteration's engine to the user's --saveEngine path.

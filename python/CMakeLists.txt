@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.31 FATAL_ERROR)
 
 project(TRTPyBinds LANGUAGES CXX)
 
-if(MSVC)
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     set(DEFAULT_PY_EXT_PATH "${TOOLS_BASE}/win32")
 else()
     set(DEFAULT_PY_EXT_PATH "/externals")
@@ -63,7 +63,9 @@ set(PYBIND11_NOPYTHON ON CACHE INTERNAL "")
 include(FetchPyBind11)
 
 # Pybind11 would normally enable this by default, but does not do so under NOPYTHON mode, so we do it manually.
-if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_X86})
+# Skip LTO under Bullseye coverage: covc emits slim-LTO objects whose code generation never runs at
+# link time, producing empty PyInit-less binding stubs.
+if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_X86} AND NOT TRT_BUILD_ENABLE_BULLSEYE_COVERAGE)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
@@ -216,13 +218,19 @@ function(createBindingLibrary moduleName pyVersion)
         string(REPLACE "." "" pyVerStr ${pyVersion})
 
         if(NOT TARGET python${pyVerStr})
+
+            if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_WIN10_X86}
+            )
+                set(PYTHON_EXTERNALS_TARGET_ARCH_PATH_SUFFIX "lib/x86_64")
+            endif()
+
             # Windows needs an explicit link against the python library.
             # Standard CPython installs put the import lib under `libs/`; the bundled
             # tools-base layout uses `lib/`. Search both.
             find_library(
                 PYTHON${pyVerStr}_LIBRARY_PATH python${pyVerStr}.lib
                 HINTS ${TRT_BUILD_PYTHON_EXTERNALS_PATH}/python${pyVersion}
-                PATH_SUFFIXES libs lib
+                PATH_SUFFIXES ${PYTHON_EXTERNALS_TARGET_ARCH_PATH_SUFFIX} libs lib
                 REQUIRED
                 NO_CMAKE_FIND_ROOT_PATH
             )

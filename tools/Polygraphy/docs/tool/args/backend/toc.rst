@@ -8,5 +8,6 @@ Module: ``polygraphy.tools.args``
     onnx/toc
     onnxrt/toc
     pluginref/toc
+    runner_select
     tf/toc
     trt/toc

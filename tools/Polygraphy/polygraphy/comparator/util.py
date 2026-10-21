@@ -22,9 +22,6 @@ from polygraphy import config, mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.datatype import DataType
 
-import math
-import os
-
 np = mod.lazy_import("numpy")
 plt = mod.lazy_import("matplotlib.pyplot")
 matplotlib = mod.lazy_import("matplotlib")
@@ -175,6 +172,52 @@ def log_output_stats(output, info_hist=False, runner_name=None, hist_range=None)
         G_LOGGER.log(
             lambda: str_histogram(output, hist_range),
             severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE,
+        )
+
+
+def log_compared_output_stats(
+    iter_result0, iter_result1, match_dicts, runner0_name, runner1_name
+):
+    """
+    Logs the raw output statistics for a pair of compared iteration results.
+
+    Invoked once after all comparison functions have run, so the stats are logged once rather than
+    once per comparison function.
+
+    Args:
+        iter_result0 (IterationResult): Outputs from the first runner.
+        iter_result1 (IterationResult): Outputs from the second runner.
+        match_dicts (List[OrderedDict[str, Any]]):
+                Per-output comparison results from each comparison function applied to this
+                iteration. Each maps a first-runner output name to a result whose truthiness
+                indicates a match; non-bool results also name the matched second-runner output.
+        runner0_name (str): The name of the first runner.
+        runner1_name (str): The name of the second runner.
+    """
+    if not match_dicts:
+        return
+
+    # All comparison functions compare the same outputs, so enumerate using the first one.
+    for out0_name, result in match_dicts[0].items():
+        out1_name = getattr(result, "output1_name", out0_name)
+        if out0_name not in iter_result0 or out1_name not in iter_result1:
+            continue
+
+        out0 = iter_result0[out0_name]
+        out1 = iter_result1[out1_name]
+
+        # An output absent from a function's dict defaults to True (not a failure).
+        failed = any(not bool(md.get(out0_name, True)) for md in match_dicts)
+
+        hist_range = (
+            min(compute_min(out0), compute_min(out1)),
+            max(compute_max(out0), compute_max(out1)),
+        )
+        log_output_stats(
+            out0, failed, f"{runner0_name}: {out0_name}", hist_range=hist_range
+        )
+        log_output_stats(
+            out1, failed, f"{runner1_name}: {out1_name}", hist_range=hist_range
         )
 
 

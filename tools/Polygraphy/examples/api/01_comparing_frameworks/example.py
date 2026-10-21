@@ -20,9 +20,17 @@
 This script runs an identity model with ONNX-Runtime and TensorRT,
 then compares outputs.
 """
+
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
-from polygraphy.comparator import Comparator, CompareFunc
+from polygraphy.comparator import (
+    Comparator,
+    CosineSimilarityCompareFunc,
+    L2CompareFunc,
+    PsnrCompareFunc,
+    SimpleCompareFunc,
+    SnrCompareFunc,
+)
 
 
 def main():
@@ -49,37 +57,46 @@ def main():
     # `Comparator.compare_accuracy()` checks that outputs match between runners.
     #
     # TIP: The `compare_func` parameter can be used to control how outputs are compared (see API reference for details).
-    #   The default comparison function is created by `CompareFunc.simple()`, but we can construct it
+    #   The default comparison function is created by `SimpleCompareFunc()`, but we can construct it
     #   explicitly if we want to change the default parameters, such as tolerance.
     assert bool(
         Comparator.compare_accuracy(
-            run_results, compare_func=CompareFunc.simple(atol=1e-8)
+            run_results, compare_func=SimpleCompareFunc(atol=1e-8)
         )
     )
 
-    # Use distance metrics comparison for more comprehensive evaluation
+    # We can also compare using single-metric comparison functions. Each checks one metric,
+    #   so combine them for a more comprehensive evaluation.
     assert bool(
         Comparator.compare_accuracy(
             run_results,
-            compare_func=CompareFunc.distance_metrics(
-                l2_tolerance=1e-5,                    # Maximum allowed L2 norm (Euclidean distance)
-                cosine_similarity_threshold=0.99,     # Minimum cosine similarity (angular similarity)
-            )
+            # Maximum allowed L2 norm (Euclidean distance):
+            compare_func=L2CompareFunc(l2_threshold=1e-5),
+        )
+    ) and bool(
+        Comparator.compare_accuracy(
+            run_results,
+            # Minimum cosine similarity (angular similarity):
+            compare_func=CosineSimilarityCompareFunc(cosine_similarity_threshold=0.99),
         )
     )
-    print("All outputs matched using distance metrics (L2 norm, Cosine Similarity)")
-    
-    # Use quality metrics for signal quality evaluation
+    print("All outputs matched using L2 norm and Cosine Similarity")
+
+    # Likewise, PSNR and SNR evaluate signal quality.
     assert bool(
         Comparator.compare_accuracy(
             run_results,
-            compare_func=CompareFunc.quality_metrics(
-                psnr_tolerance=50.0,                  # Minimum Peak Signal-to-Noise Ratio in dB
-                snr_tolerance=25.0                    # Minimum Signal-to-Noise Ratio in dB
-            )
+            # Minimum Peak Signal-to-Noise Ratio in dB:
+            compare_func=PsnrCompareFunc(psnr_threshold=50.0),
+        )
+    ) and bool(
+        Comparator.compare_accuracy(
+            run_results,
+            # Minimum Signal-to-Noise Ratio in dB:
+            compare_func=SnrCompareFunc(snr_threshold=25.0),
         )
     )
-    print("All outputs matched using quality metrics (PSNR, SNR)")
+    print("All outputs matched using PSNR and SNR")
 
     # We can use `RunResults.save()` method to save the inference results to a JSON file.
     # This can be useful if you want to generate and compare results separately.

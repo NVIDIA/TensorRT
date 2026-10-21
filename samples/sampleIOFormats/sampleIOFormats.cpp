@@ -33,7 +33,6 @@
 #include "half.h"
 #include "logger.h"
 #include "parserOnnxConfig.h"
-#include "sampleOptions.h"
 
 #include "NvInfer.h"
 #include "NvOnnxParser.h"

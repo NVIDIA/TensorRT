@@ -17,7 +17,7 @@ from polygraphy import mod
 
 
 @mod.export()
-def main(run_opts = None):
+def main(run_opts=None):
     """
     The Polygraphy CLI Toolkit
 
@@ -42,7 +42,10 @@ def main(run_opts = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "-v", "--version", action="version", version=G_LOGGER._str_from_module_info(polygraphy, name="Polygraphy")
+        "-v",
+        "--version",
+        action="version",
+        version=G_LOGGER._str_from_module_info(polygraphy, name="Polygraphy"),
     )
 
     subparsers = parser.add_subparsers(title="Tools", dest="tools")
@@ -78,6 +81,8 @@ def main(run_opts = None):
     end_time = time.time()
     if show_start_end_logging:
         log_func = G_LOGGER.finish if status == 0 else G_LOGGER.error
-        log_func(f"{'PASSED' if status == 0 else 'FAILED'} | Runtime: {end_time - start_time:.3f}s | Command: {cmd}")
+        log_func(
+            f"{'PASSED' if status == 0 else 'FAILED'} | Runtime: {end_time - start_time:.3f}s | Command: {cmd}"
+        )
 
     return status

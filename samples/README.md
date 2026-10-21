@@ -19,7 +19,6 @@
 | [sampleNonZeroPlugin](sampleNonZeroPlugin) | C++ | INetwork | Adding plugin with data-dependent output shapes |
 | [sampleIOFormats](sampleIOFormats) | C++ | ONNX | Specifying TensorRT I/O Formats |
 | [sampleProgressMonitor](sampleProgressMonitor) | C++ | ONNX | Progress Monitor API usage |
-| [trtexec](trtexec) | C++ | All | TensorRT Command-Line Wrapper: trtexec |
 | [engine_refit_onnx_bidaf](python/engine_refit_onnx_bidaf) | Python | ONNX | refitting an engine built from an ONNX model via parsers. |
 | [introductory_parser_samples](python/introductory_parser_samples) | Python | ONNX | Introduction To Importing Models Using TensorRT Parsers |
 | [onnx_packnet](python/onnx_packnet) | Python | ONNX | TensorRT Inference Of ONNX Models With Custom Layers |
@@ -30,17 +29,11 @@
 | [cute_dsl_plugin](python/cute_dsl_plugin) | Python | INetwork | Python-based TRT plugin for RMSNorm with a CuteDSL kernel |
 | [attention_mdtrt](python/attention_mdtrt) | Python | ONNX | Multi-device attention inference with MPI and NCCL |
 
-### 3. Application Samples
-| Sample | Language | Format | Description |
-|---|---|---|---|
-| [detectron2](python/detectron2) | Python | ONNX | Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT |
-
-### 4. Safety Samples
+### 3. Safety Samples
 | Sample | Language | Format | Description |
 |---|---|---|---|
 | [sampleSafeMNIST](sampleSafeMNIST) | C++ | ONNX | Build a Safety Engine for MNIST |
 | [sampleSafePluginV3](sampleSafePluginV3) | C++ | ONNX | Use Safety-Supported Plugins With Safety Engines |
-| [trtSafeExec](trtSafeExec) | C++ | ONNX | TensorRT Command-Line Wrapper With Safety Options |
 
 ## Preparing sample data
 
@@ -54,7 +47,7 @@ Many samples require the TensorRT sample data package. If not already mounted un
 
 2. Extract and set up the data:
     ```bash
-    unzip tensorrt_sample_data_xxx.zip
+    unzip tensorrt_sample_data_*.zip
     mkdir -p /usr/src/tensorrt/data
     cp -r tensorrt_sample_data_*/* /usr/src/tensorrt/data/
     export TRT_DATADIR=/usr/src/tensorrt/data

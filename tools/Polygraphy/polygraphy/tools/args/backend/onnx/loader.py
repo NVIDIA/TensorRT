@@ -484,24 +484,35 @@ class OnnxLoadArgs(BaseArgs):
             self.group.add_argument(
                 f"--{self._outputs_opt_prefix}outputs",
                 help="Name(s) of ONNX tensor(s) to mark as output(s). "
-                "Using the special value 'mark all' indicates that all tensors should be used as outputs",
+                "Supports fnmatch wildcard patterns (e.g. 'conv_*'). "
+                "Using '*' alone marks all tensors as outputs.",
                 nargs="+",
                 default=None,
                 dest="onnx_outputs",
             )
             self.group.add_argument(
                 f"--{self._outputs_opt_prefix}exclude-outputs",
-                help="[EXPERIMENTAL] Name(s) of ONNX output(s) to unmark as outputs.",
+                help="[EXPERIMENTAL] Name(s) of ONNX output(s) to unmark as outputs. "
+                "Supports fnmatch wildcard patterns (e.g. 'conv_*').",
                 nargs="+",
                 default=None,
                 dest="onnx_exclude_outputs",
+            )
+            self.group.add_argument(
+                f"--{self._outputs_opt_prefix}outputs-by-type",
+                help="Op type name(s) (case-insensitive) whose output tensors should be marked as outputs. "
+                "For example, '--onnx-outputs-by-type Conv Add'. "
+                "If a type is not found, similar op types are suggested.",
+                nargs="+",
+                default=None,
+                dest="onnx_outputs_by_type",
             )
 
         self.group.add_argument(
             "--fp-to-fp16",
             help="Convert all floating point tensors in an ONNX model to 16-bit precision. "
             "This is *not* needed in order to use TensorRT's fp16 precision, but may be useful for other backends. "
-            "Requires onnxmltools. ",
+            "Requires onnxconverter_common. ",
             action="store_true",
             default=None,
         )
@@ -532,7 +543,8 @@ class OnnxLoadArgs(BaseArgs):
         Parses command-line arguments and populates the following attributes:
 
         Attributes:
-            outputs (List[str]): Names of output tensors.
+            outputs (List[str]): Names of output tensors, or constants.MARK_ALL.
+            mark_types (List[str]): Op type names whose output tensors should be marked as outputs.
             exclude_outputs (List[str]): Names of tensors which should be unmarked as outputs.
             external_data_dir (str): Path to a directory from which to load external data.
             ignore_external_data (bool): Whether to ignore loading external data.
@@ -540,6 +552,7 @@ class OnnxLoadArgs(BaseArgs):
             upper_bounds (Union[int, Dict[str, int]]): The upper bounds for tensors with unbounded DDS.
         """
         self.outputs = args_util.get_outputs(args, "onnx_outputs")
+        self.mark_types = args_util.get(args, "onnx_outputs_by_type")
         self.exclude_outputs = args_util.get(args, "onnx_exclude_outputs")
         self.external_data_dir = args_util.get(args, "external_data_dir")
         self.ignore_external_data = args_util.get(args, "ignore_external_data")
@@ -554,15 +567,18 @@ class OnnxLoadArgs(BaseArgs):
         if disable_custom_outputs:
             outputs = None
             exclude_outputs = None
+            mark_types = None
         else:
             outputs = args_util.get_outputs_for_script(script, self.outputs)
             exclude_outputs = self.exclude_outputs
+            mark_types = self.mark_types
 
         modify_outputs_loader = make_invocable_if_nondefault_kwargs(
             "ModifyOnnxOutputs",
             loader_name,
             outputs=outputs,
             exclude_outputs=exclude_outputs,
+            mark_types=mark_types,
         )
         if modify_outputs_loader is not None:
             script.add_import(

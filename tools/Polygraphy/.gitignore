@@ -73,3 +73,6 @@ core
 
 # IDEs
 .vscode
+
+# Claude Code local settings (personal overrides, not for team)
+.claude/settings.local.json

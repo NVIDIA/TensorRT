@@ -41,14 +41,14 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     ```bash
     polygraphy run folded.onnx --onnxrt \
         --save-inputs inputs.json \
-        --onnx-outputs mark all --save-outputs layerwise_golden.json
+        --onnx-outputs '*' --save-outputs layerwise_golden.json
     ```
 
     Then we'll combine the inputs and layerwise outputs into a single layerwise inputs file
-    using the `data to-input` subtool (we'll see why this is necessary in the next step):
+    using the `data merge` subtool (we'll see why this is necessary in the next step):
 
     ```bash
-    polygraphy data to-input inputs.json layerwise_golden.json -o layerwise_inputs.json
+    polygraphy data merge inputs.json layerwise_golden.json -o layerwise_inputs.json
     ```
 
 
@@ -99,7 +99,7 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
         `debug reduce` will emit a warning like this when it tries to replace a branch:
         ```
         [W]     This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.
-                Please ensure that you have provided a data loader argument to `debug reduce` if your `--check` command is using a non-default data loader.
+                Please ensure that you have provided a data loader argument directly to `debug reduce` (i.e. prior to `--check`) if your `--check` command is using a non-default data loader.
                 Not doing so may result in false negatives!
         ```
         <!-- Polygraphy Test: Ignore End -->

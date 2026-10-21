@@ -111,9 +111,9 @@ void ScatterND::calculateTransformCoeff(
         nIndx *= dataTensorDims.d[i];
     }
 
-    std::reverse(pitches.begin(), pitches.end()); // last dimension pitch is always one (assuming linear mem)
+    std::ranges::reverse(pitches); // last dimension pitch is always one (assuming linear mem)
 
-    std::copy(pitches.begin(), pitches.end(), transformCoeff);
+    std::ranges::copy(pitches, transformCoeff);
 }
 
 int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
@@ -130,7 +130,7 @@ int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
 int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
         && workspace != nullptr);
 
     int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS];

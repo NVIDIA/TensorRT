@@ -1,10 +1,27 @@
 Third Party Notices
 ===================
 
-This report includes or loads third-party open source software.
+This report includes or loads third-party open source software. The complete
+license text of every such project is reproduced verbatim below, so that a
+report folder remains compliant when it is copied or shared on its own.
+
+Parts of this report authored by NVIDIA are licensed under Apache-2.0. Its text
+is in the LICENSE file distributed alongside this one, and it is also the option
+selected below for the dual-licensed DOMPurify.
+
 These notices are provided for attribution and license-tracking purposes only
 and do not modify the license terms of the third-party projects.
 
+
+Where the third-party code lives
+--------------------------------
+
+    netron-assets.js   Netron, Dagre, Graphlib
+    app.js             DOMPurify, marked (and Markdown, through marked)
+
+Both files are bundles: they combine NVIDIA-authored code with the projects
+listed above and therefore carry a compound SPDX license expression rather than
+a single identifier.
 
 Netron
 ------
@@ -22,6 +39,29 @@ Notes:
   report, including report-specific loading, iframe integration, and layer
   selection behavior.
 
+License text:
+
+    MIT License
+
+    Copyright (c) Lutz Roeder
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
 
 Dagre
 -----
@@ -36,6 +76,27 @@ Notes:
 - The bundled graph layout code is included through the report-specific Netron
   viewer bundle.
 
+License text:
+
+    Copyright (c) 2012-2014 Chris Pettitt
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
 
 Graphlib
 --------
@@ -43,13 +104,34 @@ Graphlib
 Project: Graphlib
 Homepage: https://github.com/dagrejs/graphlib
 License: MIT
-Package metadata URL: https://github.com/dagrejs/graphlib/blob/master/package.json
-Author: Chris Pettitt
+License URL: https://github.com/dagrejs/graphlib/blob/master/LICENSE
+Copyright: Copyright (c) 2012-2014 Chris Pettitt
 
 Notes:
 - Dagre depends on Graphlib. The bundled layout code in dev/report/netron/dagre.js may
   include or derive from Graphlib functionality.
 
+License text:
+
+    Copyright (c) 2012-2014 Chris Pettitt
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
 
 DOMPurify
 ---------
@@ -66,6 +148,11 @@ Author: Dr.-Ing. Mario Heiderich, Cure53
 Notes:
 - DOMPurify is used at runtime to sanitize rendered Markdown content.
 
+License text:
+
+    Apache License 2.0. The upstream LICENSE file at tag 3.4.9 is the
+    unmodified Apache-2.0 text, which is reproduced in full in the LICENSE
+    file distributed alongside these notices.
 
 Marked
 ------
@@ -74,13 +161,62 @@ Project: marked
 Homepage: https://github.com/markedjs/marked
 Version included in this report: 18.0.5
 License: MIT
-License URL: https://github.com/markedjs/marked/blob/v18.0.5/LICENSE.md
+License URL: https://github.com/markedjs/marked/blob/v18.0.5/LICENSE
 Package metadata URL: https://github.com/markedjs/marked/blob/v18.0.5/package.json
 Copyright:
-- Copyright (c) 2018-2026, MarkedJS
+- Copyright (c) 2018+, MarkedJS
 - Copyright (c) 2011-2018, Christopher Jeffrey
 
 Notes:
 - marked is used at runtime to render Markdown content.
-- The marked license file also includes attribution and license terms for
-  Markdown by John Gruber. See the upstream license URL above.
+- marked declares MIT upstream. Its license file also carries the separate
+  BSD-3-Clause terms for Markdown by John Gruber, which are a historical
+  attribution for Markdown itself rather than code shipped in this report. The
+  upstream file is reproduced verbatim below, including that section.
+
+License text:
+
+    # License information
+
+    ## Contribution License Agreement
+
+    If you contribute code to this project, you are implicitly allowing your code
+    to be distributed under the MIT license. You are also implicitly verifying that
+    all code is your original work. `</legalese>`
+
+    ## Marked
+
+    Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+    Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+
+    ## Markdown
+
+    Copyright © 2004, John Gruber
+    http://daringfireball.net/
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+    * Neither the name “Markdown” nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+    This software is provided by the copyright holders and contributors “as is” and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.

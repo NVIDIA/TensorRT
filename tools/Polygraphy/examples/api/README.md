@@ -33,32 +33,36 @@ will display something like this on `stdout`:
 
 from polygraphy.logger import G_LOGGER
 
+from polygraphy import mod
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
-from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
+from polygraphy.backend.trt import CreateConfig as CreateTrtConfig, EngineBytesFromNetwork, EngineFromBytes, NetworkFromOnnxPath, TrtRunner
 from polygraphy.comparator import Comparator
-import sys
+from polygraphy.exception import PolygraphyException
+trt = mod.lazy_import('tensorrt>=8.5')
 
 # Loaders
-parse_network_from_onnx = NetworkFromOnnxPath('model.onnx')
-build_engine = EngineFromNetwork(parse_network_from_onnx)
+parser_trt_config = CreateTrtConfig()
+parse_network_from_onnx = NetworkFromOnnxPath('model.onnx', config=parser_trt_config)
+build_engine = EngineBytesFromNetwork(parse_network_from_onnx)
+deserialize_engine = EngineFromBytes(build_engine)
 build_onnxrt_session = SessionFromOnnx('model.onnx')
 
 # Runners
 runners = [
-    TrtRunner(build_engine),
+    TrtRunner(deserialize_engine),
     OnnxrtRunner(build_onnxrt_session),
 ]
 
 # Runner Execution
-results = Comparator.run(runners)
+run_stream = Comparator.run(runners, streaming=True)
 
-success = True
+# Comparison Inputs
+runs = [run_stream]
+
 # Accuracy Comparison
-success &= bool(Comparator.compare_accuracy(results))
+success = bool(Comparator.compare_accuracy(runs, compare_func=[None]))
 
 # Report Results
-cmd_run = ' '.join(sys.argv)
 if not success:
-    G_LOGGER.critical(f"FAILED | Command: {cmd_run}"))
-G_LOGGER.finish(f"PASSED | Command: {cmd_run}"))
+    raise PolygraphyException('FAILED')
 ```

@@ -19,7 +19,7 @@ from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.model import ModelArgs
 from polygraphy.tools.args.backend.onnx.loader import OnnxLoadArgs
-from polygraphy.tools.script import make_invocable
+from polygraphy.tools.script import inline, inline_identifier, make_invocable, safe
 
 
 @mod.export()
@@ -45,6 +45,14 @@ class OnnxrtSessionArgs(BaseArgs):
             nargs="+",
             default=None,
         )
+        self.group.add_argument(
+            "--graph-optimization-level",
+            dest="graph_optimization_level",
+            help="The ONNX-Runtime graph optimization level, specified as the ORT enum name "
+            "(e.g. ORT_DISABLE_ALL, ORT_ENABLE_BASIC, ORT_ENABLE_EXTENDED, ORT_ENABLE_ALL). "
+            "Defaults to ORT_ENABLE_ALL (ONNX Runtime's own default).",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -52,8 +60,12 @@ class OnnxrtSessionArgs(BaseArgs):
 
         Attributes:
             providers (List[str]): A list of execution providers.
+            graph_optimization_level (str):
+                    The graph optimization level enum name (e.g. ``ORT_ENABLE_EXTENDED``),
+                    or None to use the ORT default (ORT_ENABLE_ALL).
         """
         self.providers = args_util.get(args, "providers")
+        self.graph_optimization_level = args_util.get(args, "graph_optimization_level")
 
     def add_to_script_impl(self, script, onnx_name=None):
         if onnx_name is None:  # default behavior according to self.arg_groups
@@ -65,8 +77,24 @@ class OnnxrtSessionArgs(BaseArgs):
                 onnx_name = self.arg_groups[ModelArgs].path
 
         script.add_import(imports=["SessionFromOnnx"], frm="polygraphy.backend.onnxrt")
+
+        graph_optimization_level = None
+        if self.graph_optimization_level is not None:
+            script.add_import(imports=["onnxruntime"], imp_as="onnxrt")
+            graph_optimization_level = inline(
+                safe(
+                    "onnxrt.GraphOptimizationLevel.{:}",
+                    inline_identifier(self.graph_optimization_level),
+                )
+            )
+
         loader_name = script.add_loader(
-            make_invocable("SessionFromOnnx", onnx_name, providers=self.providers),
+            make_invocable(
+                "SessionFromOnnx",
+                onnx_name,
+                providers=self.providers,
+                graph_optimization_level=graph_optimization_level,
+            ),
             "build_onnxrt_session",
         )
         return loader_name

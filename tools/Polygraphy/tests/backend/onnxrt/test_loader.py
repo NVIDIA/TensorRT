@@ -32,6 +32,20 @@ class TestSessionFromOnnx:
         assert isinstance(sess, onnxrt.InferenceSession)
         assert sess.get_providers() == ["CPUExecutionProvider"]
 
+    def test_graph_optimization_level_extended(self):
+        # ORT_ENABLE_ALL triggers a SimplifiedLayerNormFusion crash on some
+        # strongly-typed FP16 models (nvbugs/6447529). Verify that passing
+        # ORT_ENABLE_EXTENDED is respected so affected tests can opt in.
+        model = ONNX_MODELS["identity"]
+        sess = SessionFromOnnx(
+            model.loader,
+            graph_optimization_level=onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+        )()
+        assert (
+            sess._sess_options.graph_optimization_level
+            == onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+        )
+
     @pytest.mark.parametrize(
         "providers,expected",
         [
@@ -56,11 +70,20 @@ class TestSessionFromOnnx:
         "providers,expected_dict",
         [
             # Searches for 'tensorrt' as the execution provider's name
-            (["tensorrt", "cpu"], {"TensorrtExecutionProvider": {}, "CPUExecutionProvider": {}}),
+            (
+                ["tensorrt", "cpu"],
+                {"TensorrtExecutionProvider": {}, "CPUExecutionProvider": {}},
+            ),
             # Searches for the execution provider's name if the item is a tuple in the format (EP name, EP options)
             (
-                    [("TensorrtExecutionProvider", {"trt_op_types_to_exclude": "Add"}), "CPUExecutionProvider"],
-                    {"TensorrtExecutionProvider": {"trt_op_types_to_exclude": "Add"}, "CPUExecutionProvider": {}}
+                [
+                    ("TensorrtExecutionProvider", {"trt_op_types_to_exclude": "Add"}),
+                    "CPUExecutionProvider",
+                ],
+                {
+                    "TensorrtExecutionProvider": {"trt_op_types_to_exclude": "Add"},
+                    "CPUExecutionProvider": {},
+                },
             ),
         ],
     )

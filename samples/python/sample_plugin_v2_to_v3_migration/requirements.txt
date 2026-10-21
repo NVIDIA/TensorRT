@@ -3,7 +3,8 @@ cupy-cuda12x
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy
 colored
-numpy==1.26.4
+numpy==1.26.4; python_version<"3.13"
+numpy==2.2.3; python_version>="3.13"
 pywin32; platform_system == "Windows"
 pyyaml==6.0.3
 requests==2.33.0

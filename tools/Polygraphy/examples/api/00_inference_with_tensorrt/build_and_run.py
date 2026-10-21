@@ -17,9 +17,10 @@
 #
 
 """
-This script builds and runs a TensorRT engine with FP16 precision enabled
+This script builds and runs a TensorRT engine with TF32 precision enabled
 starting from an ONNX identity model.
 """
+
 import numpy as np
 from polygraphy.backend.trt import (
     CreateConfig,
@@ -32,13 +33,13 @@ from polygraphy.backend.trt import (
 
 def main():
     # We can compose multiple lazy loaders together to get the desired conversion.
-    # In this case, we want ONNX -> TensorRT Network -> TensorRT engine (w/ fp16).
+    # In this case, we want ONNX -> TensorRT Network -> TensorRT engine (w/ tf32).
     #
     # NOTE: `build_engine` is a *callable* that returns an engine, not the engine itself.
     #   To get the engine directly, you can use the immediately evaluated functional API.
     #   See examples/api/06_immediate_eval_api for details.
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(fp16=True)
+        NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(tf32=True)
     )  # Note that config is an optional argument.
 
     # To reuse the engine elsewhere, we can serialize and save it to a file.

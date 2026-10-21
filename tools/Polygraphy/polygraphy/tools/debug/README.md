@@ -23,7 +23,7 @@ The `debug` tool can help debug accuracy issues during inference.
 
     See the [example](../../../examples/cli/debug/01_debugging_flaky_trt_tactics/) for details.
 
-- `precision` can be used to determine which layers of a TensorRT network need to be
+- [EXPERIMENTAL] `precision` can be used to determine which layers of a TensorRT network need to be
     run in a higher precision in order to maintain the desired accuracy.
 
     The tool works by iteratively marking a subset of the layers in the network in the specified

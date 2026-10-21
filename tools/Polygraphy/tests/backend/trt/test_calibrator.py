@@ -19,7 +19,7 @@ import pytest
 import tensorrt as trt
 import torch
 
-from polygraphy import config, cuda, util
+from polygraphy import config, cuda, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
     CreateConfig,
@@ -37,7 +37,16 @@ from tests.models.meta import ONNX_MODELS
 
 # Skip all tests in this file if TensorRT-RTX is enabled
 if config.USE_TENSORRT_RTX:
-    pytest.skip("Calibrator tests are not compatible with TensorRT-RTX", allow_module_level=True)
+    pytest.skip(
+        "Calibrator tests are not compatible with TensorRT-RTX", allow_module_level=True
+    )
+
+# The INT8 calibrator API (trt.IInt8Calibrator and its subclasses) was removed in
+# TensorRT 11, so these tests cannot run there.
+if mod.version(trt.__version__) >= mod.version("11.0"):
+    pytest.skip(
+        "INT8 calibrator API was removed in TensorRT 11", allow_module_level=True
+    )
 
 
 @pytest.fixture(scope="session")
@@ -49,7 +58,9 @@ def identity_builder_network():
 
 @pytest.fixture(scope="session")
 def dynamic_identity_builder_network():
-    builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["dynamic_identity"].loader)
+    builder, network, parser = network_from_onnx_bytes(
+        ONNX_MODELS["dynamic_identity"].loader
+    )
     with builder, network, parser:
         yield builder, network
 
@@ -69,7 +80,9 @@ def generate_data(num_batches):
 class TestCalibrator:
     def check_calibrator_cleanup(self, calibrator):
         # Calibrator buffers should be freed after the build
-        assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
+        assert all(
+            [buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()]
+        )
 
     @pytest.mark.parametrize(
         "BaseClass",
@@ -108,7 +121,9 @@ class TestCalibrator:
                 shape = (4, 5)
                 yield {
                     "x0": np.zeros(shape, dtype=np.float32),
-                    "x1": cuda.DeviceArray(shape=shape, dtype=np.float32).copy_from(np.ones(shape, dtype=np.float32)),
+                    "x1": cuda.DeviceArray(shape=shape, dtype=np.float32).copy_from(
+                        np.ones(shape, dtype=np.float32)
+                    ),
                     "x2": cuda.DeviceArray(shape=shape, dtype=np.float32)
                     .copy_from(np.ones(shape, dtype=np.float32) * 2)
                     .ptr,
@@ -136,7 +151,9 @@ class TestCalibrator:
 
     # We should be able to mix DeviceView with NumPy arrays and PyTorch tensors.
     @pytest.mark.parametrize("mode", ["array", "view", "pointer", "torch"])
-    def test_calibrator_device_buffers_multiinput(self, multi_input_builder_network, mode):
+    def test_calibrator_device_buffers_multiinput(
+        self, multi_input_builder_network, mode
+    ):
         def generate_dev_data(num_batches):
             with cuda.DeviceArray(shape=(1,), dtype=np.float32) as x:
                 for _ in range(num_batches):
@@ -169,7 +186,9 @@ class TestCalibrator:
         calibrator = Calibrator(generate_data(NUM_BATCHES))
         config.int8_calibrator = calibrator
         runtime = trt.Runtime(get_trt_logger())
-        engine = runtime.deserialize_cuda_engine(builder.build_serialized_network(network, config))
+        engine = runtime.deserialize_cuda_engine(
+            builder.build_serialized_network(network, config)
+        )
 
         assert engine
         self.check_calibrator_cleanup(calibrator)
@@ -256,25 +275,41 @@ class TestCalibrator:
         "expected_meta,meta,should_pass",
         [
             (
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 3, 28, 28)
+                ),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 3, 28, 28)
+                ),
                 True,
             ),
             (
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(-1, None, 28, 28)),
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(-1, None, 28, 28)
+                ),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 3, 28, 28)
+                ),
                 True,
             ),
             # Wrong data type
             (
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
-                TensorMetadata().add(name="input", dtype=np.float64, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 3, 28, 28)
+                ),
+                TensorMetadata().add(
+                    name="input", dtype=np.float64, shape=(1, 3, 28, 28)
+                ),
                 False,
             ),
             # Wrong shape
             (
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
-                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 2, 28, 28)),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 3, 28, 28)
+                ),
+                TensorMetadata().add(
+                    name="input", dtype=np.float32, shape=(1, 2, 28, 28)
+                ),
                 False,
             ),
         ],
@@ -290,7 +325,9 @@ class TestCalibrator:
         calibrator.set_input_metadata(expected_meta)
 
         with calibrator:
-            assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass
+            assert (
+                calibrator.get_batch(list(expected_meta.keys())) is not None
+            ) == should_pass
         self.check_calibrator_cleanup(calibrator)
 
     def test_calibrator_forces_float32_data(self):
@@ -322,7 +359,11 @@ class TestCalibrator:
         create_config = CreateConfig(
             int8=True,
             calibrator=calibrator,
-            profiles=[Profile().add(name="X", min=(1, 2, 1, 1), opt=(1, 2, 2, 2), max=(1, 2, 4, 4))],
+            profiles=[
+                Profile().add(
+                    name="X", min=(1, 2, 1, 1), opt=(1, 2, 2, 2), max=(1, 2, 4, 4)
+                )
+            ],
         )
         with engine_from_network((builder, network), create_config) as engine:
             assert calibrator.num_batches == 2

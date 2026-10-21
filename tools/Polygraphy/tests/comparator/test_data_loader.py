@@ -22,9 +22,21 @@ import pytest
 
 from polygraphy import constants, util
 from polygraphy.common import TensorMetadata
-from polygraphy.comparator import DataLoader
-from polygraphy.comparator.data_loader import DataLoaderCache
+from polygraphy.comparator import (
+    DataLoader,
+    IterationResult,
+    RunResults,
+    StreamingDataLoader,
+)
+from polygraphy.comparator.data_loader import (
+    DataLoaderCache,
+    check_feed_dict,
+    coerce_buffer,
+    coerce_feed_dict,
+)
 from polygraphy.datatype import DataType
+from polygraphy.json import save_json
+from tests.comparator._helpers import _single_iteration
 from tests.models.meta import ONNX_MODELS
 from polygraphy.exception import PolygraphyException
 
@@ -214,17 +226,49 @@ class TestDataLoader:
         data_loader.input_metadata = input_meta
 
         assert util.array.is_torch(data_loader[0]["X"])
-    
-    @pytest.mark.parametrize("name, should_match", [
-        ("inp_*",      [True for _ in range(12)]),
-        ("inp_?",      [False, False, False, *[True for _ in range(9)]]),
-        ("inp_[abc]",  [*[False for _ in range(6)], True, True, True, False, False, False]),
-        ("inp_[!abc]", [False, False, False, True, True, True, False, False, False, True, True, True]),
-    ])
+
+    @pytest.mark.parametrize(
+        "name, should_match",
+        [
+            ("inp_*", [True for _ in range(12)]),
+            ("inp_?", [False, False, False, *[True for _ in range(9)]]),
+            (
+                "inp_[abc]",
+                [*[False for _ in range(6)], True, True, True, False, False, False],
+            ),
+            (
+                "inp_[!abc]",
+                [
+                    False,
+                    False,
+                    False,
+                    True,
+                    True,
+                    True,
+                    False,
+                    False,
+                    False,
+                    True,
+                    True,
+                    True,
+                ],
+            ),
+        ],
+    )
     def test_input_name_with_wildcards(self, name, should_match):
         match_case = [
-            "inp_foo", "inp_bar", "inp_123", "inp_1", "inp_s", "inp_k",
-            "inp_a", "inp_b", "inp_c", "inp_d", "inp_e", "inp_f",
+            "inp_foo",
+            "inp_bar",
+            "inp_123",
+            "inp_1",
+            "inp_s",
+            "inp_k",
+            "inp_a",
+            "inp_b",
+            "inp_c",
+            "inp_d",
+            "inp_e",
+            "inp_f",
         ]
         input_meta = TensorMetadata().add(name, dtype=np.float32, shape=(2, 2, 3))
         data_loader = DataLoader(input_metadata=input_meta)
@@ -233,7 +277,8 @@ class TestDataLoader:
             data_loader.input_metadata.add(case, dtype=np.float32, shape=(-1, 2, 3))
 
         res = [data_loader[0][name].shape == (2, 2, 3) for name in data_loader[0]]
-        assert res == should_match 
+        assert res == should_match
+
 
 build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
 
@@ -300,3 +345,100 @@ class TestDataLoaderCache:
         feed_dict = cache[0]
         assert list(feed_dict.keys()) == ["X"]
         assert util.array.all(feed_dict["X"] == 0)
+
+
+class TestStreamingDataLoader:
+    # Note: directory loading of full file contents is covered by test_expands_multi_iteration_file,
+    # and non-numeric file discovery/ordering by tests/util/test_serde.py::TestListIterationFiles.
+    def test_rejects_directory_when_disallowed(self, tmp_path):
+        # allow_dirs=False enforces the files-only contract, at iteration time.
+        with pytest.raises(PolygraphyException, match="it is a directory"):
+            list(StreamingDataLoader([str(tmp_path)], allow_dirs=False))
+
+    def test_expands_multi_iteration_file(self, tmp_path):
+        # A single input file may hold a JSON list of feed_dicts; each is yielded as its own iteration.
+        save_json({"x": np.zeros((1,), dtype=np.float32)}, str(tmp_path / "0.json"))
+        save_json(
+            [
+                {"x": np.ones((1,), dtype=np.float32)},
+                {"x": np.full((1,), 2.0, dtype=np.float32)},
+            ],
+            str(tmp_path / "1.json"),
+        )
+        feeds = list(StreamingDataLoader([str(tmp_path)]))
+        assert len(feeds) == 3  # 1 from 0.json + 2 from the list in 1.json
+
+    @pytest.mark.parametrize("path_type", [str, lambda p: p], ids=["str", "pathlib"])
+    def test_accepts_single_path(self, tmp_path, path_type):
+        # Both str and pathlib.Path are normalized to a single-item input, not iterated.
+        single = tmp_path / "0.json"
+        save_json({"x": np.zeros((1,), dtype=np.float32)}, str(single))
+        assert len(list(StreamingDataLoader(path_type(single)))) == 1
+
+    def test_empty_directory_yields_nothing(self, tmp_path):
+        # A directory with no .json files produces an empty iteration, not an error.
+        feeds = list(StreamingDataLoader([str(tmp_path)]))
+        assert feeds == []
+
+
+class TestCoerceFeedDict:
+    METADATA = TensorMetadata().add("x", DataType.FLOAT32, (2,))
+
+    def test_casts_dtype(self):
+        coerced = coerce_feed_dict(
+            {"x": np.zeros((2,), dtype=np.float64)}, self.METADATA
+        )
+        assert util.array.dtype(coerced["x"]) == DataType.FLOAT32
+
+    def test_matches_name_by_position(self):
+        # The buffer name differs from the expected name, but is matched positionally.
+        coerced = coerce_feed_dict(
+            {"y": np.zeros((2,), dtype=np.float32)}, self.METADATA
+        )
+        assert list(coerced.keys()) == ["x"]
+
+    def test_missing_input_is_fatal(self):
+        with pytest.raises(PolygraphyException, match="Does not exist"):
+            coerce_feed_dict({}, self.METADATA)
+
+    def test_fallback_failure_is_actionable(self):
+        # When a buffer cannot be coerced and the fallback also fails, the error explains the real cause.
+        def failing_fallback(name):
+            raise RuntimeError("cannot reload")
+
+        with pytest.raises(PolygraphyException, match="could not reload"):
+            coerce_feed_dict(
+                {
+                    "x": np.zeros((5,), dtype=np.float32)
+                },  # wrong shape, cannot coerce to (2,)
+                self.METADATA,
+                fallback=failing_fallback,
+            )
+
+
+class TestCoerceBuffer:
+    def test_casts_and_reshapes(self):
+        buffer = coerce_buffer(
+            np.zeros((4,), dtype=np.float64), "x", DataType.FLOAT32, (2, 2)
+        )
+        assert util.array.dtype(buffer) == DataType.FLOAT32
+        assert util.array.shape(buffer) == (2, 2)
+
+
+class TestCheckFeedDict:
+    def test_accepts_feed_dict(self):
+        # A real feed_dict passes silently.
+        check_feed_dict({"x": np.zeros((1,), dtype=np.float32)})
+
+    def test_run_results_gets_data_merge_hint(self):
+        # A RunResults (e.g. from --save-outputs) is a common mistake, so the error points at `data merge`.
+        run_results = _single_iteration({"A": [0.0]})
+        with pytest.raises(PolygraphyException, match="data merge"):
+            check_feed_dict(run_results)
+
+    def test_non_dict_omits_data_merge_hint(self):
+        # A non-RunResults non-feed_dict must NOT mention `data merge`, which would mislead.
+        with pytest.raises(
+            PolygraphyException, match="cannot be recognized as a feed_dict"
+        ):
+            check_feed_dict([1, 2, 3])

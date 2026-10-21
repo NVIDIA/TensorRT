@@ -18,7 +18,7 @@ a function called `load_config` which accepts a builder and network and returns 
 In this example, the included `define_network.py` script parses an ONNX model and appends an identity
 layer to it. Since it returns the builder, network, and parser in a function called `load_network`,
 we can build and run a TensorRT engine from it using just a single command. The `create_config.py`
-script creates a new TensorRT builder configuration and enables FP16 mode.
+script creates a new TensorRT builder configuration and enables TF32 mode.
 
 
 ### TIP: Generating Script Templates Automatically
@@ -44,10 +44,10 @@ polygraphy template trt-config -o my_create_config.py
 ```
 
 You can also specify builder configuration options to pre-populate the script.
-For example, to enable FP16 mode:
+For example, to enable TF32 mode:
 
 ```bash
-polygraphy template trt-config --fp16 -o my_create_config.py
+polygraphy template trt-config --tf32 -o my_create_config.py
 ```
 
 

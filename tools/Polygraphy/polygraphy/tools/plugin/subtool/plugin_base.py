@@ -50,7 +50,7 @@ class PluginBase(Tool):
 
     GRAPH_PATTERN_FILE_NAME = "pattern.py"
 
-    def __init__(self, list_plugins:bool, name=None):
+    def __init__(self, list_plugins: bool, name=None):
         super().__init__(name)
         self.list_plugins = list_plugins
 
@@ -86,13 +86,21 @@ class PluginBase(Tool):
         self.match_plugin(
             model_file=args.model_file,
             plugin_dir=args.plugin_dir,
-            output_file=args_util.get(args,"output"),
+            output_file=args_util.get(args, "output"),
             include_list=args.include,
             exclude_list=args.exclude,
-            list_plugins=self.list_plugins
+            list_plugins=self.list_plugins,
         )
 
-    def match_plugin(self, model_file, plugin_dir, output_file=None, include_list=None, exclude_list=None, list_plugins=False):
+    def match_plugin(
+        self,
+        model_file,
+        plugin_dir,
+        output_file=None,
+        include_list=None,
+        exclude_list=None,
+        list_plugins=False,
+    ):
         """
         find matching subgraphs based on plugin pattern
         """
@@ -120,18 +128,32 @@ class PluginBase(Tool):
             G_LOGGER.info(f"checking {plugin} in model")
             plugin_yaml = {}
 
-            plugin_pattern_loc = os.path.join(plugin_dir, plugin, self.GRAPH_PATTERN_FILE_NAME)
+            plugin_pattern_loc = os.path.join(
+                plugin_dir, plugin, self.GRAPH_PATTERN_FILE_NAME
+            )
             # create a new graph in every iteration, in case the pattern matching modifies the graph
-            graph = gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx()) if self.arg_groups else gs.import_onnx(onnx.load(model_file))
+            graph = (
+                gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx())
+                if self.arg_groups
+                else gs.import_onnx(onnx.load(model_file))
+            )
 
-            #get inputs, outputs, attributes from plugin
-            G_LOGGER.ultra_verbose(f"calling get_matching_subgraphs from {plugin_pattern_loc}")
-            ioattrs = common_backend.invoke_from_script(plugin_pattern_loc, "get_matching_subgraphs", graph)
+            # get inputs, outputs, attributes from plugin
+            G_LOGGER.ultra_verbose(
+                f"calling get_matching_subgraphs from {plugin_pattern_loc}"
+            )
+            ioattrs = common_backend.invoke_from_script(
+                plugin_pattern_loc, "get_matching_subgraphs", graph
+            )
 
             if ioattrs:
                 G_LOGGER.ultra_verbose("match found")
-                plugin_yaml["name"] = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_metadata")['name']
-                plugin_yaml["op"] = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_metadata")['op']
+                plugin_yaml["name"] = common_backend.invoke_from_script(
+                    plugin_pattern_loc, "get_plugin_metadata"
+                )["name"]
+                plugin_yaml["op"] = common_backend.invoke_from_script(
+                    plugin_pattern_loc, "get_plugin_metadata"
+                )["op"]
                 plugin_yaml["instances"] = ioattrs
                 out_yaml.append(plugin_yaml)
                 plugin_frequency[plugin] += len(ioattrs)
@@ -141,7 +163,9 @@ class PluginBase(Tool):
         if list_plugins:
             return
 
-        config_yaml = output_file or os.path.abspath(os.path.join(os.path.dirname(model_file),"config.yaml"))
+        config_yaml = output_file or os.path.abspath(
+            os.path.join(os.path.dirname(model_file), "config.yaml")
+        )
 
         with open(config_yaml, "w") as stream:
             yaml.dump_all(out_yaml, stream, default_flow_style=False, sort_keys=False)

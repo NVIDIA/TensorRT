@@ -256,6 +256,7 @@ inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t in
 
 namespace samplesSafeCommon
 {
+#if !TRT_WINML
 //! Represents the compute capability of a device.
 //! This pertains to virtual architectures represented by the intermediate PTX format.
 //! This is distinct from the SM version.
@@ -291,6 +292,7 @@ inline bool isSmSafe()
     return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
         || smVersion == 0x0A00 || smVersion == 0x0B00;
 }
+#endif
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
 {

@@ -1,6 +1,0 @@
-__pycache__/
-onnx/
-engine/
-output/
-pytorch_model/
-artifacts_cache/

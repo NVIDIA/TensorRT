@@ -102,6 +102,14 @@ class TrtOnnxFlagArgs(BaseArgs):
             action="store_true",
             default=None,
         )
+        self.group.add_argument(
+            "--enable-uint8-asymmetric-quantization-dla",
+            help="[DEPRECATED - use `--onnx-flags ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` instead] "
+            "Switch to set the `trt.OnnxParserFlag.ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` flag "
+            "to enable uint8 and asymmetric quantization for DLA.",
+            action="store_true",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -114,6 +122,9 @@ class TrtOnnxFlagArgs(BaseArgs):
         self._plugin_instancenorm = args_util.get(
             args, "plugin_instancenorm", default=None
         )
+        self._enable_uint8_asymmetric_quantization_dla = args_util.get(
+            args, "enable_uint8_asymmetric_quantization_dla", default=None
+        )
 
     def get_flags(self):
         """
@@ -122,6 +133,19 @@ class TrtOnnxFlagArgs(BaseArgs):
         Flags should not be accessed directly.
         """
         flags = copy.copy(self._flags) or []
+
+        if self._enable_uint8_asymmetric_quantization_dla is not None:
+            mod.warn_deprecated(
+                "--enable-uint8-asymmetric-quantization-dla",
+                "`--onnx-flags ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA`",
+                "0.55.0",
+                always_show_warning=True,
+            )
+            if self._enable_uint8_asymmetric_quantization_dla and (
+                "enable_uint8_and_asymmetric_quantization_dla"
+                not in [f.lower() for f in flags]
+            ):
+                flags.append("ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA")
         if (
             TrtConfigArgs in self.arg_groups
             and (
@@ -135,10 +159,9 @@ class TrtOnnxFlagArgs(BaseArgs):
             )
             flags.append("native_instancenorm")
 
-        return (
-            [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None,
-            self._plugin_instancenorm,
-        )
+        parser_flags = [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None
+
+        return parser_flags, self._plugin_instancenorm
 
 
 @mod.export()
@@ -152,6 +175,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         - TrtLoadPluginsArgs
         - OnnxLoadArgs: if allow_onnx_loading == True
         - TrtOnnxFlagArgs
+        - TrtConfigArgs: if support for some ONNX parser flags is required
     """
 
     def __init__(
@@ -170,25 +194,36 @@ class TrtLoadNetworkArgs(BaseArgs):
                     Defaults to True.
             allow_tensor_formats (bool):
                     Whether to allow tensor formats and related options to be set.
-                    Defaults to False.
+                    Defaults to True.
         """
         super().__init__()
         self._allow_custom_outputs = util.default(allow_custom_outputs, True)
         self._allow_onnx_loading = util.default(allow_onnx_loading, True)
-        self._allow_tensor_formats = util.default(allow_tensor_formats, False)
+        self._allow_tensor_formats = util.default(allow_tensor_formats, True)
 
     def add_parser_args_impl(self):
         if self._allow_custom_outputs:
             self.group.add_argument(
                 "--trt-outputs",
                 help="Name(s) of TensorRT output(s). "
-                "Using '--trt-outputs mark all' indicates that all tensors should be used as outputs",
+                "Supports fnmatch wildcard patterns (e.g. 'conv_*'). "
+                "Using '*' alone marks all tensors as outputs.",
                 nargs="+",
                 default=None,
             )
             self.group.add_argument(
                 "--trt-exclude-outputs",
-                help="[EXPERIMENTAL] Name(s) of TensorRT output(s) to unmark as outputs.",
+                help="[EXPERIMENTAL] Name(s) of TensorRT output(s) to unmark as outputs. "
+                "Supports fnmatch wildcard patterns (e.g. 'conv_*').",
+                nargs="+",
+                default=None,
+            )
+            self.group.add_argument(
+                "--trt-outputs-by-type",
+                help="TensorRT layer type name(s) (case-insensitive) whose output tensors should be marked as outputs. "
+                "Names are matched against trt.LayerType enum values. "
+                "For example, '--trt-outputs-by-type CONVOLUTION ACTIVATION'. "
+                "If a type is not found, similar layer types are suggested.",
                 nargs="+",
                 default=None,
             )
@@ -204,12 +239,30 @@ class TrtLoadNetworkArgs(BaseArgs):
         )
 
         self.group.add_argument(
+            "--decomposable-attentions",
+            help="Mark all IAttention layers as decomposable, allowing TRT to fall back to "
+            "decomposed kernels when no dedicated fused attention kernel is available. "
+            "Corresponds to IAttention::setDecomposable(true) in the TensorRT API.",
+            action="store_true",
+            default=None,
+        )
+
+        self.group.add_argument(
             "--tensor-dtypes",
             "--tensor-datatypes",
             help="Data type to use for each network I/O tensor. This should be specified on a per-tensor basis, using the format: "
             "--tensor-datatypes <tensor_name>:<tensor_datatype>. Data type values come from the TensorRT data type aliases, like "
             "float32, float16, int8, bool, etc. For example: --tensor-datatypes example_tensor:float16 other_tensor:int8. ",
             nargs="+",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--all-tensor-dtypes",
+            "--all-tensor-datatypes",
+            help="Shorthand to set all I/O tensors to the same type. This argument should be set using the format: "
+            "--all-tensor-datatypes <tensor_datatype>. Data type values come from the TensorRT data type aliases, like "
+            "float32, float16, int8, bool, etc. For example: --all-tensor-datatypes float16. ",
             default=None,
         )
 
@@ -224,13 +277,15 @@ class TrtLoadNetworkArgs(BaseArgs):
                 default=None,
             )
 
-        self.group.add_argument(
-            "--trt-network-func-name",
-            help="[DEPRECATED - function name can be specified alongside the script like so: `my_custom_script.py:my_func`] "
-            "When using a trt-network-script instead of other model types, this specifies the name "
-            "of the function that loads the network. Defaults to `load_network`.",
-            default=None,
-        )
+            self.group.add_argument(
+                "--all-tensor-formats",
+                help="Shorthand for specifying the same set of allowed formats for all I/O tensors. Values should be in the format: "
+                "--all-tensor-formats <tensor_format1> [<tensor_format2> ...]. Format values come from the `trt.TensorFormat` enum "
+                "and are case-insensitve. "
+                "For example: --all-tensor-formats linear, chw16.",
+                nargs="+",
+                default=None,
+            )
 
         self.group.add_argument(
             "--trt-network-postprocess-script",
@@ -273,11 +328,14 @@ class TrtLoadNetworkArgs(BaseArgs):
 
         Attributes:
             outputs (List[str]): Names of output tensors.
+            mark_layer_types (List[str]): Layer type names (matched against trt.LayerType) whose output tensors should be marked as outputs.
             exclude_outputs (List[str]): Names of tensors which should be unmarked as outputs.
-            trt_network_func_name (str): The name of the function in a custom network script that creates the network.
             layer_precisions (Dict[str, str]): Layer names mapped to their desired compute precision, in string form.
-            tensor_datatypes (Dict[str, str]): Tensor names mapped to their desired data types, in string form.
-            tensor_formats (Dict[str, List[str]]): Tensor names mapped to their desired formats, in string form.
+            decomposable_attentions (bool): Whether to mark all IAttention layers as decomposable.
+            tensor_datatypes (Dict[str, str]) or str: Tensor names mapped to a list of their desired data types, in string form,
+                    or a single datatype in string form to apply to all I/O tensors.
+            tensor_formats (Dict[str, List[str]]) or List[str]: Tensor names mapped to a list of their desired formats, in string form,
+                    or a list of formats in string form to apply to all I/O tensors.
             postprocess_scripts (List[Tuple[str, str]]):
                     A list of tuples specifying a path to a network postprocessing script and the name of the postprocessing function.
             strongly_typed (bool): Whether to mark the network as being strongly typed.
@@ -285,10 +343,9 @@ class TrtLoadNetworkArgs(BaseArgs):
             mark_unfused_tensors_as_debug_tensors (bool): Whether to mark unfused tensors as debug tensors.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
+        self.mark_layer_types = args_util.get(args, "trt_outputs_by_type")
 
         self.exclude_outputs = args_util.get(args, "trt_exclude_outputs")
-
-        self.trt_network_func_name = args_util.get(args, "trt_network_func_name")
 
         layer_precisions = args_util.parse_arglist_to_dict(
             args_util.get(args, "layer_precisions"), allow_empty_key=False
@@ -300,6 +357,8 @@ class TrtLoadNetworkArgs(BaseArgs):
                 for name, value in layer_precisions.items()
             }
 
+        self.decomposable_attentions = args_util.get(args, "decomposable_attentions")
+
         tensor_datatypes = args_util.parse_arglist_to_dict(
             args_util.get(args, "tensor_dtypes"), allow_empty_key=False
         )
@@ -309,6 +368,16 @@ class TrtLoadNetworkArgs(BaseArgs):
                 name: inline(safe("trt.{}", inline_identifier(value)))
                 for name, value in tensor_datatypes.items()
             }
+
+        all_tensor_datatypes = args_util.get(args, "all_tensor_dtypes")
+        if all_tensor_datatypes is not None:
+            if self.tensor_datatypes is not None:
+                G_LOGGER.warning(
+                    "Both --all-tensor-datatypes and --tensor-datatypes were provided. Only types in --all-tensor-datatypes will be applied."
+                )
+            self.tensor_datatypes = inline(
+                safe("trt.{}", inline_identifier(all_tensor_datatypes))
+            )
 
         tensor_formats = args_util.parse_arglist_to_dict(
             args_util.get(args, "tensor_formats"), allow_empty_key=False
@@ -324,6 +393,17 @@ class TrtLoadNetworkArgs(BaseArgs):
                 ]
                 for name, values in tensor_formats.items()
             }
+
+        all_tensor_formats = args_util.get(args, "all_tensor_formats")
+        if all_tensor_formats is not None:
+            if self.tensor_formats is not None:
+                G_LOGGER.warning(
+                    "Both --all-tensor-formats and --tensor-formats were provided. Only formats in --all-tensor-formats will be applied."
+                )
+            self.tensor_formats = [
+                inline(safe("trt.TensorFormat.{}", inline_identifier(name.upper())))
+                for name in all_tensor_formats
+            ]
 
         pps = args_util.parse_arglist_to_tuple_list(
             args_util.get(args, "trt_network_postprocess_script"),
@@ -349,19 +429,18 @@ class TrtLoadNetworkArgs(BaseArgs):
 
     def add_to_script_impl(self, script):
         network_func_name = self.arg_groups[ModelArgs].extra_model_info
-        if self.trt_network_func_name is not None:
-            mod.warn_deprecated(
-                "--trt-network-func-name",
-                "the model argument",
-                "0.50.0",
-                always_show_warning=True,
-            )
-            network_func_name = self.trt_network_func_name
 
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
         parser_flags, plugin_instancenorm = self.arg_groups[TrtOnnxFlagArgs].get_flags()
+
+        # Get config loader if TrtConfigArgs is available (needed for some ONNX parser flags)
+        config_loader_name = None
+        if TrtConfigArgs in self.arg_groups:
+            config_loader_name = self.arg_groups[TrtConfigArgs].add_to_script(
+                script, "parser_trt_config"
+            )
 
         if any(
             arg is not None
@@ -373,7 +452,9 @@ class TrtLoadNetworkArgs(BaseArgs):
                 plugin_instancenorm,
             ]
         ):
-            script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
+            script.add_import(
+                imports=tensorrt_module_and_version_string(), imp_as="trt"
+            )
 
         if model_type == "trt-network-script":
             script.add_import(
@@ -406,6 +487,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                     mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors,
+                    config=config_loader_name,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
@@ -421,6 +503,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                     mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors,
+                    config=config_loader_name,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
@@ -454,12 +537,19 @@ class TrtLoadNetworkArgs(BaseArgs):
             "set_network_outputs",
             outputs=outputs,
             exclude_outputs=self.exclude_outputs,
+            mark_layer_types=self.mark_layer_types,
         )
         loader_name = add_loader_if_nondefault(
             "SetLayerPrecisions",
             "set_layer_precisions",
             layer_precisions=self.layer_precisions,
         )
+        if self.decomposable_attentions:
+            script.add_import(
+                imports=["SetDecomposableAttentions"], frm="polygraphy.backend.trt"
+            )
+            loader_str = make_invocable("SetDecomposableAttentions", loader_name)
+            loader_name = script.add_loader(loader_str, "set_decomposable_attentions")
         loader_name = add_loader_if_nondefault(
             "SetTensorDatatypes",
             "set_tensor_datatypes",
@@ -479,7 +569,8 @@ class TrtLoadNetworkArgs(BaseArgs):
         Loads a TensorRT Network model according to arguments provided on the command-line.
 
         Returns:
-            tensorrt.INetworkDefinition
+            Tuple[trt.Builder, trt.INetworkDefinition, Optional[trt.OnnxParser]]:
+                    A tuple containing the TensorRT builder, network, and optionally the parser.
         """
         loader = args_util.run_script(self.add_to_script)
         return loader()
@@ -686,9 +777,6 @@ class TrtLoadEngineBytesArgs(BaseArgs):
                 script
             )
 
-        script.add_import(
-            imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt"
-        )
         config_loader_name = self.arg_groups[TrtConfigArgs].add_to_script(script)
 
         script.add_import(
@@ -748,6 +836,15 @@ class TrtLoadEngineArgs(BaseArgs):
             "engine that excludes the lean runtime. ",
             default=None,
         )
+        self.group.add_argument(
+            "--dla-workspace-allocation-strategy",
+            help="The DLA workspace allocation strategy to use when deserializing an engine. "
+            "Values come from the names in `trt.DLAWorkspaceAllocationStrategy` and are case-insensitive. "
+            "Requires TensorRT 11.3 or later. "
+            "For example, `default` or `shared_static`. The shared strategy can reduce memory when "
+            "multiple DLA engines are loaded on the same core, but those engines must not run concurrently. ",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -755,12 +852,24 @@ class TrtLoadEngineArgs(BaseArgs):
 
         Attributes:
             load_runtime (str):
-                    Path rom which to load a runtime that can be used to load a
+                    Path from which to load a runtime that can be used to load a
                     version compatible engine that excludes the lean runtime.
+            dla_workspace_allocation_strategy (str):
+                    The DLA workspace allocation strategy used when deserializing
+                    the engine.
         """
         self.load_runtime = args_util.parse_path(
             args_util.get(args, "load_runtime"), "Runtime"
         )
+        self.dla_workspace_allocation_strategy = None
+        dla_workspace_allocation_strategy = args_util.get(
+            args, "dla_workspace_allocation_strategy"
+        )
+        if dla_workspace_allocation_strategy is not None:
+            self.dla_workspace_allocation_strategy = make_trt_enum_val(
+                "DLAWorkspaceAllocationStrategy",
+                dla_workspace_allocation_strategy,
+            )
 
     def add_to_script_impl(self, script, network_name=None):
         """
@@ -772,6 +881,11 @@ class TrtLoadEngineArgs(BaseArgs):
         )
 
         script.add_import(imports=["EngineFromBytes"], frm="polygraphy.backend.trt")
+
+        if self.dla_workspace_allocation_strategy is not None:
+            script.add_import(
+                imports=tensorrt_module_and_version_string(), imp_as="trt"
+            )
 
         runtime_loader = None
         if self.load_runtime is not None:
@@ -787,6 +901,7 @@ class TrtLoadEngineArgs(BaseArgs):
                     script, load_serialized_engine
                 ),
                 runtime=runtime_loader,
+                dla_workspace_allocation_strategy=self.dla_workspace_allocation_strategy,
             ),
             "deserialize_engine",
         )

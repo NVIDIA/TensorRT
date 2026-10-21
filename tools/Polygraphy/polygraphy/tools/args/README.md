@@ -35,7 +35,7 @@ These helpers typically use the `run_script` method from `polygraphy.tools.args.
 
 ## Usage
 
-Tools can subscribe to argument groups by implementing the `get_subscriptions()` interface defined in [tool.py](../base/tool.py).
+Tools can subscribe to argument groups by implementing the `get_subscriptions_impl()` method (which backs the `get_subscriptions()` interface) defined in [tool.py](../base/tool.py).
 This will add all the command-line options provided by the argument group to the tool, and these will be parsed
 automatically before the tool's `run` method is called.
 The tool can then access the argument groups via `self.arg_groups`.

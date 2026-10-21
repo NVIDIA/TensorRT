@@ -27,9 +27,4 @@ class Template(Tool):
         super().__init__("template")
 
     def get_subtools_impl(self):
-        return "Template Subtools", [
-            TrtNetwork(),
-            TrtConfig(),
-            OnnxGs(),
-            ShardHint()
-        ]
+        return "Template Subtools", [TrtNetwork(), TrtConfig(), OnnxGs(), ShardHint()]

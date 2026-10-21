@@ -23,8 +23,7 @@
 //! for its child fork+execs. Each branch does its own parseArgs.
 int main(int argc, char** argv)
 {
-    if (sample::peekArg(argc, argv, "--tuneBuildRoutes")
-        || sample::peekArg(argc, argv, "--tuneBuildRouteFile")
+    if (sample::peekArg(argc, argv, "--tuneBuildRoutes") || sample::peekArg(argc, argv, "--tuneBuildRouteFile")
         || sample::peekArg(argc, argv, "--continue"))
     {
         return sample::runTuningLoop(argc, argv);

@@ -135,7 +135,7 @@ class TrtConfigArgs(BaseArgs):
                     Defaults to False.
             allow_tensor_formats (bool):
                     Whether to allow tensor formats and related options to be set.
-                    Defaults to False.
+                    Defaults to True.
             allow_compute_capabilities (bool):
                     Whether to allow compute capabilities options to be set.
                     Defaults to False.
@@ -149,8 +149,10 @@ class TrtConfigArgs(BaseArgs):
         )
         self._allow_custom_input_shapes = util.default(allow_custom_input_shapes, True)
         self._allow_engine_capability = util.default(allow_engine_capability, False)
-        self._allow_tensor_formats = util.default(allow_tensor_formats, False)
-        self._allow_compute_capabilities = util.default(allow_compute_capabilities, False)
+        self._allow_tensor_formats = util.default(allow_tensor_formats, True)
+        self._allow_compute_capabilities = util.default(
+            allow_compute_capabilities, False
+        )
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -329,13 +331,6 @@ class TrtConfigArgs(BaseArgs):
             "TensorRT builder configuration. When this option is specified, all other config arguments are ignored. "
             "By default, Polygraphy looks for a function called `load_config`. You can specify a custom function name "
             "by separating it with a colon. For example: `my_custom_script.py:my_func`",
-            default=None,
-        )
-        self.group.add_argument(
-            "--trt-config-func-name",
-            help="[DEPRECATED - function name can be specified with --trt-config-script like so: `my_custom_script.py:my_func`]"
-            "When using a trt-config-script, this specifies the name of the function "
-            "that creates the config. Defaults to `load_config`. ",
             default=None,
         )
         self.group.add_argument(
@@ -630,16 +625,6 @@ class TrtConfigArgs(BaseArgs):
             default_func_name="postprocess_config",
         )
 
-        func_name = args_util.get(args, "trt_config_func_name")
-        if func_name is not None:
-            mod.warn_deprecated(
-                "--trt-config-func-name",
-                "the config script argument",
-                "0.50.0",
-                always_show_warning=True,
-            )
-            self.trt_config_func_name = func_name
-
         self.use_dla = args_util.get(args, "use_dla")
         self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
 
@@ -685,9 +670,7 @@ class TrtConfigArgs(BaseArgs):
             )
 
         self.runtime_platform = None
-        runtime_platform = args_util.get(
-            args, "runtime_platform"
-        )
+        runtime_platform = args_util.get(args, "runtime_platform")
         if runtime_platform is not None:
             self.runtime_platform = make_trt_enum_val(
                 "RuntimePlatform", runtime_platform
@@ -728,9 +711,7 @@ class TrtConfigArgs(BaseArgs):
         self.weight_streaming = args_util.get(args, "weight_streaming")
 
         self.tiling_optimization_level = None
-        tiling_optimization_level = args_util.get(
-            args, "tiling_optimization_level"
-        )
+        tiling_optimization_level = args_util.get(args, "tiling_optimization_level")
         if tiling_optimization_level is not None:
             self.tiling_optimization_level = make_trt_enum_val(
                 "TilingOptimizationLevel", tiling_optimization_level
@@ -749,14 +730,21 @@ class TrtConfigArgs(BaseArgs):
                 try:
                     capabilities = []
                     for cap_str in compute_capabilities_list:
-                        major, minor = map(int, cap_str.split('.'))
+                        major, minor = map(int, cap_str.split("."))
                         capabilities.append((major, minor))
                     self.compute_capabilities = capabilities
                 except ValueError:
-                    G_LOGGER.critical(f"Invalid compute capabilities format: {compute_capabilities_list}. "
-                                      "Expected format: space-separated 'major.minor' versions (e.g., '7.5 8.0').")
+                    G_LOGGER.critical(
+                        f"Invalid compute capabilities format: {compute_capabilities_list}. "
+                        "Expected format: space-separated 'major.minor' versions (e.g., '7.5 8.0')."
+                    )
 
-    def add_to_script_impl(self, script):
+    def add_to_script_impl(self, script, custom_loader_name=None):
+        # If a custom loader name is provided, we assume we always want the loader.
+        custom_loader_name_provided = custom_loader_name is not None
+        if custom_loader_name is None:
+            custom_loader_name = "create_trt_config"
+
         profiles = []
         for profile_dict in self.profile_dicts:
             profile_str = "Profile()"
@@ -794,7 +782,9 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
             data_loader_name = self.arg_groups[DataLoaderArgs].add_to_script(script)
             if self.calibration_base_class:
-                script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
+                script.add_import(
+                    imports=tensorrt_module_and_version_string(), imp_as="trt"
+                )
 
             if (
                 self.arg_groups[DataLoaderArgs].is_using_random_data()
@@ -849,7 +839,9 @@ class TrtConfigArgs(BaseArgs):
                 self.compute_capabilities,
             ]
         ):
-            script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
+            script.add_import(
+                imports=tensorrt_module_and_version_string(), imp_as="trt"
+            )
 
         if self.trt_config_script is not None:
             script.add_import(
@@ -910,10 +902,12 @@ class TrtConfigArgs(BaseArgs):
                 weight_streaming=self.weight_streaming,
                 runtime_platform=self.runtime_platform,
                 tiling_optimization_level=self.tiling_optimization_level,
-                **extra_args
+                **extra_args,
             )
-            
-            if config_loader_str is None and polygraphy_config.USE_TENSORRT_RTX:
+
+            if config_loader_str is None and (
+                polygraphy_config.USE_TENSORRT_RTX or custom_loader_name_provided
+            ):
                 config_loader_str = make_invocable(config_alias)
 
             if config_loader_str is not None:
@@ -930,9 +924,9 @@ class TrtConfigArgs(BaseArgs):
                         imp_as=config_alias,
                     )
 
-        if config_loader_str is not None:
+        if config_loader_str is not None or custom_loader_name_provided:
             config_loader_name = script.add_loader(
-                config_loader_str, "create_trt_config"
+                config_loader_str, custom_loader_name, force=custom_loader_name_provided
             )
         else:
             config_loader_name = None
@@ -946,7 +940,9 @@ class TrtConfigArgs(BaseArgs):
                     imp_as="CreateTrtConfig",
                 )
                 config_loader_name = script.add_loader(
-                    make_invocable("CreateTrtConfig"), "create_trt_config"
+                    make_invocable("CreateTrtConfig"),
+                    custom_loader_name,
+                    force=custom_loader_name_provided,
                 )
 
             script.add_import(
@@ -986,9 +982,11 @@ class TrtConfigArgs(BaseArgs):
         # Use CreateConfigRTX if TensorRT-RTX is enabled, otherwise use CreateConfig
         if polygraphy_config.USE_TENSORRT_RTX:
             from polygraphy.backend.tensorrt_rtx import CreateConfigRTX
+
             default_loader = CreateConfigRTX()
         else:
             from polygraphy.backend.trt import CreateConfig
+
             default_loader = CreateConfig()
 
         loader = util.default(args_util.run_script(self.add_to_script), default_loader)

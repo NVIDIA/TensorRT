@@ -238,7 +238,7 @@ bool doInference(SampleSafePluginInferArgs const& args)
     ITRTGraph* graph = nullptr;
 
     getSafePluginRegistry(g_recorder)->registerCreator(creator, "", g_recorder);
-    createTRTGraph(graph, engineFile.data(), engineFileSize, g_recorder, true, nullptr);
+    createTRTGraphWithSo(graph, engineFile.data(), engineFileSize, nullptr, g_recorder, true, nullptr);
     SAFE_ASSERT(graph != nullptr);
 
     // Setup as many auxiliary streams as the graph requires - destroyed at scope end.

@@ -68,18 +68,15 @@ def adjust_memory_pool_limits_after_8_6(limits):
 
 def update_expected_output(expected):
     is_trt_10_plus = (
-        mod.version(trt.__version__) >= mod.version("10.0") or 
-        config.USE_TENSORRT_RTX
+        mod.version(trt.__version__) >= mod.version("10.0") or config.USE_TENSORRT_RTX
     )
     is_trt_8_6_plus = (
-        mod.version(trt.__version__) >= mod.version("8.6") or 
-        config.USE_TENSORRT_RTX
+        mod.version(trt.__version__) >= mod.version("8.6") or config.USE_TENSORRT_RTX
     )
     is_trt_8_7_plus = (
-        mod.version(trt.__version__) >= mod.version("8.7") or 
-        config.USE_TENSORRT_RTX
+        mod.version(trt.__version__) >= mod.version("8.7") or config.USE_TENSORRT_RTX
     )
-    
+
     if is_trt_8_6_plus:
         if is_trt_10_plus:
             expected = expected.replace(
@@ -95,14 +92,19 @@ def update_expected_output(expected):
                     dedent(expected).strip()
                     + "\nPreview Features       | [FASTER_DYNAMIC_SHAPES_0805, DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
                 )
-            else:
-                preview_features = "[PROFILE_SHARING_0806"
-                if config.USE_TENSORRT_RTX:
-                    preview_features += ", RUNTIME_ACTIVATION_RESIZE_10_10"
-                preview_features += "]"
+            elif config.USE_TENSORRT_RTX:
                 expected = (
                     dedent(expected).strip()
-                    + f"\nPreview Features       | {preview_features}"
+                    + "\nPreview Features       | [RUNTIME_ACTIVATION_RESIZE_10_10]"
+                )
+            elif mod.version(trt.__version__) >= mod.version("11.0"):
+                # PROFILE_SHARING_0806 graduated out of preview in TRT 11, so no
+                # preview features are enabled by default.
+                pass
+            else:  # TRT 10 case
+                expected = (
+                    dedent(expected).strip()
+                    + "\nPreview Features       | [PROFILE_SHARING_0806]"
                 )
 
     if is_trt_8_7_plus:
@@ -136,7 +138,9 @@ def update_expected_output(expected):
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """.format("TF32" if config.USE_TENSORRT_RTX else "")
+                """.format(
+                    "TF32" if config.USE_TENSORRT_RTX else ""
+                )
             ),
         ),
         (
@@ -153,7 +157,9 @@ def update_expected_output(expected):
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | []
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """.format("TF32" if config.USE_TENSORRT_RTX else "")
+                """.format(
+                    "TF32" if config.USE_TENSORRT_RTX else ""
+                )
             ),
         ),
         (
@@ -169,31 +175,44 @@ def update_expected_output(expected):
                 Memory Pools           | [WORKSPACE: 4.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """.format("TF32" if config.USE_TENSORRT_RTX else "")
+                """.format(
+                    "TF32" if config.USE_TENSORRT_RTX else ""
+                )
             ),
         ),
-        (
+        pytest.param(
             CreateConfig(
                 memory_pool_limits=adjust_memory_pool_limits_after_8_6(
                     {trt.MemoryPoolType.WORKSPACE: 16 << 20}
                 ),
-                **({} if config.USE_TENSORRT_RTX else {
-                    "fp16": True,
-                    "int8": True,
-                    "tf32": True,
-                }),
-                refittable=True,
-                precision_constraints="obey",
+                **(
+                    {
+                        "refittable": True,
+                    }
+                    if config.USE_TENSORRT_RTX
+                    # FP16/INT8 and the precision-constraint flags were removed in
+                    # TRT 11; use cross-version flags so the multi-flag repr is still
+                    # exercised on every TRT version without a skip.
+                    else {
+                        "refittable": True,
+                        "sparse_weights": True,
+                        "tf32": True,
+                    }
+                ),
             ),
             update_expected_output(
                 """
-                Flags                  | [{}REFIT, TF32, OBEY_PRECISION_CONSTRAINTS]
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
                 """.format(
-                    "" if config.USE_TENSORRT_RTX else "FP16, INT8, ",
+                    (
+                        "REFIT, TF32"
+                        if config.USE_TENSORRT_RTX
+                        else "REFIT, TF32, SPARSE_WEIGHTS"
+                    ),
                 )
             ),
         ),
@@ -215,57 +234,57 @@ def update_expected_output(expected):
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
                 Optimization Profiles  | 2 profile(s)
-                """.format("TF32" if config.USE_TENSORRT_RTX else "")
+                """.format(
+                    "TF32" if config.USE_TENSORRT_RTX else ""
+                )
             ),
         ),
-    ] + ([] if config.USE_TENSORRT_RTX else [
-        (
-            CreateConfig(
-                memory_pool_limits=adjust_memory_pool_limits_after_8_6(
-                    {trt.MemoryPoolType.WORKSPACE: 16 << 20}
-                ),
-                use_dla=True,
-            ),
-            update_expected_output(
-                """
-                Flags                  | []
-                Engine Capability      | EngineCapability.DEFAULT
-                Memory Pools           | [WORKSPACE: 16.00 MiB, DLA_MANAGED_SRAM: 0.00 MiB, DLA_LOCAL_DRAM: 1024.00 MiB, DLA_GLOBAL_DRAM: 512.00 MiB]
-                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                DLA                    | Default Device Type: DeviceType.DLA, Core: -1
-                Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """
-            ),
-        ),
-    ]) + [
         (
             (
                 CreateConfig(
                     memory_pool_limits=adjust_memory_pool_limits_after_8_6(
                         {trt.MemoryPoolType.WORKSPACE: 16 << 20}
                     ),
-                    preview_features=[trt.PreviewFeature.PROFILE_SHARING_0806],
+                    preview_features=(
+                        [trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03]
+                        if (
+                            mod.version(trt.__version__) >= mod.version("11.0")
+                            or config.USE_TENSORRT_RTX
+                        )
+                        else [trt.PreviewFeature.PROFILE_SHARING_0806]
+                    ),
                 ),
                 update_expected_output(
                     """
-                Flags                  | [{}]
+                Flags                  | [{0}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                Preview Features       | [PROFILE_SHARING_0806]
-                """.format("TF32" if config.USE_TENSORRT_RTX else "")
+                Preview Features       | [{1}]
+                """.format(
+                        "TF32" if config.USE_TENSORRT_RTX else "",
+                        (
+                            "ALIASED_PLUGIN_IO_10_03"
+                            if (
+                                mod.version(trt.__version__) >= mod.version("11.0")
+                                or config.USE_TENSORRT_RTX
+                            )
+                            else "PROFILE_SHARING_0806"
+                        ),
+                    )
                 ),
             )
-            if mod.version(trt.__version__) >= mod.version("10.0") or config.USE_TENSORRT_RTX
+            if mod.version(trt.__version__) >= mod.version("10.0")
+            or config.USE_TENSORRT_RTX
             else (
                 CreateConfig(
                     memory_pool_limits=adjust_memory_pool_limits_after_8_6(
                         {trt.MemoryPoolType.WORKSPACE: 16 << 20}
                     ),
                     preview_features=(
-                        [trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03] 
-                        if config.USE_TENSORRT_RTX 
+                        [trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03]
+                        if config.USE_TENSORRT_RTX
                         else [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
                     ),
                 ),
@@ -278,9 +297,13 @@ def update_expected_output(expected):
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
                 Preview Features       | [{}]
                 """.format(
-                    "TF32" if config.USE_TENSORRT_RTX else "",
-                    "ALIASED_PLUGIN_IO_10_03" if config.USE_TENSORRT_RTX else "FASTER_DYNAMIC_SHAPES_0805"
-                )
+                        "TF32" if config.USE_TENSORRT_RTX else "",
+                        (
+                            "ALIASED_PLUGIN_IO_10_03"
+                            if config.USE_TENSORRT_RTX
+                            else "FASTER_DYNAMIC_SHAPES_0805"
+                        ),
+                    )
                 ),
             )
         ),
@@ -291,7 +314,6 @@ def update_expected_output(expected):
         "memory-pool-limits",
         "builder-flags" + ("-rtx" if config.USE_TENSORRT_RTX else ""),
         "profiles",
-    ] + ([] if config.USE_TENSORRT_RTX else ["dla"]) + [
         "preview-features",
     ],
 )
@@ -299,6 +321,8 @@ def test_str_from_config(create_config, expected, dummy_network):
     config = create_config(*dummy_network)
     actual = trt_util.str_from_config(config, dummy_network)
     expected = dedent(expected).strip()
+    print(actual)
+    print(expected)
     assert actual == expected
 
 

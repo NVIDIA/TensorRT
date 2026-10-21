@@ -15,21 +15,30 @@
 # limitations under the License.
 #
 
+# Setup basic fixtures required for x86 -> aarch64 cross compile
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-set(TRT_PLATFORM_ID "aarch64")
-
-set(CMAKE_C_COMPILER /usr/bin/aarch64-linux-gnu-gcc)
-set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++)
+set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc CACHE STRING "")
+set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++ CACHE STRING "")
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE STRING "")
+set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "")
 
 set(CMAKE_C_COMPILER_TARGET aarch64-linux-gnu)
 set(CMAKE_CXX_COMPILER_TARGET aarch64-linux-gnu)
 
-set(CMAKE_C_COMPILER_FORCED TRUE)
-set(CMAKE_CXX_COMPILER_FORCED TRUE)
+# Restrict lookup paths for certain types of objects to ensure the correct one gets picked.
+# See https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html#cross-compiling-for-linux
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-set(RT_LIB /usr/aarch64-linux-gnu/lib/librt.so)
+# Set the TRT platform for other list files to query.
+set(TRT_BUILD_PLATFORM ${TRT_PLATFORM_AARCH64} CACHE INTERNAL "")
 
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "" FORCE)
+# We keep the target system libraries at this path.
+list(APPEND CMAKE_LIBRARY_PATH /usr/aarch64-linux-gnu/lib)
+
+# FindCUDAToolkit will fail to find this and emit a warning unless we tell it where it is.
+set(CUDAToolkit_rt_LIBRARY /usr/aarch64-linux-gnu/lib/librt.so.1)

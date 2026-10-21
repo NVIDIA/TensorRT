@@ -393,7 +393,7 @@ ONNX_MODELS = {
         check_runner=check_residual_block,
     ),
     "graph_with_subgraph_matching_toy_plugin": Model(
-        path=model_path("toy_subgraph.onnx"), 
+        path=model_path("toy_subgraph.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
     ),
@@ -459,6 +459,19 @@ ONNX_MODELS = {
     ),
     "attention_same_qkv": Model(
         path=model_path("attention_same_qkv.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "sd_attention": Model(
+        path=model_path("sd_attention.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+        input_metadata=TensorMetadata().add(
+            "hidden_states", dtype=DataType.FLOAT32, shape=(1, 256, 320)
+        ),
+    ),
+    "tensorscatter_with_aliased_io": Model(
+        path=model_path("tensorscatter_with_aliased_io.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
     ),

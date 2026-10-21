@@ -25,4 +25,10 @@ def make_trt_enum_val(enum_name, value):
     """
     Helper function to create inline TRT enums for usage across various TRT classes.
     """
-    return inline(safe("trt.{:}.{:}", inline_identifier(enum_name), inline_identifier(value.upper())))
+    return inline(
+        safe(
+            "trt.{:}.{:}",
+            inline_identifier(enum_name),
+            inline_identifier(value.upper()),
+        )
+    )

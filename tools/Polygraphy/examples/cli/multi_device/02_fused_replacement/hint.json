@@ -1,0 +1,47 @@
+{
+    "parallelism": "CP",
+    "attention_layers": [
+        {
+            "q": "q",
+            "gather_kv": false,
+            "gather_q": false,
+            "replace": {
+                "is_causal": false,
+                "q_shuffle": null,
+                "k_shuffle": null,
+                "v_shuffle": null,
+                "nb_rank": 2,
+                "polygraphy_class": "FusedAttention"
+            },
+            "polygraphy_class": "AttentionLayerHint"
+        }
+    ],
+    "dist_collectives": {
+        "group_size": 0,
+        "root": -1,
+        "nb_rank": 2,
+        "reduce_op": "max",
+        "groups": [],
+        "polygraphy_class": "DistCollective"
+    },
+    "inputs": [
+        {
+            "name": "input",
+            "seq_len_idx": 0,
+            "rank": 2,
+            "polygraphy_class": "ShardTensor"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "output",
+            "seq_len_idx": 0,
+            "rank": 2,
+            "polygraphy_class": "ShardTensor"
+        }
+    ],
+    "k_seq_len_idx": 0,
+    "v_seq_len_idx": 0,
+    "kv_rank": null,
+    "polygraphy_class": "ShardHints"
+}

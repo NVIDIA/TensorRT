@@ -67,7 +67,7 @@ class TfTrtArgs(BaseArgs):
         self.minimum_segment_size = args_util.get(args, "minimum_segment_size")
         self.dynamic_op = args_util.get(args, "dynamic_op")
 
-    def add_to_script_impl(self, script, loader_name=None, suffix=None):
+    def add_to_script_impl(self, script, loader_name=None):
         """
         Args:
             loader_name (str): The name of the loader which should be consumed by the ``UseTfTrt`` loader.
@@ -85,7 +85,7 @@ class TfTrtArgs(BaseArgs):
                 is_dynamic_op=self.dynamic_op,
                 minimum_segment_size=self.minimum_segment_size,
             )
-            loader_name = script.add_loader(loader_str, "use_tftrt", suffix=suffix)
+            loader_name = script.add_loader(loader_str, "use_tftrt")
         return loader_name
 
 
@@ -136,7 +136,7 @@ class TfLoadArgs(BaseArgs):
             self.group.add_argument(
                 "--tf-outputs",
                 help="Name(s) of TensorFlow output(s). "
-                "Using '--tf-outputs mark all' indicates that all tensors should be used as outputs",
+                "Using '*' indicates that all tensors should be used as outputs.",
                 nargs="+",
                 default=None,
             )

@@ -201,7 +201,7 @@ void DetectionLayer::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_ASSERT(libNamespace != nullptr);
         mNameSpace = libNamespace;
     }
     catch (std::exception const& e)
@@ -295,8 +295,8 @@ int32_t DetectionLayer::enqueue(
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_ASSERT(inputs != nullptr);
+        PLUGIN_ASSERT(outputs != nullptr);
         void* detections = outputs[0];
 
         // refine detection
@@ -334,7 +334,7 @@ void DetectionLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Di
     try
     {
         checkValidInputs(inputDims, nbInputs);
-        PLUGIN_VALIDATE(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
+        PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
 
         mAnchorsCnt = inputDims[2].d[0];
         mType = inputTypes[0];

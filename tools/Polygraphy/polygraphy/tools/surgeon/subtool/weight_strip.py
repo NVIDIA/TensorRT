@@ -26,17 +26,20 @@ gs = mod.lazy_import("onnx_graphsurgeon")
 np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx")
 
+
 class WeightStripperArgs(BaseArgs):
     """
     Weight Stripping: weight stripping
     """
+
     def add_parser_args_impl(self):
         self.group.add_argument(
             "--exclude-list",
             help="Path to text file containing a list of initializers to skip",
             default=None,
-            required=False
+            required=False,
         )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -52,6 +55,7 @@ class WeightStripperArgs(BaseArgs):
         with open(self.exclude_list) as fp:
             lines = [line.rstrip() for line in fp]
             return set(lines)
+
 
 def get_patterns():
     """
@@ -73,10 +77,10 @@ def get_patterns():
 
     # dictionary storing the index of the input the Producer output can be linked to
     input_positions = {
-        'Conv': [0],
-        'ConvTranspose': [0],
-        'Gemm': [0, 1, 2],
-        'MatMul': [0, 1],
+        "Conv": [0],
+        "ConvTranspose": [0],
+        "Gemm": [0, 1, 2],
+        "MatMul": [0, 1],
     }
 
     # Conv with Weight input
@@ -166,7 +170,9 @@ def get_patterns():
     in_0 = dq_2.variable()
     x_scale = dq_2.variable()
     x_zero_point = dq_2.variable()
-    dq_2_out = dq_2.add("dq_2", "DequantizeLinear", inputs=[in_0, x_scale, x_zero_point])
+    dq_2_out = dq_2.add(
+        "dq_2", "DequantizeLinear", inputs=[in_0, x_scale, x_zero_point]
+    )
     dq_2.set_output_tensors([dq_2_out])
 
     qdq_patterns = []
@@ -178,16 +184,23 @@ def get_patterns():
                 for dq in [dq_1, dq_2]:
                     curr_pattern = gs.GraphPattern()
 
-                    q_inps = [curr_pattern.variable() for _ in range(len(q.input_tensors))]
+                    q_inps = [
+                        curr_pattern.variable() for _ in range(len(q.input_tensors))
+                    ]
                     q_out = curr_pattern.add("Q", q, inputs=q_inps)
 
-                    dq_inps = [curr_pattern.variable() for _ in range(len(dq.input_tensors) - 1)]
+                    dq_inps = [
+                        curr_pattern.variable()
+                        for _ in range(len(dq.input_tensors) - 1)
+                    ]
                     dq_out = curr_pattern.add("DQ", dq, inputs=[q_out] + dq_inps)
 
                     # in case of Gemm with 2 inputs, skip the case where output of dq node is the 3rd input of Gemm
                     if len(op.input_tensors) <= input_pos:
                         continue
-                    op_inps = [curr_pattern.variable() for _ in range(len(op.input_tensors))]
+                    op_inps = [
+                        curr_pattern.variable() for _ in range(len(op.input_tensors))
+                    ]
                     op_inps[input_pos] = dq_out
                     out = curr_pattern.add("base_op", op, inputs=op_inps)
                     curr_pattern.set_output_tensors([out])
@@ -206,7 +219,9 @@ def get_patterns():
         for input_pos in input_positions[op_type]:
             curr_pattern = gs.GraphPattern()
 
-            t_inps = [curr_pattern.variable() for _ in range(len(transpose.input_tensors))]
+            t_inps = [
+                curr_pattern.variable() for _ in range(len(transpose.input_tensors))
+            ]
             t_out = curr_pattern.add("t", transpose, inputs=t_inps)
 
             # in case of Gemm with 2 inputs, skip the case where output of transpose node is the 3rd input of Gemm
@@ -262,38 +277,44 @@ def get_patterns():
     ends = slice_3.variable()
     axes = slice_3.variable()
     steps = slice_3.variable()
-    slice_3_out = slice_3.add("slice_3", "Slice", inputs=[in_0, starts, ends, axes, steps])
+    slice_3_out = slice_3.add(
+        "slice_3", "Slice", inputs=[in_0, starts, ends, axes, steps]
+    )
     slice_3.set_output_tensors([slice_3_out])
     base_patterns.append(slice_3)
 
     return base_patterns + qdq_patterns + transpose_patterns
-    
+
+
 def get_size_thresholds():
     """
     Strip the initializers of the ops only if the size threshold has been crossed
     """
     return {
-        'Conv': 1,
-        'ConvTranspose': 1,
-        'Gather': 1024,
-        'Gemm': 1,
-        'Plugin': 1024,
-        'Slice': 1024,
+        "Conv": 1,
+        "ConvTranspose": 1,
+        "Gather": 1024,
+        "Gemm": 1,
+        "Plugin": 1024,
+        "Slice": 1024,
     }
+
 
 def get_inputs_to_strip():
     """
     Restrict the stripping of initializers of the ops to the input index specified
     """
     return {
-        'QuantizeLinear': set([0]),
-        'Slice': set([0]),
+        "QuantizeLinear": set([0]),
+        "Slice": set([0]),
     }
+
 
 class WeightStripper(BaseSurgeonSubtool):
     """
     Strip weights from the provided ONNX model
     """
+
     def __init__(self):
         super().__init__("weight-strip")
 
@@ -302,10 +323,18 @@ class WeightStripper(BaseSurgeonSubtool):
 
     def get_subscriptions_impl(self):
         return [
-            ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
-            OnnxLoadArgs(allow_shape_inference=False, outputs_opt_prefix=False, allow_from_tf=False),
+            ModelArgs(
+                model_opt_required=True,
+                input_shapes_opt_name=False,
+                required_model_type="onnx",
+            ),
+            OnnxLoadArgs(
+                allow_shape_inference=False,
+                outputs_opt_prefix=False,
+                allow_from_tf=False,
+            ),
             OnnxSaveArgs(allow_shape_inference=False, output_opt_required=True),
-            WeightStripperArgs()
+            WeightStripperArgs(),
         ]
 
     def __skip(self, node, inp, inp_index):
@@ -315,7 +344,10 @@ class WeightStripper(BaseSurgeonSubtool):
         The function also modifies exclude_list if a matching input is found
         """
         # restrict stripping of certain op inputs
-        if node.op in self.inputs_to_strip and inp_index not in self.inputs_to_strip[node.op]:
+        if (
+            node.op in self.inputs_to_strip
+            and inp_index not in self.inputs_to_strip[node.op]
+        ):
             return True
         # Skip inputs that are not initializers
         if not isinstance(inp, gs.Constant):
@@ -328,9 +360,12 @@ class WeightStripper(BaseSurgeonSubtool):
             self.exclude_list.remove(inp.name)
             return True
         # Heuristic to strip based on size
-        if node.op in self.size_thresholds and inp.values.size < self.size_thresholds[node.op]:
+        if (
+            node.op in self.size_thresholds
+            and inp.values.size < self.size_thresholds[node.op]
+        ):
             return True
-        
+
         return False
 
     def __get_matching_subgraph_inputs(self, graph):
@@ -358,9 +393,11 @@ class WeightStripper(BaseSurgeonSubtool):
             if not onnx.defs.has(node.op):
                 for inp_index, inp in enumerate(node.inputs):
                     if not self.__skip(node, inp, inp_index):
-                        G_LOGGER.verbose(f"Stripping initializer {inp.name} to the {node.op} op.")
+                        G_LOGGER.verbose(
+                            f"Stripping initializer {inp.name} to the {node.op} op."
+                        )
                         self.initializers_to_strip.add(inp.name)
-    
+
     def __get_sparse_tensors(self, model):
         """
         Identify sparse tensors in the model
@@ -372,8 +409,10 @@ class WeightStripper(BaseSurgeonSubtool):
 
     def run_impl_surgeon(self, args):
         def strip_weights(model):
-            G_LOGGER.start(f"Beginning weight stripping...")
-            G_LOGGER.warning(f"The model is expected to be constant folded to successfully capture all weights eligible for stripping")
+            G_LOGGER.start("Beginning weight stripping...")
+            G_LOGGER.warning(
+                "The model is expected to be constant folded to successfully capture all weights eligible for stripping"
+            )
             graph = gs.import_onnx(model)
             # check model sparsity
             G_LOGGER.info("Querying Sparse Initializers in the model")
@@ -392,18 +431,24 @@ class WeightStripper(BaseSurgeonSubtool):
                     initializer.raw_data = b""
 
                     # Check sparsity
-                    sparse_str = "SPARSE_2_4" if initializer.name in sparse_initializers else ""
-                    
+                    sparse_str = (
+                        "SPARSE_2_4" if initializer.name in sparse_initializers else ""
+                    )
+
                     # Update initializer doc_string
-                    initializer.doc_string = '/'.join(["TRT_WEIGHTLESS", sparse_str])
+                    initializer.doc_string = "/".join(["TRT_WEIGHTLESS", sparse_str])
                     num_stripped += 1
 
             if self.exclude_list:
-                G_LOGGER.warning(f"The following weights provided by the user to skip stripping were not found in the model: {self.exclude_list}.")
+                G_LOGGER.warning(
+                    f"The following weights provided by the user to skip stripping were not found in the model: {self.exclude_list}."
+                )
             assert num_stripped == len(self.initializers_to_strip)
 
             if num_stripped:
-                model.doc_string = '-'.join(filter(None, [model.doc_string, "TRT_WEIGHTLESS"]))
+                model.doc_string = "-".join(
+                    filter(None, [model.doc_string, "TRT_WEIGHTLESS"])
+                )
             G_LOGGER.finish(f"Finished stripping {num_stripped} weights")
 
             return model

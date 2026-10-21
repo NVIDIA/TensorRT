@@ -285,6 +285,16 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
         nonlocal name
         name = name or obj.__name__
 
+        deprecation_msg = (
+            f"Deprecated: Use {use_instead} instead."
+            if use_instead is not None
+            else "Deprecated."
+        )
+
+        def deprecated_doc(original):
+            # Preserve the original docstring (if any) after the deprecation notice.
+            return f"{deprecation_msg}\n\n{original}" if original else deprecation_msg
+
         if inspect.ismodule(obj):
 
             class DeprecatedModule:
@@ -298,7 +308,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                     self = obj
                     return setattr(self, attr_name, value)
 
-            DeprecatedModule.__doc__ = f"Deprecated: Use {use_instead} instead"
+            DeprecatedModule.__doc__ = deprecated_doc(obj.__doc__)
             return DeprecatedModule()
         elif inspect.isclass(obj):
 
@@ -307,15 +317,20 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                     warn_deprecated(name, use_instead, remove_in, module_name)
                     super().__init__(*args, **kwargs)
 
-            Deprecated.__doc__ = f"Deprecated: Use {use_instead} instead"
+            # Report the real name in reprs/warnings; leave __qualname__ alone so
+            # inspect.getsource can still locate the class definition.
+            Deprecated.__name__ = obj.__name__
+            Deprecated.__doc__ = deprecated_doc(obj.__doc__)
             return Deprecated
         elif inspect.isfunction(obj):
+            import functools
 
+            @functools.wraps(obj)
             def wrapped(*args, **kwargs):
                 warn_deprecated(name, use_instead, remove_in, module_name)
                 return obj(*args, **kwargs)
 
-            wrapped.__doc__ = f"Deprecated: Use {use_instead} instead"
+            wrapped.__doc__ = deprecated_doc(obj.__doc__)
             return wrapped
         else:
             G_LOGGER.internal_error(f"deprecate is not implemented for: {obj}")

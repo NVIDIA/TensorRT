@@ -37,7 +37,9 @@ def make_poly_fixture(subtool: List[str]):
             # NOTE: script_runner does not work very well in `in-process`` mode if you need to inspect stdout/stderr.
             # Occasionally, the output comes out empty - not clear why. Cave emptor!
             # Decorate your tests with `@pytest.mark.script_launch_mode("subprocess")` to use `subprocess` to avoid this issue.
-            status = script_runner.run(*cmd, *args, **kwargs)
+            # NOTE:
+            # Enhanced stdout/stderr capture and  'in-process' mode should be fixed since this MR.
+            status = script_runner.run([*cmd, *args], **kwargs)
             assert status.success == (not expect_error)
             return status
 
@@ -51,6 +53,7 @@ poly_run = make_poly_fixture(["run"])
 poly_convert = make_poly_fixture(["convert"])
 poly_inspect = make_poly_fixture(["inspect"])
 poly_check = make_poly_fixture(["check"])
+poly_check_accuracy = make_poly_fixture(["check", "accuracy"])
 poly_multi_device_shard = make_poly_fixture(["multi-device", "shard"])
 poly_surgeon = make_poly_fixture(["surgeon"])
 poly_surgeon_extract = make_poly_fixture(["surgeon", "extract"])
