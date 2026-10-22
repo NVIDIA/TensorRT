@@ -3,6 +3,13 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext
+### Fixed
+- Fixed a bug where loading JSON data, such as with `--load-inputs` or `inspect data`, failed with
+  `ValueError: The truth value of an array with more than one element is ambiguous` when a tensor
+  was named after a type Polygraphy serializes, such as `Tensor` or `ndarray`.
+
+
 ## v0.53.6 (2026-09-22)
 ### Added
 - `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as

@@ -87,6 +87,23 @@ class TestDecoder:
         ):
             from_json(d_json)
 
+    def test_legacy_type_marker(self):
+        legacy = to_json(
+            {"x": -1, "__polygraphy_encoded_Dummy": constants.LEGACY_TYPE_MARKER}
+        )
+
+        assert from_json(legacy).x == -1
+
+    # Keys can collide with registered type names, e.g. a tensor named "Tensor" in saved inputs.
+    @pytest.mark.parametrize("name", ["ndarray", "Tensor", "RunResults"])
+    def test_array_under_registered_type_name(self, name):
+        feed_dicts = [{name: np.arange(4, dtype=np.float32).reshape(1, 4)}]
+
+        decoded = from_json(to_json(feed_dicts))
+
+        assert list(decoded[0].keys()) == [name]
+        assert np.array_equal(decoded[0][name], feed_dicts[0][name])
+
     def test_names_correct(self):
         # Trigger `try_register_common_json`
         d = Dummy(x=-1)
