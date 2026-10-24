@@ -61,7 +61,7 @@ To build the TensorRT-OSS components, you will first need the following software
   - cuDNN 8.9
 - [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
 - [cmake](https://github.com/Kitware/CMake/releases) >= v3.31
-- [python](https://www.python.org/downloads/) >= v3.10, <= v3.14.x
+- [python](https://www.python.org/downloads/) >= v3.10, <= v3.15.x
 - [pip](https://pypi.org/project/pip/#history) >= v19.0
 - Essential utilities
   - [git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [wget](https://www.gnu.org/software/wget/faq.html#download)
