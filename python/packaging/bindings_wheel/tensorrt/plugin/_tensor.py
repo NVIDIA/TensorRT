@@ -146,7 +146,7 @@ class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
         `True` if this integer expression is a build-time constant, `False` otherwise.
 
         Raises:
-            RuntimeError: For fake :class:`SymIntExpr`\s. Check :attr:`is_fake` to determine accessibility.
+            RuntimeError: For fake :class:`SymIntExpr`\\s. Check :attr:`is_fake` to determine accessibility.
         """
         if self._is_dummy:
             raise RuntimeError("Not accessible for fake 'SymIntExpr's. Check is_fake to determine accessibility.")
@@ -294,7 +294,7 @@ class ShapeExpr(SymInt32):
         `True` if this shape expression is a build-time constant, `False` otherwise.
 
         Raises:
-            RuntimeError: For fake :class:`ShapeExpr`\s. Check :attr:`is_fake` to determine accessibility.
+            RuntimeError: For fake :class:`ShapeExpr`\\s. Check :attr:`is_fake` to determine accessibility.
         """
         if self._is_dummy:
             raise RuntimeError("Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility.")
@@ -423,7 +423,7 @@ class SymExprs:
 class ShapeExprs(SymExprs):
     def __init__(self, length, _is_dummy=False):
         """
-        Iterable holding :class:`ShapeExpr`\s, representing a tensor shape
+        Iterable holding :class:`ShapeExpr`\\s, representing a tensor shape
 
         Args:
             length (int): Number of dimensions of the tensor
@@ -484,7 +484,7 @@ class ShapeExprs(SymExprs):
 class SymIntExprs(SymExprs):
     def __init__(self, length):
         """
-        Iterable holding :class:`SymIntExpr`\s
+        Iterable holding :class:`SymIntExpr`\\s
 
         Args:
             length (int): Number of symbolic expressions in the iterable
@@ -943,7 +943,7 @@ class Tensor:
     """
     Representation of a tensor that carries data
 
-    :class:`Tensor` objects are strictly *descriptors* of a tensor with an underlying data buffer. `tensorrt.plugin` does not provide any APIs that perform standard data-altering operations on :class:`Tensor`\s.
+    :class:`Tensor` objects are strictly *descriptors* of a tensor with an underlying data buffer. `tensorrt.plugin` does not provide any APIs that perform standard data-altering operations on :class:`Tensor`\\s.
 
     Supports `__cuda_array_interface__` for interoperability with other frameworks.
 
