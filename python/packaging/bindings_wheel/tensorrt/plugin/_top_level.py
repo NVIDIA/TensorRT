@@ -33,7 +33,7 @@ def cdiv(first: Union[int, ShapeExpr], second: Union[int, ShapeExpr]) -> ShapeEx
         second (Union[int, ShapeExpr]): Divisor
 
     Raises:
-        ValueError: If both arguments are `int`\s or if `second` evaluates to 0
+        ValueError: If both arguments are `int`\\s or if `second` evaluates to 0
 
     Returns:
         ShapeExpr: Symbolic expression for the ceiling division of `first` by `second`
@@ -57,7 +57,7 @@ def max(first: Union[int, ShapeExpr], second: Union[int, ShapeExpr]) -> ShapeExp
         second (Union[int, ShapeExpr]): Second operand
 
     Raises:
-        ValueError: If both arguments are `int`\s
+        ValueError: If both arguments are `int`\\s
 
     Returns:
         ShapeExpr: Symbolic expression for the maximum of `first` and `second`
@@ -81,7 +81,7 @@ def min(first: Union[int, ShapeExpr], second: Union[int, ShapeExpr]) -> ShapeExp
         second (Union[int, ShapeExpr]): Second operand
 
     Raises:
-        ValueError: If both arguments are `int`\s
+        ValueError: If both arguments are `int`\\s
 
     Returns:
         ShapeExpr: Symbolic expression for the minimum of `first` and `second`
