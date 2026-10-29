@@ -663,7 +663,6 @@ void DebugTensorWriter::writeSummary(std::string_view name, nvinfer1::Dims const
     case nvinfer1::DataType::kFP8:
 #if CUDA_VERSION >= 11060
         processTensorSummary<__nv_fp8_e4m3>(addr_host, volume, mSummaryFile);
-        break;
 #else
         sample::gLogWarning << "Unsupported data type kFP8 for tensor '" << name
                             << "' summary dump in this CUDA version." << std::endl;

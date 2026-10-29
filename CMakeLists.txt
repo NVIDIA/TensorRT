@@ -198,11 +198,14 @@ set(CMAKE_CUDA_RUNTIME_LIBRARY "static" CACHE STRING "")
 
 if(NOT TARGET trt_global_definitions)
     add_library(trt_global_definitions INTERFACE)
-    target_include_directories(trt_global_definitions INTERFACE ${CUDAToolkit_INCLUDE_DIRS})
+    target_include_directories(trt_global_definitions SYSTEM INTERFACE ${CUDAToolkit_INCLUDE_DIRS})
     target_compile_definitions(trt_global_definitions INTERFACE
         TRT_WINML=$<BOOL:${TRT_PRODUCT_IS_RTX}>
     )
 endif()
+
+include(TensorRTWarnings)
+trt_enable_warnings_as_errors()
 
 if(BUILD_PLUGINS)
     option(TRT_BUILD_ENABLE_DLA "Build TensorRT with DLA features enabled." ${TensorRT_ENABLE_DLA})
@@ -296,6 +299,10 @@ if(BUILD_SAMPLES OR BUILD_SAFE_SAMPLES)
                 GIT_TAG        v1.14.0
             )
             FetchContent_MakeAvailable(googletest)
+            # Hide warnings for third-party code.
+            foreach(gtest_target gtest gtest_main gmock gmock_main)
+                target_compile_options(${gtest_target} PRIVATE -w)
+            endforeach()
         endif()
         set(TRT_GTEST_DISCOVERY_MODE PRE_TEST CACHE STRING "gtest discovery mode.")
     endif()

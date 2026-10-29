@@ -320,7 +320,6 @@ int32_t ROIAlignV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc 
             mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr,
             mAligned);
     }
-    break;
     case nvinfer1::DataType::kHALF:
     {
         auto bottomData = static_cast<__half const*>(inputs[0]);
@@ -332,7 +331,6 @@ int32_t ROIAlignV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc 
             mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr,
             mAligned);
     }
-    break;
     default: return -1;
     }
 
