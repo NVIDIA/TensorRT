@@ -3,6 +3,13 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext
+### Fixed
+- Fixed a bug where loading JSON data, such as with `--load-inputs`, `--load-outputs` or `inspect data`,
+  failed with `TypeError: unhashable type` or `Could not decode serialized type` when a tensor was
+  named `polygraphy_class`, the key Polygraphy uses to mark serialized types.
+
+
 ## v0.53.6 (2026-09-22)
 ### Added
 - `Comparator.run()` now accepts a `save_input_blob_path` parameter, exposed on the CLI as
