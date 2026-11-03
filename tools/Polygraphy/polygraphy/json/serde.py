@@ -185,7 +185,9 @@ class Decoder(BaseCustomImpl):
                 return func(dct)
 
         type_name = dct.get(constants.TYPE_MARKER)
-        if type_name is not None:
+        # Only a string names a type. A tensor may also be named after this key, and then the
+        # value is its data, which is already decoded.
+        if isinstance(type_name, str):
             if type_name not in self.polygraphy_registered:
                 user_type_name = {
                     "Tensor": "torch.Tensor",

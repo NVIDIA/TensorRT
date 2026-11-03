@@ -87,6 +87,27 @@ class TestDecoder:
         ):
             from_json(d_json)
 
+    def test_feed_dict_key_named_type_marker(self):
+        # A tensor can be named after the key that marks serialized types.
+        feed_dict = {constants.TYPE_MARKER: np.ones((1, 4), dtype=np.float32)}
+
+        decoded = from_json(to_json(feed_dict))
+        assert np.array_equal(
+            decoded[constants.TYPE_MARKER], feed_dict[constants.TYPE_MARKER]
+        )
+
+    def test_output_named_type_marker(self):
+        result = IterationResult(
+            {constants.TYPE_MARKER: np.ones((1, 4), dtype=np.float32)},
+            runtime=1.0,
+            runner_name="runner",
+        )
+
+        decoded = from_json(to_json(result))
+        assert np.array_equal(
+            decoded[constants.TYPE_MARKER], result[constants.TYPE_MARKER]
+        )
+
     def test_names_correct(self):
         # Trigger `try_register_common_json`
         d = Dummy(x=-1)
