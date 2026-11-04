@@ -168,9 +168,12 @@ def constant_to_onnx_tensor(tensor: Constant) -> onnx.TensorProto:
         arr = _NUMPY_ARRAY_CONVERTERS[target_dtype](tensor.values)
         tensor_raw_bytes = arr.tobytes()
 
-    # Fp4 gets doubled in size upon importing into numpy, we need to run it through
-    # ONNX's packer to half the byte size again
-    elif source_dtype == target_dtype and source_dtype == onnx.TensorProto.FLOAT4E2M1:
+    # NumPy stores each 4-bit value in one byte; ONNX packs two per byte.
+    elif source_dtype == target_dtype and source_dtype in (
+        onnx.TensorProto.FLOAT4E2M1,
+        onnx.TensorProto.INT4,
+        onnx.TensorProto.UINT4,
+    ):
         tensor_raw_bytes = onnx.numpy_helper.tobytes_little_endian(onnx.numpy_helper._pack_4bitx2(tensor.values))
     else:
         tensor_raw_bytes = tensor.values.tobytes()
