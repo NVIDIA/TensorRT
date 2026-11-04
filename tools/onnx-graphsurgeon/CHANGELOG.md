@@ -6,6 +6,7 @@ Dates are in YYYY-MM-DD format.
 ## vNext
 
 ### Fixed
+- Avoid mutating the original ONNX initializer when exporting a renamed lazy constant.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
