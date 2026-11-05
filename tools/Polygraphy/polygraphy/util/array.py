@@ -1092,6 +1092,9 @@ def abs():
     """
 
     def torch_abs_impl(obj):
+        # int64 is supported directly; a float32 round-trip loses integer bits.
+        if obj.dtype == torch.int64:
+            return torch.abs(obj)
         # PyTorch doesn't support abs for all types, so cast to FP32
         original_dtype = obj.dtype
         return torch.abs(obj.to(torch.float32)).to(original_dtype)
