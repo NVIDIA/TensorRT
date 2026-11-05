@@ -9,6 +9,7 @@ Dates are in YYYY-MM-DD format.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+- Fixed loading sparse initializers whose values or indices are stored in `raw_data`, which previously failed with a spurious index count error. Loaded sparse values now also keep their original data type instead of being converted to `float64`, which lost precision for large integers and produced invalid models on export.
 
 ## v0.6.2 (2026-05-21)
 
