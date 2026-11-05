@@ -1041,8 +1041,10 @@ def topk():
     """
 
     def numpy_impl(obj, k, axis):
-        # NumPy doesn't have a Top K implementation
-        indices = np.argsort(-obj, axis=axis, kind="stable")
+        # Negating integers can overflow (and wraps for unsigned values).
+        # Bitwise inversion reverses their order without changing the dtype.
+        key = np.bitwise_not(obj) if np.issubdtype(obj.dtype, np.integer) else -obj
+        indices = np.argsort(key, axis=axis, kind="stable")
         axis_len = indices.shape[axis]
         indices = np.take(indices, np.arange(0, builtins.min(k, axis_len)), axis=axis)
         return np.take_along_axis(obj, indices, axis=axis), indices
