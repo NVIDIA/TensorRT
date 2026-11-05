@@ -120,9 +120,15 @@ int32_t ScatterElementsPluginV3::enqueue(PluginTensorDesc const* inputDesc, Plug
     {
         PLUGIN_ASSERT(inputDesc[kINDICES_TENSOR_IDX].type == DataType::kINT64);
 
+        // "axis" accepts a negative value counting from the back ([-r, r-1], per this
+        // plugin's own documented spec); the kernel indexes Dims::d[axis] directly and
+        // has no notion of negative indices, so it must be resolved to [0, r-1] here.
+        int32_t const rank = inputDesc[kDATA_TENSOR_IDX].dims.nbDims;
+        int32_t const axis = mAxis < 0 ? mAxis + rank : mAxis;
+
         runScatterElementsKernel(outputs[kOUTPUT_TENSOR_IDX], inputs[kDATA_TENSOR_IDX], inputs[kUPDATES_TENSOR_IDX],
             inputs[kINDICES_TENSOR_IDX], outputDesc[kOUTPUT_TENSOR_IDX], inputDesc[kDATA_TENSOR_IDX],
-            inputDesc[kUPDATES_TENSOR_IDX], inputDesc[kINDICES_TENSOR_IDX], mAxis, mReduction, stream);
+            inputDesc[kUPDATES_TENSOR_IDX], inputDesc[kINDICES_TENSOR_IDX], axis, mReduction, stream);
         return pluginStatus_t::STATUS_SUCCESS;
     }
     catch (std::exception const& e)
