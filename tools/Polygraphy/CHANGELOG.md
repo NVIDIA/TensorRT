@@ -2,6 +2,10 @@
 
 Dates are in YYYY-MM-DD format.
 
+## Unreleased
+### Fixed
+- Preserve cosine similarity under independent rescaling of finite output vectors, avoiding spurious comparison passes and failures.
+
 
 ## vNext
 ### Fixed
