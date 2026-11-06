@@ -5,6 +5,9 @@ Dates are in YYYY-MM-DD format.
 
 ## vNext
 ### Fixed
+- Fixed `inspect sparsity` and the `surgeon` subtools that check 2:4 sparsity misreading BF16
+  initializers. A sparse tensor could be reported as non-sparse or fail with an `IndexError`, and a
+  dense tensor stored in `int32_data` (such as all `2.0`) could be reported as sparse.
 - Fixed a bug where loading JSON data, such as with `--load-inputs` or `inspect data`, failed with
   `ValueError: The truth value of an array with more than one element is ambiguous` when a tensor
   was named after a type Polygraphy serializes, such as `Tensor` or `ndarray`.
