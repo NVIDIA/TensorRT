@@ -235,38 +235,24 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
     assert tensor.data_type == onnx.TensorProto.BFLOAT16
     is_raw_data = len(tensor.int32_data) == 0
     data = bytearray(tensor.raw_data) if is_raw_data else tensor.int32_data
-    step = 4 if is_raw_data else 2
+
+    def is_zero(idx):
+        if is_raw_data:
+            # raw_data is a byte array with two bytes per BF16 value.
+            return data[idx * 2] == 0 and data[idx * 2 + 1] == 0
+        # int32_data stores one BF16 value per entry, in the low 16 bits.
+        return data[idx] & 0xFFFF == 0
 
     ostride = pdim * pstride
     for o in range(outer):
         for i in range(pstride):
-            for piter in range(0, pdim, step):
+            for piter in range(0, pdim, 4):
 
                 def short2long(idx):
                     return o * ostride + (piter + idx) * pstride + i
 
                 if check:
-                    zeros = 0
-                    if is_raw_data:
-                        for i in range(step):
-                            if (
-                                data[short2long(i) * 2] == 0
-                                and data[short2long(i) * 2 + 1] == 0
-                            ):
-                                zeros += 1
-                    else:
-                        i32_data_0 = data[short2long(0)]
-
-                        def bf16_zeros_in_int32(v):
-                            bf16_data_0 = v & 0xFF
-                            bf16_data_1 = (v >> 8) & 0xFF
-                            v0_zero = 1 if bf16_data_0 == 0 else 0
-                            v1_zero = 1 if bf16_data_1 == 0 else 0
-                            return v0_zero + v1_zero
-
-                        zeros = bf16_zeros_in_int32(i32_data_0) + bf16_zeros_in_int32(
-                            i32_data_0
-                        )
+                    zeros = sum(1 for si in range(4) if is_zero(short2long(si)))
                     if zeros < 2:
                         G_LOGGER.warning(f"Found non-sparse tensor: {tensor.name}")
                         return False
@@ -279,9 +265,9 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
                         data[short2long(2) * 2] = 0
                         data[short2long(2) * 2 + 1] = 0
                     else:
-                        # data is 32bit array, bf16 is 16bit
-                        # We use the index but only need to change one value
+                        # data is 32bit array with one bf16 value per entry
                         data[short2long(0)] = 0
+                        data[short2long(2)] = 0
 
     if check:
         G_LOGGER.info(f"Found sparse tensor: {tensor.name}")
