@@ -482,6 +482,24 @@ class TestOnnxExporter(object):
         if model.path != lstm_model().path:
             assert onnx_graph == exported_onnx_graph
 
+    @pytest.mark.parametrize(
+        "model", [ext_weights(), sparse_nnz_model()], ids=lambda model: str(model)
+    )
+    def test_export_graph_does_not_pass_initializers_to_make_graph(self, model):
+        # `onnx.helper.make_graph` adds initializers with `extend()`, which serializes each one and
+        # fails for tensors >2 GiB. Initializers must instead be copied in individually. See issue #4899.
+        graph = OnnxImporter.import_graph(model.load().graph)
+
+        with mock.patch.object(
+            onnx.helper, "make_graph", wraps=onnx.helper.make_graph
+        ) as make_graph:
+            onnx_graph = OnnxExporter.export_graph(graph)
+
+        _, kwargs = make_graph.call_args
+        assert not kwargs.get("initializer")
+        assert not kwargs.get("sparse_initializer")
+        assert onnx_graph == model.load().graph
+
     def test_export_fp4_tensor(self) -> None:
         """Test a tensor can be exported when using fp4."""
         name = "fp4_tensor"
