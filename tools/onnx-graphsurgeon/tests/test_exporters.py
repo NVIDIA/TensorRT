@@ -41,9 +41,11 @@ from onnx_models import (
 from onnx_graphsurgeon.exporters.onnx_exporter import (
     OnnxExporter,
     constant_to_onnx_tensor,
+    export_onnx,
 )
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.function import Function
+from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 
@@ -485,9 +487,10 @@ class TestOnnxExporter(object):
     @pytest.mark.parametrize(
         "model", [ext_weights(), sparse_nnz_model()], ids=lambda model: str(model)
     )
-    def test_export_graph_does_not_pass_initializers_to_make_graph(self, model):
-        # `onnx.helper.make_graph` adds initializers with `extend()`, which serializes each one and
-        # fails for tensors >2 GiB. Initializers must instead be copied in individually. See issue #4899.
+    def test_export_graph_does_not_pass_nodes_or_initializers_to_make_graph(self, model):
+        # `onnx.helper.make_graph` adds nodes and initializers with `extend()`, which serializes each one
+        # and fails for tensors >2 GiB (including tensors in node attributes). They must instead be copied
+        # in individually. See issue #4899.
         graph = OnnxImporter.import_graph(model.load().graph)
 
         with mock.patch.object(
@@ -496,9 +499,87 @@ class TestOnnxExporter(object):
             onnx_graph = OnnxExporter.export_graph(graph)
 
         _, kwargs = make_graph.call_args
+        assert not kwargs.get("nodes")
         assert not kwargs.get("initializer")
         assert not kwargs.get("sparse_initializer")
         assert onnx_graph == model.load().graph
+
+    def test_export_node_does_not_extend_attributes(self):
+        # `extend()` serializes each AttributeProto, which fails for tensor attributes >2 GiB. See issue #4899.
+        value = Constant("value", np.ones((2, 3), dtype=np.float32))
+        node = Node(
+            "Constant", attrs={"value": value}, outputs=[Variable("out", dtype=np.float32)]
+        )
+        node_proto = mock.MagicMock()
+
+        with mock.patch.object(onnx.helper, "make_node", return_value=node_proto):
+            OnnxExporter.export_node(node)
+
+        node_proto.attribute.extend.assert_not_called()
+        node_proto.attribute.add.return_value.CopyFrom.assert_called_once()
+        (attr,), _ = node_proto.attribute.add.return_value.CopyFrom.call_args
+        assert attr.name == "value"
+        assert onnx.numpy_helper.to_array(attr.t).tolist() == value.values.tolist()
+
+    def test_export_function_does_not_pass_nodes_or_attribute_protos_to_make_function(self):
+        # `onnx.helper.make_function` adds nodes and attribute defaults with `extend()`. See issue #4899.
+        X = Variable("X", dtype=np.float32)
+        Y = Variable("Y", dtype=np.float32)
+        Z = Variable("Z", dtype=np.float32)
+        nodes = [
+            Node("Add", inputs=[X, Constant("c", np.ones(1, dtype=np.float32))], outputs=[Y]),
+            Node("Relu", inputs=[Y], outputs=[Z]),
+        ]
+        func = Function(
+            "F", domain="org.test", nodes=nodes, inputs=[X], outputs=[Z], attrs={"alpha": 2.0}
+        )
+
+        with mock.patch.object(
+            onnx.helper, "make_function", wraps=onnx.helper.make_function
+        ) as make_function:
+            onnx_func = OnnxExporter.export_function(func)
+
+        args, kwargs = make_function.call_args
+        assert not args[4]  # nodes
+        assert not kwargs.get("attribute_protos")
+        # The Constant input becomes a Constant node, followed by the function's own nodes.
+        assert [n.op_type for n in onnx_func.node] == ["Constant", "Add", "Relu"]
+        assert [a.name for a in onnx_func.attribute_proto] == ["alpha"]
+        assert onnx_func.attribute_proto[0].f == 2.0
+
+    def test_export_onnx_does_not_pass_functions_to_make_model(self):
+        # `onnx.helper.make_model` adds functions with `extend()`. See issue #4899.
+        fi = Variable("fi", dtype=np.float32, shape=(1,))
+        fo = Variable("fo", dtype=np.float32, shape=(1,))
+        func = Function(
+            "F",
+            domain="org.test",
+            nodes=[Node("Relu", inputs=[fi], outputs=[fo])],
+            inputs=[fi],
+            outputs=[fo],
+            opset=18,
+        )
+        x = Variable("x", dtype=np.float32, shape=(1,))
+        y = Variable("y", dtype=np.float32, shape=(1,))
+        graph = Graph(
+            nodes=[Node("F", domain="org.test", inputs=[x], outputs=[y])],
+            inputs=[x],
+            outputs=[y],
+            functions=[func],
+            opset=18,
+        )
+        unrelated = onnx.helper.make_function("other", "G", [], [], [], [])
+
+        with mock.patch.object(
+            onnx.helper, "make_model", wraps=onnx.helper.make_model
+        ) as make_model:
+            model = export_onnx(graph, functions=[unrelated])
+
+        _, kwargs = make_model.call_args
+        assert not kwargs.get("functions")
+        # As before, caller-supplied `functions` are replaced by the graph's functions.
+        assert [(f.domain, f.name) for f in model.functions] == [("org.test", "F")]
+        onnx.checker.check_model(model)
 
     def test_export_fp4_tensor(self) -> None:
         """Test a tensor can be exported when using fp4."""
