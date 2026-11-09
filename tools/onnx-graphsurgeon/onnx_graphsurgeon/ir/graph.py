@@ -587,12 +587,12 @@ class Graph(object):
 
                     return inputs.values()
 
-                # Find all functions used in this list of nodes.
+                # Find all functions used in this list of nodes, including within their subgraphs.
                 def get_used_funcs(nodes):
                     inputs = {}
-                    for subgraph in self.subgraphs():
-                        inputs.update(get_used_funcs(subgraph.nodes))
                     for node in nodes:
+                        for subgraph in node.subgraphs():
+                            inputs.update(get_used_funcs(subgraph.nodes))
                         func_id = (node.domain, node.op)
                         if func_id in func_id_to_func:
                             inputs[func_id] = func_id_to_func[func_id]
