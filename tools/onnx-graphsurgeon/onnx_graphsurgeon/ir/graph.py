@@ -1350,12 +1350,24 @@ class Graph(object):
                     # The subgraph outputs correspond to the If node outputs. Only the latter are visible
                     # in the parent graph, so we rebind the producer nodes of the subgraph outputs to point
                     # to the output tensors of the If instead.
-                    for node_out, subgraph_out in zip(node.outputs, subgraph.outputs):
+                    # Copy the outputs first: clearing a node output's inputs also removes it from node.outputs.
+                    for node_out, subgraph_out in zip(
+                        list(node.outputs), list(subgraph.outputs)
+                    ):
                         node_out.inputs.clear()
+                        # A constant subgraph output has no producer to rebind.
+                        if isinstance(subgraph_out, Constant):
+                            node_out.to_constant(subgraph_out.values)
+                            continue
                         for producer in subgraph_out.inputs:
                             for tensor_idx, out_tensor in enumerate(producer.outputs):
                                 if out_tensor == subgraph_out:
                                     producer.outputs[tensor_idx] = node_out
+                        # Subgraph nodes may also consume the output, so they must read the If output too.
+                        for consumer in list(subgraph_out.outputs):
+                            for tensor_idx, in_tensor in enumerate(consumer.inputs):
+                                if in_tensor is subgraph_out:
+                                    consumer.inputs[tensor_idx] = node_out
 
                     # Copy subgraph nodes into parent graph at the index of the If.
                     del self.nodes[index]
