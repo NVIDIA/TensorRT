@@ -49,6 +49,8 @@ ONNX_PYTHON_ATTR_MAPPING = {
     "FLOATS": "floats",
     "INTS": "ints",
     "STRINGS": "strings",
+    "TYPE_PROTO": "tp",
+    "TYPE_PROTOS": "type_protos",
 }
 
 
@@ -302,6 +304,8 @@ class OnnxImporter(BaseImporter):
                     processed = list(processed)
                 elif attr_str == "STRINGS":
                     processed = [decode_onnx_string(p, attr.name) for p in processed]
+                elif attr_str == "TYPE_PROTOS":
+                    processed = list(processed)
                 return processed
 
             if attr.type in ATTR_TYPE_MAPPING:
