@@ -1468,6 +1468,35 @@ class TestFoldConstants(object):
         assert graph.nodes[0].op == "Shape"
         assert isinstance(graph.outputs[0], Variable)
 
+    @pytest.mark.parametrize(
+        "attrs, expected",
+        [
+            ({"start": 1}, [3, 4, 5]),
+            ({"start": 1, "end": -1}, [3, 4]),
+            ({"start": -2}, [4, 5]),
+            ({"end": 10}, [2, 3, 4, 5]),
+        ],
+    )
+    def test_shape_of_variable_tensor_start_end(self, attrs, expected):
+        var = Variable("var", dtype=np.float32, shape=(2, 3, 4, 5))
+        graph = Graph(inputs=[var], opset=18, ir_version=10)
+        shape_out = Variable("shape_out", dtype=np.int64)
+        graph.nodes.append(
+            Node("Shape", inputs=[var], outputs=[shape_out], attrs=attrs)
+        )
+        graph.outputs = [
+            shape_out,
+            graph.gather(shape_out, indices=np.array(0)),
+            graph.slice(shape_out, np.array([1]), np.array([3]), axes=np.array([0])),
+        ]
+
+        graph.fold_constants().cleanup()
+
+        assert not graph.nodes
+        assert np.all(graph.outputs[0].values == expected)
+        assert graph.outputs[1].values == expected[0]
+        assert np.all(graph.outputs[2].values == expected[1:3])
+
     # Constant folding should not cause constant tensors in the model to be loaded.
     def test_no_load_constants(self):
         graph = gs.import_onnx(const_foldable().load())
