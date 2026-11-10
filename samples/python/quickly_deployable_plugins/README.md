@@ -328,7 +328,7 @@ Verbose logs show TRT timing both tactics during engine build, then a single win
 # Additional Resources
 
 **Python Plugin Guide**
-- [pluginGuide.md](../../../documentation/python/pluginGuide.md)
+- [Python Plugin Guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/pluginGuide.html)
 
 **`tensorrt.plugin` API reference**
 - [`tensorrt.plugin` module API reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/tensorrt.plugin/index.html)
