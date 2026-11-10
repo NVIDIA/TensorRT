@@ -167,6 +167,8 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 ## Building TensorRT-OSS
 
+C++ code is built with `-Wall` and the warnings listed in `cmake/modules/TensorRTWarnings.cmake` treated as errors, where the compiler supports them.
+
 - Generate Makefiles and build
 
   **Example: Linux (x86-64) build with default cuda-13.4**

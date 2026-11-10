@@ -121,7 +121,8 @@ if(CMAKE_CROSSCOMPILING AND NOT TARGET protobuf::protoc)
         CACHE INTERNAL "")
 endif()
 
-# Hide all warnings for third-party code.
+# Hide all warnings for third-party code. The caller's options are restored at the end of this file.
+get_directory_property(_TRT_CALLER_COMPILE_OPTIONS COMPILE_OPTIONS)
 if (MSVC)
 else()
     add_compile_options(-w)
@@ -234,3 +235,6 @@ if(${RESTORE_CMAKE_LINK_LIBRARIES_ONLY_TARGETS})
     set(CMAKE_LINK_LIBRARIES_ONLY_TARGETS ON)
     unset(RESTORE_CMAKE_LINK_LIBRARIES_ONLY_TARGETS)
 endif()
+
+set_directory_properties(PROPERTIES COMPILE_OPTIONS "${_TRT_CALLER_COMPILE_OPTIONS}")
+unset(_TRT_CALLER_COMPILE_OPTIONS)

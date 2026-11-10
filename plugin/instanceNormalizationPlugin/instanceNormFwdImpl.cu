@@ -763,30 +763,23 @@ void instanceNormBufferSizesDispatch(InstanceNormFwdContext const& context, Inst
         case 700:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_700>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         case 720:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_720>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         case 750:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_750>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         case 800:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_800>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         case 860:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_860>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         case 870:
             return instanceNormBufferSizes<kernel_params_32_int8_sm_870>(
                 params, size_sums, size_counts, size_retired_ctas);
-            break;
         default:
             return instanceNormBufferSizes<kernel_params_32_int8>(params, size_sums, size_counts, size_retired_ctas);
-            break;
         }
         return instanceNormBufferSizes<kernel_params_32_int8>(params, size_sums, size_counts, size_retired_ctas);
     }
@@ -820,13 +813,13 @@ int32_t instanceNormFwdDispatch(InstanceNormFwdContext const& context, InstanceN
     {
         switch (context.sm_version)
         {
-        case 700: return instance_norm_fwd_launch<kernel_params_32_int8_sm_700>(context, params, stream); break;
-        case 720: return instance_norm_fwd_launch<kernel_params_32_int8_sm_720>(context, params, stream); break;
-        case 750: return instance_norm_fwd_launch<kernel_params_32_int8_sm_750>(context, params, stream); break;
-        case 800: return instance_norm_fwd_launch<kernel_params_32_int8_sm_800>(context, params, stream); break;
-        case 860: return instance_norm_fwd_launch<kernel_params_32_int8_sm_860>(context, params, stream); break;
-        case 870: return instance_norm_fwd_launch<kernel_params_32_int8_sm_870>(context, params, stream); break;
-        default: return instance_norm_fwd_launch<kernel_params_32_int8>(context, params, stream); break;
+        case 700: return instance_norm_fwd_launch<kernel_params_32_int8_sm_700>(context, params, stream);
+        case 720: return instance_norm_fwd_launch<kernel_params_32_int8_sm_720>(context, params, stream);
+        case 750: return instance_norm_fwd_launch<kernel_params_32_int8_sm_750>(context, params, stream);
+        case 800: return instance_norm_fwd_launch<kernel_params_32_int8_sm_800>(context, params, stream);
+        case 860: return instance_norm_fwd_launch<kernel_params_32_int8_sm_860>(context, params, stream);
+        case 870: return instance_norm_fwd_launch<kernel_params_32_int8_sm_870>(context, params, stream);
+        default: return instance_norm_fwd_launch<kernel_params_32_int8>(context, params, stream);
         }
     }
     else if (input_data_type == 1 && output_data_type == 2)

@@ -28,6 +28,7 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
     SOURCE_DIR     "${TensorRT_BINARY_DIR}/onnx"
     EXCLUDE_FROM_ALL
+    SYSTEM
 )
 
 FetchContent_MakeAvailable(onnx)
