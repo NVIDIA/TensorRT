@@ -15,6 +15,12 @@ Dates are in YYYY-MM-DD format.
 ### Added
 - Added support for `FLOAT4E2M1` tensors and upgraded ONNX version to >= 1.20
 
+### Fixed
+- Fixed a bug where a `Constant` whose values were `ml_dtypes.float8_e4m3fnuz` was exported with the
+  `FLOAT8E4M3FN` ONNX data type instead of `FLOAT8E4M3FNUZ`. The two types share a byte width, so the
+  tensor was silently mislabelled and would be interpreted as the wrong format by anything reading it
+  back — including an import followed by a re-export.
+
 
 ## v0.6.1 (2026-02-17)
 
