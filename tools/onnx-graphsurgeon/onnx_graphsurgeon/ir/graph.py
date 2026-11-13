@@ -1199,6 +1199,8 @@ class Graph(object):
                         )
                         if not error_ok:
                             raise err
+                        # Give up on this partition; its tensors stay unfolded.
+                        continue
 
                     constant_values.update(partition_and_infer(part))
                 else:

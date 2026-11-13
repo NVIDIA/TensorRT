@@ -1365,6 +1365,25 @@ class TestFoldConstants(object):
         original = foldable_with_invalid_node.copy()
         assert foldable_with_invalid_node.fold_constants() == original
 
+    def test_with_invalid_nodes_basic_partitioning(self):
+        # A partition that fails in ONNX-Runtime is left unfolded and other partitions are
+        # unaffected. This used to raise RecursionError.
+        weights = np.ones(shape=(1, 3), dtype=np.float32)
+
+        graph = Graph(ir_version=10)
+        inp = Variable("input", shape=(1, 3), dtype=np.float32)
+        bad = graph.add(graph.fake(weights, name="e"), weights, name="bad")
+        good = graph.add(weights, weights, name="good")
+        graph.inputs = [inp]
+        graph.outputs = [graph.add(inp, bad), good]
+
+        graph.fold_constants(partitioning="basic").cleanup()
+
+        assert [n.op for n in graph.nodes] == ["Fake", "Add", "Add"]
+        assert graph.outputs[1].name == "good"
+        assert isinstance(graph.outputs[1], Constant)
+        assert np.all(graph.outputs[1].values == weights * 2)
+
     def test_no_foldable_constants(self):
         inp0 = Variable("input0", shape=(1, 3), dtype=np.float32)
         inp1 = Variable("input1", shape=(1, 3), dtype=np.float32)
