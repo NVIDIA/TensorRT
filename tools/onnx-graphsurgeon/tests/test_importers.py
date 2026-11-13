@@ -152,6 +152,18 @@ class TestOnnxImporter(object):
                 onnx_node, OrderedDict(), OrderedDict(), opset=11, import_domains=None
             )
 
+    def test_import_node_sparse_tensor_attr(self):
+        values = onnx.helper.make_tensor("v", onnx.TensorProto.FLOAT, [2], [5.0, 7.0])
+        indices = onnx.helper.make_tensor("i", onnx.TensorProto.INT64, [2], [1, 4])
+        sparse = onnx.helper.make_sparse_tensor(values, indices, [6])
+        onnx_node = onnx.helper.make_node("Constant", [], ["c"], sparse_value=sparse)
+
+        node = OnnxImporter.import_node(
+            onnx_node, OrderedDict(), OrderedDict(), opset=13, import_domains=None
+        )
+        assert list(node.attrs) == ["sparse_value"]
+        assert isinstance(node.attrs["sparse_value"]._values, SparseValues)
+
     # TODO: Test all attribute types - missing graph
     def test_import_node(self):
         op = "Test"
