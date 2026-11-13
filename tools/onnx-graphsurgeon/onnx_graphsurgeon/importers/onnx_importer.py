@@ -45,6 +45,7 @@ ONNX_PYTHON_ATTR_MAPPING = {
     "INT": "i",
     "STRING": "s",
     "TENSOR": "t",
+    "SPARSE_TENSOR": "sparse_tensor",
     "GRAPH": "g",
     "FLOATS": "floats",
     "INTS": "ints",
@@ -289,7 +290,7 @@ class OnnxImporter(BaseImporter):
                 processed = getattr(attr, ONNX_PYTHON_ATTR_MAPPING[attr_str])
                 if attr_str == "STRING":
                     processed = decode_onnx_string(processed, attr.name)
-                elif attr_str == "TENSOR":
+                elif attr_str == "TENSOR" or attr_str == "SPARSE_TENSOR":
                     processed = OnnxImporter.import_tensor(processed)
                 elif attr_str == "GRAPH":
                     processed = OnnxImporter.import_graph(
