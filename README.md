@@ -85,7 +85,7 @@ To build the TensorRT-OSS components, you will first need the following software
   - [Clang-format](https://clang.llvm.org/docs/ClangFormat.html)
   - [Git-clang-format](https://github.com/llvm-mirror/clang/blob/master/tools/clang-format/git-clang-format)
 
-  > NOTE: [onnx-tensorrt](https://github.com/onnx/onnx-tensorrt), [cub](http://nvlabs.github.io/cub/), and [protobuf](https://github.com/protocolbuffers/protobuf.git) packages are downloaded along with TensorRT OSS, and not required to be installed.
+  > NOTE: [onnx-tensorrt](https://github.com/onnx/onnx-tensorrt), cub, and [protobuf](https://github.com/protocolbuffers/protobuf.git) packages are downloaded along with TensorRT OSS, and not required to be installed.
 
 ## Downloading TensorRT Build
 
