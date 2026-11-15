@@ -1835,6 +1835,77 @@ class TestFoldConstants(object):
             assert out.inputs
         onnx.checker.check_model(gs.export_onnx(graph))
 
+    # Converting a floating point constant to the integer type truncates it. For most ops that
+    # is only exact for whole numbers: for `Cast(x) * 2.5`, elision would compute `x * 2`.
+    # Max and Min commute with truncation, so `Max(x, 2.5)` may become `Max(x, 2)`.
+    @pytest.mark.parametrize(
+        "op, const_value, should_elide",
+        [
+            ("Mul", 2.0, True),
+            ("Mul", 2.5, False),
+            ("Mul", np.inf, False),
+            ("Mul", 2.0**63, False),
+            ("Mul", 1e20, False),
+            ("Max", 2.5, True),
+            ("Min", -2.5, True),
+            ("Max", np.inf, False),
+        ],
+        ids=[
+            "whole",
+            "fractional",
+            "inf",
+            "int64_bound",
+            "out_of_range",
+            "max_fractional",
+            "min_fractional",
+            "max_inf",
+        ],
+    )
+    def test_cast_elision_float_constant_values(self, op, const_value, should_elide):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        const = graph.constant(np.array([const_value], dtype=np.float32))
+        op_out = graph.layer(op=op, inputs=[casted_x, const], outputs=["op_out"])[0]
+        graph.outputs = [graph.cast(op_out, to=onnx.TensorProto.DataType.INT64)]
+
+        graph.fold_constants().cleanup()
+
+        ops = [node.op for node in graph.nodes]
+        if should_elide:
+            assert ops == [op]
+            assert graph.nodes[0].inputs[1].dtype == np.int64
+            assert graph.nodes[0].inputs[1].values.tolist() == [int(const_value)]
+        else:
+            assert ops == ["Cast", op, "Cast"]
+            assert graph.nodes[1].inputs[1].dtype == np.float32
+
+    # A constant read by the elided node and by another node must keep its original type
+    # for the other node.
+    def test_cast_elision_shared_constant(self):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X, Y], ir_version=10)
+        const = Constant("const", np.array([2.0], dtype=np.float32))
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_x, const)
+        int_out = graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)
+        int_out.to_variable(dtype=np.int64, shape=(1,))
+        float_out = graph.mul(Y, const)
+        float_out.to_variable(dtype=np.float32, shape=(1,))
+        graph.outputs = [int_out, float_out]
+
+        graph.fold_constants().cleanup()
+
+        add = next(node for node in graph.nodes if node.op == "Add")
+        mul = next(node for node in graph.nodes if node.op == "Mul")
+        assert add.inputs[0] == X
+        assert add.inputs[1].dtype == np.int64
+        assert mul.inputs[1] is const
+        assert const.dtype == np.float32
+        assert add.inputs[1].name != const.name
+        onnx.checker.check_model(gs.export_onnx(graph))
+
     @pytest.mark.parametrize(
         # If layer1_num_bytes is larger than layer0_num_bytes, then it must be a multiple.
         "size_threshold, layer0_num_bytes, layer0_should_fold, layer1_num_bytes, layer1_should_fold",

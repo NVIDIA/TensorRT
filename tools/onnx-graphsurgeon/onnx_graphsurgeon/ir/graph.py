@@ -904,6 +904,30 @@ class Graph(object):
             if any(out_cast.attrs["to"] != final_type for out_cast in out_casts):
                 return
 
+            # Floating point constant inputs are converted (truncated) to the integer type below.
+            # In general that is only exact if every value is a whole number. Otherwise, for
+            # example, `Cast(x) * 2.5` would become `x * 2` and silently change the result.
+            # Truncation is monotonic and leaves whole numbers unchanged, so for these ops it
+            # commutes with the op, e.g. `Cast(Max(Cast(x), 2.5))` equals `Max(x, 2)` for any
+            # integer `x`, and fractional constants are fine.
+            TRUNCATION_SAFE_OPS = ["Concat", "Max", "Min"]
+            np_final_type = onnx.helper.tensor_dtype_to_np_dtype(final_type)
+            int_info = np.iinfo(np_final_type)
+            for inp in node.inputs:
+                if not isinstance(inp, Constant) or inp.values.size == 0:
+                    continue
+                values = inp.values
+                if not np.all(np.isfinite(values)):
+                    return
+                if node.op not in TRUNCATION_SAFE_OPS and not np.array_equal(
+                    values, np.trunc(values)
+                ):
+                    return
+                # The bounds are powers of two, so they are exact in floating point, unlike
+                # `int_info.max`, which rounds up to `-int_info.min` for INT64.
+                if values.min() < int_info.min or values.max() >= -float(int_info.min):
+                    return
+
             # If all checks passed, reconnect inputs/outputs to the consumers/producers
             # of the Cast nodes.
             # Note that we need to be careful in how we rebind tensors since they may
@@ -911,9 +935,14 @@ class Graph(object):
             # `cast_node.inputs[0].outputs[0] == cast_node`.
             for index, inp in enumerate(node.inputs):
                 if isinstance(inp, Constant):
-                    inp.values = inp.values.astype(
-                        onnx.helper.tensor_dtype_to_np_dtype(final_type)
-                    )
+                    new_values = inp.values.astype(np_final_type)
+                    if len(inp.outputs) > 1:
+                        # The constant is also read elsewhere, where it must keep its
+                        # original type, so give this node its own converted copy.
+                        name = self._generate_name(inp.name, self._local_tensors())
+                        node.inputs[index] = Constant(name, new_values)
+                    else:
+                        inp.values = new_values
 
                 for cast in inp_casts:
                     if cast.outputs[0] == inp:

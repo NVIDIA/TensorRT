@@ -11,6 +11,9 @@ Dates are in YYYY-MM-DD format.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
 - Fixed a bug where shape tensor cast elision in `fold_constants()` left a disconnected tensor, producing an invalid model,
   when the output of the elided node was consumed by more than one `Cast` node.
+- Fixed shape tensor cast elision in `fold_constants()` silently changing results when a floating point constant input
+  was not a whole number (for example, `Cast(x) * 2.5` became `x * 2`), and changing the type of a constant that is also
+  used by other nodes.
 
 ## v0.6.2 (2026-05-21)
 
