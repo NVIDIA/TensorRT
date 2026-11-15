@@ -881,25 +881,27 @@ class Graph(object):
                 return
 
             final_type = inp_dtypes[0]
+            if final_type not in [
+                onnx.TensorProto.DataType.INT32,
+                onnx.TensorProto.DataType.INT64,
+            ]:
+                return
 
-            # Get list of output nodes that cast to int32 or int64
+            # All consumers of the outputs are known to be Cast nodes at this point.
             out_casts = [
                 out_node
                 for out_tensor in node.outputs
                 for out_node in out_tensor.outputs
-                if out_node.op == "Cast"
-                and out_node.attrs["to"]
-                in [onnx.TensorProto.DataType.INT32, onnx.TensorProto.DataType.INT64]
             ]
 
             # No cast node found on outputs, return early
             if not out_casts:
                 return
 
-            # Ensure that all output cast nodes are casting to the same type and that this
-            # matches the original type before the inputs were casted.
-            out_dtypes = [out_cast.attrs["to"] for out_cast in out_casts]
-            if len(set(out_dtypes)) != 1 or out_dtypes[0] != final_type:
+            # Every output cast must cast back to the original type before the inputs were
+            # casted. If any consumer casts to another type (e.g. FLOAT16), it still needs the
+            # floating point result, so the cast cannot be elided.
+            if any(out_cast.attrs["to"] != final_type for out_cast in out_casts):
                 return
 
             # If all checks passed, reconnect inputs/outputs to the consumers/producers
@@ -918,11 +920,17 @@ class Graph(object):
                         node.inputs[index] = cast.inputs[0]
 
             for index, out in enumerate(node.outputs):
-                for cast in out_casts:
-                    if cast.inputs[0] == out:
-                        out_tensor = cast.outputs[0]
-                        out_tensor.inputs.clear()  # Disconnect from Cast
-                        node.outputs[index] = out_tensor
+                casts = [cast for cast in out_casts if cast.inputs[0] == out]
+                if not casts:
+                    continue
+                # The first Cast's output becomes the output of this node. Any other Cast
+                # of the same tensor is rebound to that output; it now casts to the type its
+                # input already has, so its result is unchanged.
+                out_tensor = casts[0].outputs[0]
+                out_tensor.inputs.clear()  # Disconnect from Cast
+                node.outputs[index] = out_tensor
+                for cast in casts[1:]:
+                    cast.inputs[0] = out_tensor
 
         if fold_shapes:
             # Perform shape tensor cast elision prior to most other folding
