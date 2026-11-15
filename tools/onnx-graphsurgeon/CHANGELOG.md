@@ -14,6 +14,8 @@ Dates are in YYYY-MM-DD format.
 - Fixed shape tensor cast elision in `fold_constants()` silently changing results when a floating point constant input
   was not a whole number (for example, `Cast(x) * 2.5` became `x * 2`), and changing the type of a constant that is also
   used by other nodes.
+- Fixed shape tensor cast elision in `fold_constants()` producing an invalid model for `Equal`, `Greater` and `Less`,
+  whose `BOOL` output was rebound to the integer output of the following `Cast`.
 
 ## v0.6.2 (2026-05-21)
 

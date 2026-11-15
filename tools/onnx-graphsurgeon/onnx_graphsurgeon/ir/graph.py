@@ -948,6 +948,11 @@ class Graph(object):
                     if cast.outputs[0] == inp:
                         node.inputs[index] = cast.inputs[0]
 
+            # Comparisons produce BOOL rather than the floating point type, so their output
+            # Casts are real conversions from BOOL and must stay. Only the input Casts are elided.
+            if node.op in ["Equal", "Greater", "Less"]:
+                return
+
             for index, out in enumerate(node.outputs):
                 casts = [cast for cast in out_casts if cast.inputs[0] == out]
                 if not casts:

@@ -1880,6 +1880,30 @@ class TestFoldConstants(object):
             assert ops == ["Cast", op, "Cast"]
             assert graph.nodes[1].inputs[1].dtype == np.float32
 
+    # Comparisons output BOOL, so the Cast after them converts BOOL to the integer type and must
+    # stay. Only the Casts on the inputs can be elided.
+    @pytest.mark.parametrize("op", ["Equal", "Greater", "Less"])
+    def test_cast_elision_comparison(self, op):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        const = graph.constant(np.array([2.0], dtype=np.float32))
+        cmp_out = graph.layer(op=op, inputs=[casted_x, const], outputs=["cmp_out"])[0]
+        cmp_out.to_variable(dtype=np.bool_, shape=(1,))
+        out = graph.cast(cmp_out, to=onnx.TensorProto.DataType.INT64)
+        out.to_variable(dtype=np.int64, shape=(1,))
+        graph.outputs = [out]
+
+        graph.fold_constants().cleanup()
+
+        assert [node.op for node in graph.nodes] == [op, "Cast"]
+        cmp, cast = graph.nodes
+        assert cmp.inputs[0] == X
+        assert cmp.inputs[1].dtype == np.int64
+        assert cmp.outputs[0] == cmp_out
+        assert cast.inputs[0] == cmp_out and cast.outputs[0] == out
+        onnx.checker.check_model(gs.export_onnx(graph), full_check=True)
+
     # A constant read by the elided node and by another node must keep its original type
     # for the other node.
     def test_cast_elision_shared_constant(self):
