@@ -1849,6 +1849,8 @@ class TestFoldConstants(object):
             ("Max", 2.5, True),
             ("Min", -2.5, True),
             ("Max", np.inf, False),
+            ("Div", 0.0, False),
+            ("Div", 2.0, True),
         ],
         ids=[
             "whole",
@@ -1859,6 +1861,8 @@ class TestFoldConstants(object):
             "max_fractional",
             "min_fractional",
             "max_inf",
+            "div_by_zero",
+            "div_whole",
         ],
     )
     def test_cast_elision_float_constant_values(self, op, const_value, should_elide):
@@ -1902,6 +1906,28 @@ class TestFoldConstants(object):
         assert cmp.inputs[1].dtype == np.int64
         assert cmp.outputs[0] == cmp_out
         assert cast.inputs[0] == cmp_out and cast.outputs[0] == out
+        onnx.checker.check_model(gs.export_onnx(graph), full_check=True)
+
+    # If any non-constant input of the node is not produced by a Cast to FLOAT (here a graph
+    # input `Y`, or the result of another op), eliding would mix integer and floating point inputs.
+    @pytest.mark.parametrize(
+        "other_from_op", [False, True], ids=["graph_input", "op_output"]
+    )
+    def test_cast_elision_mixed_inputs(self, other_from_op):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X, Y], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        other = graph.relu(Y) if other_from_op else Y
+        add_out = graph.add(casted_x, other)
+        out = graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)
+        out.to_variable(dtype=np.int64, shape=(1,))
+        graph.outputs = [out]
+
+        graph.fold_constants().cleanup()
+
+        ops = [node.op for node in graph.nodes]
+        assert ops == ["Cast"] + (["Relu"] if other_from_op else []) + ["Add", "Cast"]
         onnx.checker.check_model(gs.export_onnx(graph), full_check=True)
 
     # A constant read by the elided node and by another node must keep its original type

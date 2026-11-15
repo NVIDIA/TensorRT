@@ -16,6 +16,9 @@ Dates are in YYYY-MM-DD format.
   used by other nodes.
 - Fixed shape tensor cast elision in `fold_constants()` producing an invalid model for `Equal`, `Greater` and `Less`,
   whose `BOOL` output was rebound to the integer output of the following `Cast`.
+- Fixed shape tensor cast elision in `fold_constants()` producing an invalid model when only some of a node's inputs came
+  from `Cast` nodes, and no longer elide `Div` by a constant containing zero, which turned a model that runs into one that
+  fails at load time.
 
 ## v0.6.2 (2026-05-21)
 

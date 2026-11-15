@@ -873,6 +873,16 @@ class Graph(object):
             if not inp_casts:
                 return
 
+            # Every non-constant input must come from one of those casts. Otherwise, e.g. for
+            # `Add(Cast(x), y)` with a floating point `y`, eliding the cast would leave the node
+            # with one integer and one floating point input.
+            cast_outputs = [inp_cast.outputs[0] for inp_cast in inp_casts]
+            if any(
+                not isinstance(inp, Constant) and inp not in cast_outputs
+                for inp in node.inputs
+            ):
+                return
+
             # Ensure that all input cast nodes are casting from the same type
             inp_dtypes = [
                 dtype_to_onnx(inp_cast.inputs[0].dtype) for inp_cast in inp_casts
@@ -918,6 +928,10 @@ class Graph(object):
                     continue
                 values = inp.values
                 if not np.all(np.isfinite(values)):
+                    return
+                # Floating point division by zero gives inf, but integer division by zero is an
+                # error, so a model that loads and runs would no longer do so after elision.
+                if node.op == "Div" and inp is node.inputs[1] and np.any(values == 0):
                     return
                 if node.op not in TRUNCATION_SAFE_OPS and not np.array_equal(
                     values, np.trunc(values)
