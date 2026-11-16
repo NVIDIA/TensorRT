@@ -1787,6 +1787,54 @@ class TestFoldConstants(object):
         else:
             assert ops == ["Add"]
 
+    # For a graph like:
+    #
+    #        inp
+    #         |
+    #       Cast
+    #         |
+    #        Add
+    #       /   \
+    #    Cast   Cast
+    #     |       |
+    #   out0     out1
+    #
+    # Cast elision is only valid if every consumer of the `Add` output casts back to the
+    # original integer type. If one of them casts to a floating point type, it must keep
+    # reading the floating point result. If both cast back to the original type, both must
+    # still be connected after elision.
+    @pytest.mark.parametrize(
+        "second_cast_to, expected_ops",
+        [
+            (onnx.TensorProto.DataType.FLOAT16, ["Cast", "Add", "Cast", "Cast"]),
+            (onnx.TensorProto.DataType.INT32, ["Add", "Cast"]),
+        ],
+        ids=["float16", "int32"],
+    )
+    def test_cast_elision_multiple_output_casts(self, second_cast_to, expected_ops):
+        X = gs.Variable("X", dtype=np.int32, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_x, casted_x)
+        out0 = graph.cast(add_out, to=onnx.TensorProto.DataType.INT32)
+        out1 = graph.cast(add_out, to=second_cast_to)
+        out0.to_variable(dtype=np.int32, shape=(1,))
+        out1.to_variable(
+            dtype=onnx.helper.tensor_dtype_to_np_dtype(second_cast_to), shape=(1,)
+        )
+        graph.outputs = [out0, out1]
+
+        graph.fold_constants().cleanup()
+
+        assert [node.op for node in graph.nodes] == expected_ops
+        # Every input of every node must still be produced by some node or be a graph input.
+        for node in graph.nodes:
+            for inp in node.inputs:
+                assert inp.inputs or inp in graph.inputs
+        for out in graph.outputs:
+            assert out.inputs
+        onnx.checker.check_model(gs.export_onnx(graph))
+
     @pytest.mark.parametrize(
         # If layer1_num_bytes is larger than layer0_num_bytes, then it must be a multiple.
         "size_threshold, layer0_num_bytes, layer0_should_fold, layer1_num_bytes, layer1_should_fold",

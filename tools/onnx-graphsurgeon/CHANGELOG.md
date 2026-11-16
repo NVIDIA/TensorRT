@@ -9,6 +9,8 @@ Dates are in YYYY-MM-DD format.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+- Fixed a bug where shape tensor cast elision in `fold_constants()` left a disconnected tensor, producing an invalid model,
+  when the output of the elided node was consumed by more than one `Cast` node.
 
 ## v0.6.2 (2026-05-21)
 
