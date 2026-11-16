@@ -778,6 +778,23 @@ class TestToposort(object):
         func.outputs = [intermediate]
         return func
 
+    @staticmethod
+    def make_if_node(branch_node: Node, else_node: Node = None) -> Node:
+        """
+        Create an If node whose branches consist only of 'branch_node'.
+        If 'else_node' is provided, the else-branch consists only of 'else_node' instead.
+        """
+        then_branch = Graph(nodes=[branch_node], outputs=list(branch_node.outputs))
+        else_branch = then_branch
+        if else_node is not None:
+            else_branch = Graph(nodes=[else_node], outputs=list(else_node.outputs))
+        return Node(
+            "If",
+            inputs=[Variable("cond")],
+            outputs=[Variable("if_out")],
+            attrs={"then_branch": then_branch, "else_branch": else_branch},
+        )
+
     @pytest.mark.parametrize("toposort_test_case", TOPOSORT_TEST_CASES)
     def test_topologically_sort(self, toposort_test_case):
         graph, expected_node_order = toposort_test_case()
@@ -851,6 +868,94 @@ class TestToposort(object):
             assert False, "Should have raised"
         except OnnxGraphSurgeonException:
             pass
+
+    @pytest.mark.parametrize("mode", ["full", "functions"])
+    def test_function_order_with_subgraph_in_graph(self, mode):
+        # Sorting functions must not recurse infinitely when the graph contains a subgraph.
+        func1 = self.make_single_node_function("func1", [])
+        func2 = self.make_single_node_function("func2", ["func1"])
+        if_node = self.make_if_node(
+            Node("Identity", inputs=[Variable("x")], outputs=[Variable("y")])
+        )
+        graph = Graph(nodes=[if_node], functions=[func2, func1])
+        graph.toposort(mode=mode)
+        assert graph.functions == [func1, func2]
+
+    def test_function_toposort_with_subgraph_in_function(self):
+        # Same as above, but sorting from a Function which itself contains a subgraph.
+        func1 = self.make_single_node_function("func1", [])
+        func2 = self.make_single_node_function("func2", ["func1"])
+        if_node = self.make_if_node(
+            Node("Identity", inputs=[Variable("x")], outputs=[Variable("y")])
+        )
+        func = Function("func_with_if", nodes=[if_node], functions=[func2, func1])
+        func.toposort(mode="functions")
+        assert func.functions == [func1, func2]
+
+    @pytest.mark.parametrize("mode", ["full", "functions"])
+    def test_function_order_dependency_in_subgraph(self, mode):
+        # func2 uses func1 only from within the else-branch of an If node.
+        func1 = self.make_single_node_function("func1", [])
+        if_node = self.make_if_node(
+            Node("Identity", inputs=[Variable("x")], outputs=[Variable("y")]),
+            else_node=Node(
+                "func1",
+                domain=Function.DEFAULT_DOMAIN,
+                inputs=[Variable("x")],
+                outputs=[Variable("y")],
+            ),
+        )
+        assert len(list(if_node.subgraphs())) == 2
+        func2 = Function("func2", nodes=[if_node])
+        graph = Graph(functions=[func2, func1])
+        graph.toposort(mode=mode)
+        assert graph.functions == [func1, func2]
+
+    def test_function_order_dependency_in_nested_subgraph(self):
+        # func3 uses func2 only from within an If node nested inside another If node.
+        # func2 uses func1 directly.
+        func1 = self.make_single_node_function("func1", [])
+        func2 = self.make_single_node_function("func2", ["func1"])
+        func3 = Function(
+            "func3",
+            nodes=[
+                self.make_if_node(
+                    self.make_if_node(
+                        Node(
+                            "func2",
+                            domain=Function.DEFAULT_DOMAIN,
+                            inputs=[Variable("x")],
+                            outputs=[Variable("y")],
+                        )
+                    )
+                )
+            ],
+        )
+        graph = Graph(functions=[func3, func1, func2])
+        graph.toposort()
+        assert graph.functions == [func1, func2, func3]
+
+    def test_function_circular_dep_through_subgraph(self):
+        # Circular dependency [func1 -> func2 -> func1], where func2 uses func1 only from within an If node.
+        func1 = self.make_single_node_function("func1", ["func2"])
+        func2 = Function(
+            "func2",
+            nodes=[
+                self.make_if_node(
+                    Node(
+                        "func1",
+                        domain=Function.DEFAULT_DOMAIN,
+                        inputs=[Variable("x")],
+                        outputs=[Variable("y")],
+                    )
+                )
+            ],
+        )
+        graph = Graph(functions=[func2, func1])
+        with pytest.raises(
+            OnnxGraphSurgeonException, match="Cycle detected in function definitions"
+        ):
+            graph.toposort()
 
 
 def build_basic_graph():
