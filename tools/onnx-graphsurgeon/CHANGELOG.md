@@ -9,6 +9,16 @@ Dates are in YYYY-MM-DD format.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+- Fixed a bug where shape tensor cast elision in `fold_constants()` left a disconnected tensor, producing an invalid model,
+  when the output of the elided node was consumed by more than one `Cast` node.
+- Fixed shape tensor cast elision in `fold_constants()` silently changing results when a floating point constant input
+  was not a whole number (for example, `Cast(x) * 2.5` became `x * 2`), and changing the type of a constant that is also
+  used by other nodes.
+- Fixed shape tensor cast elision in `fold_constants()` producing an invalid model for `Equal`, `Greater` and `Less`,
+  whose `BOOL` output was rebound to the integer output of the following `Cast`.
+- Fixed shape tensor cast elision in `fold_constants()` producing an invalid model when only some of a node's inputs came
+  from `Cast` nodes, and no longer elide `Div` by a constant containing zero, which turned a model that runs into one that
+  fails at load time.
 
 ## v0.6.2 (2026-05-21)
 

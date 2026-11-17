@@ -1787,6 +1787,175 @@ class TestFoldConstants(object):
         else:
             assert ops == ["Add"]
 
+    # For a graph like:
+    #
+    #        inp
+    #         |
+    #       Cast
+    #         |
+    #        Add
+    #       /   \
+    #    Cast   Cast
+    #     |       |
+    #   out0     out1
+    #
+    # Cast elision is only valid if every consumer of the `Add` output casts back to the
+    # original integer type. If one of them casts to a floating point type, it must keep
+    # reading the floating point result. If both cast back to the original type, both must
+    # still be connected after elision.
+    @pytest.mark.parametrize(
+        "second_cast_to, expected_ops",
+        [
+            (onnx.TensorProto.DataType.FLOAT16, ["Cast", "Add", "Cast", "Cast"]),
+            (onnx.TensorProto.DataType.INT32, ["Add", "Cast"]),
+        ],
+        ids=["float16", "int32"],
+    )
+    def test_cast_elision_multiple_output_casts(self, second_cast_to, expected_ops):
+        X = gs.Variable("X", dtype=np.int32, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_x, casted_x)
+        out0 = graph.cast(add_out, to=onnx.TensorProto.DataType.INT32)
+        out1 = graph.cast(add_out, to=second_cast_to)
+        out0.to_variable(dtype=np.int32, shape=(1,))
+        out1.to_variable(
+            dtype=onnx.helper.tensor_dtype_to_np_dtype(second_cast_to), shape=(1,)
+        )
+        graph.outputs = [out0, out1]
+
+        graph.fold_constants().cleanup()
+
+        assert [node.op for node in graph.nodes] == expected_ops
+        # Every input of every node must still be produced by some node or be a graph input.
+        for node in graph.nodes:
+            for inp in node.inputs:
+                assert inp.inputs or inp in graph.inputs
+        for out in graph.outputs:
+            assert out.inputs
+        onnx.checker.check_model(gs.export_onnx(graph))
+
+    # Converting a floating point constant to the integer type truncates it. For most ops that
+    # is only exact for whole numbers: for `Cast(x) * 2.5`, elision would compute `x * 2`.
+    # Max and Min commute with truncation, so `Max(x, 2.5)` may become `Max(x, 2)`.
+    @pytest.mark.parametrize(
+        "op, const_value, should_elide",
+        [
+            ("Mul", 2.0, True),
+            ("Mul", 2.5, False),
+            ("Mul", np.inf, False),
+            ("Mul", 2.0**63, False),
+            ("Mul", 1e20, False),
+            ("Max", 2.5, True),
+            ("Min", -2.5, True),
+            ("Max", np.inf, False),
+            ("Div", 0.0, False),
+            ("Div", 2.0, True),
+        ],
+        ids=[
+            "whole",
+            "fractional",
+            "inf",
+            "int64_bound",
+            "out_of_range",
+            "max_fractional",
+            "min_fractional",
+            "max_inf",
+            "div_by_zero",
+            "div_whole",
+        ],
+    )
+    def test_cast_elision_float_constant_values(self, op, const_value, should_elide):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        const = graph.constant(np.array([const_value], dtype=np.float32))
+        op_out = graph.layer(op=op, inputs=[casted_x, const], outputs=["op_out"])[0]
+        graph.outputs = [graph.cast(op_out, to=onnx.TensorProto.DataType.INT64)]
+
+        graph.fold_constants().cleanup()
+
+        ops = [node.op for node in graph.nodes]
+        if should_elide:
+            assert ops == [op]
+            assert graph.nodes[0].inputs[1].dtype == np.int64
+            assert graph.nodes[0].inputs[1].values.tolist() == [int(const_value)]
+        else:
+            assert ops == ["Cast", op, "Cast"]
+            assert graph.nodes[1].inputs[1].dtype == np.float32
+
+    # Comparisons output BOOL, so the Cast after them converts BOOL to the integer type and must
+    # stay. Only the Casts on the inputs can be elided.
+    @pytest.mark.parametrize("op", ["Equal", "Greater", "Less"])
+    def test_cast_elision_comparison(self, op):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[X], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        const = graph.constant(np.array([2.0], dtype=np.float32))
+        cmp_out = graph.layer(op=op, inputs=[casted_x, const], outputs=["cmp_out"])[0]
+        cmp_out.to_variable(dtype=np.bool_, shape=(1,))
+        out = graph.cast(cmp_out, to=onnx.TensorProto.DataType.INT64)
+        out.to_variable(dtype=np.int64, shape=(1,))
+        graph.outputs = [out]
+
+        graph.fold_constants().cleanup()
+
+        assert [node.op for node in graph.nodes] == [op, "Cast"]
+        cmp, cast = graph.nodes
+        assert cmp.inputs[0] == X
+        assert cmp.inputs[1].dtype == np.int64
+        assert cmp.outputs[0] == cmp_out
+        assert cast.inputs[0] == cmp_out and cast.outputs[0] == out
+        onnx.checker.check_model(gs.export_onnx(graph), full_check=True)
+
+    # If any non-constant input of the node is not produced by a Cast to FLOAT (here a graph
+    # input `Y`, or the result of another op), eliding would mix integer and floating point inputs.
+    @pytest.mark.parametrize(
+        "other_from_op", [False, True], ids=["graph_input", "op_output"]
+    )
+    def test_cast_elision_mixed_inputs(self, other_from_op):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X, Y], ir_version=10)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        other = graph.relu(Y) if other_from_op else Y
+        add_out = graph.add(casted_x, other)
+        out = graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)
+        out.to_variable(dtype=np.int64, shape=(1,))
+        graph.outputs = [out]
+
+        graph.fold_constants().cleanup()
+
+        ops = [node.op for node in graph.nodes]
+        assert ops == ["Cast"] + (["Relu"] if other_from_op else []) + ["Add", "Cast"]
+        onnx.checker.check_model(gs.export_onnx(graph), full_check=True)
+
+    # A constant read by the elided node and by another node must keep its original type
+    # for the other node.
+    def test_cast_elision_shared_constant(self):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X, Y], ir_version=10)
+        const = Constant("const", np.array([2.0], dtype=np.float32))
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_x, const)
+        int_out = graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)
+        int_out.to_variable(dtype=np.int64, shape=(1,))
+        float_out = graph.mul(Y, const)
+        float_out.to_variable(dtype=np.float32, shape=(1,))
+        graph.outputs = [int_out, float_out]
+
+        graph.fold_constants().cleanup()
+
+        add = next(node for node in graph.nodes if node.op == "Add")
+        mul = next(node for node in graph.nodes if node.op == "Mul")
+        assert add.inputs[0] == X
+        assert add.inputs[1].dtype == np.int64
+        assert mul.inputs[1] is const
+        assert const.dtype == np.float32
+        assert add.inputs[1].name != const.name
+        onnx.checker.check_model(gs.export_onnx(graph))
+
     @pytest.mark.parametrize(
         # If layer1_num_bytes is larger than layer0_num_bytes, then it must be a multiple.
         "size_threshold, layer0_num_bytes, layer0_should_fold, layer1_num_bytes, layer1_should_fold",

@@ -873,6 +873,16 @@ class Graph(object):
             if not inp_casts:
                 return
 
+            # Every non-constant input must come from one of those casts. Otherwise, e.g. for
+            # `Add(Cast(x), y)` with a floating point `y`, eliding the cast would leave the node
+            # with one integer and one floating point input.
+            cast_outputs = [inp_cast.outputs[0] for inp_cast in inp_casts]
+            if any(
+                not isinstance(inp, Constant) and inp not in cast_outputs
+                for inp in node.inputs
+            ):
+                return
+
             # Ensure that all input cast nodes are casting from the same type
             inp_dtypes = [
                 dtype_to_onnx(inp_cast.inputs[0].dtype) for inp_cast in inp_casts
@@ -881,26 +891,56 @@ class Graph(object):
                 return
 
             final_type = inp_dtypes[0]
+            if final_type not in [
+                onnx.TensorProto.DataType.INT32,
+                onnx.TensorProto.DataType.INT64,
+            ]:
+                return
 
-            # Get list of output nodes that cast to int32 or int64
+            # All consumers of the outputs are known to be Cast nodes at this point.
             out_casts = [
                 out_node
                 for out_tensor in node.outputs
                 for out_node in out_tensor.outputs
-                if out_node.op == "Cast"
-                and out_node.attrs["to"]
-                in [onnx.TensorProto.DataType.INT32, onnx.TensorProto.DataType.INT64]
             ]
 
             # No cast node found on outputs, return early
             if not out_casts:
                 return
 
-            # Ensure that all output cast nodes are casting to the same type and that this
-            # matches the original type before the inputs were casted.
-            out_dtypes = [out_cast.attrs["to"] for out_cast in out_casts]
-            if len(set(out_dtypes)) != 1 or out_dtypes[0] != final_type:
+            # Every output cast must cast back to the original type before the inputs were
+            # casted. If any consumer casts to another type (e.g. FLOAT16), it still needs the
+            # floating point result, so the cast cannot be elided.
+            if any(out_cast.attrs["to"] != final_type for out_cast in out_casts):
                 return
+
+            # Floating point constant inputs are converted (truncated) to the integer type below.
+            # In general that is only exact if every value is a whole number. Otherwise, for
+            # example, `Cast(x) * 2.5` would become `x * 2` and silently change the result.
+            # Truncation is monotonic and leaves whole numbers unchanged, so for these ops it
+            # commutes with the op, e.g. `Cast(Max(Cast(x), 2.5))` equals `Max(x, 2)` for any
+            # integer `x`, and fractional constants are fine.
+            TRUNCATION_SAFE_OPS = ["Concat", "Max", "Min"]
+            np_final_type = onnx.helper.tensor_dtype_to_np_dtype(final_type)
+            int_info = np.iinfo(np_final_type)
+            for inp in node.inputs:
+                if not isinstance(inp, Constant) or inp.values.size == 0:
+                    continue
+                values = inp.values
+                if not np.all(np.isfinite(values)):
+                    return
+                # Floating point division by zero gives inf, but integer division by zero is an
+                # error, so a model that loads and runs would no longer do so after elision.
+                if node.op == "Div" and inp is node.inputs[1] and np.any(values == 0):
+                    return
+                if node.op not in TRUNCATION_SAFE_OPS and not np.array_equal(
+                    values, np.trunc(values)
+                ):
+                    return
+                # The bounds are powers of two, so they are exact in floating point, unlike
+                # `int_info.max`, which rounds up to `-int_info.min` for INT64.
+                if values.min() < int_info.min or values.max() >= -float(int_info.min):
+                    return
 
             # If all checks passed, reconnect inputs/outputs to the consumers/producers
             # of the Cast nodes.
@@ -909,20 +949,36 @@ class Graph(object):
             # `cast_node.inputs[0].outputs[0] == cast_node`.
             for index, inp in enumerate(node.inputs):
                 if isinstance(inp, Constant):
-                    inp.values = inp.values.astype(
-                        onnx.helper.tensor_dtype_to_np_dtype(final_type)
-                    )
+                    new_values = inp.values.astype(np_final_type)
+                    if len(inp.outputs) > 1:
+                        # The constant is also read elsewhere, where it must keep its
+                        # original type, so give this node its own converted copy.
+                        name = self._generate_name(inp.name, self._local_tensors())
+                        node.inputs[index] = Constant(name, new_values)
+                    else:
+                        inp.values = new_values
 
                 for cast in inp_casts:
                     if cast.outputs[0] == inp:
                         node.inputs[index] = cast.inputs[0]
 
+            # Comparisons produce BOOL rather than the floating point type, so their output
+            # Casts are real conversions from BOOL and must stay. Only the input Casts are elided.
+            if node.op in ["Equal", "Greater", "Less"]:
+                return
+
             for index, out in enumerate(node.outputs):
-                for cast in out_casts:
-                    if cast.inputs[0] == out:
-                        out_tensor = cast.outputs[0]
-                        out_tensor.inputs.clear()  # Disconnect from Cast
-                        node.outputs[index] = out_tensor
+                casts = [cast for cast in out_casts if cast.inputs[0] == out]
+                if not casts:
+                    continue
+                # The first Cast's output becomes the output of this node. Any other Cast
+                # of the same tensor is rebound to that output; it now casts to the type its
+                # input already has, so its result is unchanged.
+                out_tensor = casts[0].outputs[0]
+                out_tensor.inputs.clear()  # Disconnect from Cast
+                node.outputs[index] = out_tensor
+                for cast in casts[1:]:
+                    cast.inputs[0] = out_tensor
 
         if fold_shapes:
             # Perform shape tensor cast elision prior to most other folding
