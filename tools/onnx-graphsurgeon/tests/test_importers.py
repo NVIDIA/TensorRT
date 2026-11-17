@@ -437,6 +437,57 @@ class TestOnnxImporter(object):
         with pytest.raises(OnnxGraphSurgeonException, match="out of bounds"):
             _ = tensor.values
 
+    @pytest.mark.parametrize("raw", [True, False], ids=["raw_data", "typed_field"])
+    @pytest.mark.parametrize(
+        "dtype, values",
+        [
+            (np.float32, [1.5, -2.25]),
+            (np.float16, [1.5, -2.25]),
+            (np.int64, [7, 2**60 + 1]),
+            (np.int32, [-3, 9]),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "indices, index_shape",
+        [([1, 4], [2]), ([0, 1, 1, 1], [2, 2])],
+        ids=["nnz", "nnz_rank"],
+    )
+    def test_import_sparse_tensor_preserves_values_and_dtype(
+        self, raw, dtype, values, indices, index_shape
+    ):
+        dense_shape = [2, 3]
+        values = np.array(values, dtype=dtype)
+        if raw:
+            values_tensor = onnx.numpy_helper.from_array(values, "w_sparse")
+            indices_tensor = onnx.numpy_helper.from_array(
+                np.array(indices, dtype=np.int64).reshape(index_shape), "indices"
+            )
+        else:
+            values_tensor = onnx.helper.make_tensor(
+                "w_sparse",
+                onnx.helper.np_dtype_to_tensor_dtype(values.dtype),
+                values.shape,
+                values.tolist(),
+            )
+            indices_tensor = onnx.helper.make_tensor(
+                "indices", onnx.TensorProto.INT64, index_shape, indices
+            )
+        sparse_tensor = onnx.helper.make_sparse_tensor(
+            values_tensor, indices_tensor, dense_shape
+        )
+
+        expected = np.zeros(dense_shape, dtype=dtype)
+        if len(index_shape) == 1:
+            expected.ravel()[indices] = values
+        else:
+            for value, index in zip(values, np.reshape(indices, index_shape)):
+                expected[tuple(index)] = value
+
+        tensor = OnnxImporter.import_tensor(sparse_tensor)
+        assert tensor.dtype == dtype
+        assert tensor.values.dtype == dtype
+        assert np.array_equal(tensor.values, expected)
+
     def test_import_fp4_tensor(self):
         name = "test_fp4"
         shape = (2, 2)

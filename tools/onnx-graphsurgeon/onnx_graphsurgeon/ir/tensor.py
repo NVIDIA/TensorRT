@@ -296,16 +296,20 @@ class SparseValues(LazyValues):
                 f"Unsupported index data type {self.tensor.indices.data_type} in {self.tensor.values.name}"
             )
 
-        if self.tensor.values.data_type == onnx.TensorProto.FLOAT16:
-            values_data = np.asarray(
-                self.tensor.values.int32_data, dtype=np.uint16
-            ).view(np.float16)
-        else:
-            field_name = onnx.helper.tensor_dtype_to_field(self.tensor.values.data_type)
-            values = getattr(self.tensor.values, field_name)
-            dtype = onnx.helper.tensor_dtype_to_np_dtype(self.tensor.values.data_type)
-            values_data = np.asarray(values, dtype)
-        indices_data = np.asarray(self.tensor.indices.int64_data, dtype=np.int64)
+        def to_flat_array(tensor_proto, kind):
+            # Use numpy_helper so that every storage form is handled, including raw_data
+            # (which is what numpy_helper.from_array produces) and external data.
+            try:
+                return np.asarray(onnx.numpy_helper.to_array(tensor_proto)).ravel()
+            except ValueError as err:
+                G_LOGGER.critical(
+                    f"Sparse tensor {self.tensor.values.name} has malformed {kind}: {err}"
+                )
+
+        values_data = to_flat_array(self.tensor.values, "values")
+        indices_data = to_flat_array(self.tensor.indices, "indices").astype(
+            np.int64, copy=False
+        )
 
         if len(self.tensor.indices.dims) == 1:
             nnz = int(self.tensor.indices.dims[0])
@@ -336,7 +340,7 @@ class SparseValues(LazyValues):
                     f"out of bounds for dense shape {self.tensor.dims}"
                 )
 
-            values = np.zeros(dense_size)
+            values = np.zeros(dense_size, dtype=values_data.dtype)
             # [NNZ] layout, in which case the i-th value must be the linearized-index of the i-th value.
             values[indices_data] = values_data
             values = values.reshape(self.tensor.dims)
@@ -360,7 +364,7 @@ class SparseValues(LazyValues):
                     f"but index shape {self.tensor.indices.dims} requires {nnz * index_rank}"
                 )
 
-            values = np.zeros(self.tensor.dims)
+            values = np.zeros(self.tensor.dims, dtype=values_data.dtype)
             indices_data = indices_data.reshape(self.tensor.indices.dims)
             dimension_bounds = np.asarray(self.tensor.dims, dtype=np.int64)
             out_of_bounds_indices = (indices_data < 0) | (
