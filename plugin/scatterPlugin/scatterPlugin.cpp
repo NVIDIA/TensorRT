@@ -127,53 +127,97 @@ int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
     return copySize;
 }
 
+void ScatterND::validateIndices(
+    void const* deviceIndices, int32_t nSlices, int32_t indexRank, Dims const& dataDims, cudaStream_t stream) const
+{
+    PLUGIN_VALIDATE(nSlices >= 0, "ScatterND: nSlices must be non-negative");
+    PLUGIN_VALIDATE(indexRank >= 0, "ScatterND: indexRank must be non-negative");
+    if (nSlices == 0 || indexRank == 0)
+    {
+        return;
+    }
+
+    // Indices come from a runtime tensor input (attacker/user-influenced), not static file content, so they
+    // must be validated before use: an out-of-range component would otherwise flow, unchecked, into a flat
+    // offset used for a raw device-side memcpy (see transformIdxKernel/scatterKernel in scatterLayer.cu).
+    std::vector<int32_t> hostIndices(static_cast<size_t>(nSlices) * static_cast<size_t>(indexRank));
+    PLUGIN_CUASSERT(cudaMemcpyAsync(
+        hostIndices.data(), deviceIndices, hostIndices.size() * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
+    PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
+
+    for (int32_t slice = 0; slice < nSlices; ++slice)
+    {
+        for (int32_t dim = 0; dim < indexRank; ++dim)
+        {
+            int32_t const idx = hostIndices[static_cast<size_t>(slice) * indexRank + dim];
+            if (!(0 <= idx && idx < dataDims.d[dim]))
+            {
+                std::ostringstream msg;
+                msg << "ScatterND: index " << idx << " at slice " << slice << ", dimension " << dim
+                    << " is out of range for data dimension size " << dataDims.d[dim];
+                PLUGIN_ERROR(msg.str().c_str());
+            }
+        }
+    }
+}
+
 int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
-        && workspace != nullptr);
-
-    int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS];
-    std::memset(transformCoeff, 0, sizeof(int32_t) * outputDesc[0].dims.MAX_DIMS);
-    Dims IndexDims = inputDesc[indexTensorIdx].dims;
-
-    Dims dataDims = inputDesc[dataTensorIdx].dims;
-
-    int32_t indexRank = IndexDims.d[IndexDims.nbDims - 1];
-    PLUGIN_ASSERT(indexRank <= dataDims.nbDims);
-
-    int32_t nSlices = calculateNumSlices(IndexDims);
-    int32_t rowSize = 1;
-    int32_t copySize = calculateCopySize(dataDims);
-    int32_t elementSizeInBytes = 1;
-    switch (inputDesc->type)
+    try
     {
-    case DataType::kFLOAT:
-    case DataType::kINT32: elementSizeInBytes = 4; break;
-    case DataType::kHALF: elementSizeInBytes = 2; break;
-    case DataType::kINT8:
-    case DataType::kUINT8:
-    case DataType::kBOOL: elementSizeInBytes = 1; break;
-    case DataType::kFP8:
-    case DataType::kBF16:
-    case DataType::kINT64:
-    case DataType::kINT4:
-    case DataType::kFP4:
-    case DataType::kE8M0: PLUGIN_FAIL("Unsupported data type");
+        PLUGIN_ASSERT(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+            && workspace != nullptr);
+
+        int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS]{};
+        Dims const& indexDims = inputDesc[indexTensorIdx].dims;
+
+        Dims const& dataDims = inputDesc[dataTensorIdx].dims;
+
+        int32_t indexRank = indexDims.d[indexDims.nbDims - 1];
+        PLUGIN_VALIDATE(indexRank <= dataDims.nbDims, "ScatterND: indexRank must not exceed the data tensor rank");
+
+        int32_t nSlices = calculateNumSlices(indexDims);
+
+        validateIndices(inputs[indexTensorIdx], nSlices, indexRank, dataDims, stream);
+
+        int32_t rowSize = 1;
+        int32_t copySize = calculateCopySize(dataDims);
+        int32_t elementSizeInBytes = 1;
+        switch (inputDesc->type)
+        {
+        case DataType::kFLOAT:
+        case DataType::kINT32: elementSizeInBytes = 4; break;
+        case DataType::kHALF: elementSizeInBytes = 2; break;
+        case DataType::kINT8:
+        case DataType::kUINT8:
+        case DataType::kBOOL: elementSizeInBytes = 1; break;
+        case DataType::kFP8:
+        case DataType::kBF16:
+        case DataType::kINT64:
+        case DataType::kINT4:
+        case DataType::kFP4:
+        case DataType::kE8M0: PLUGIN_FAIL("Unsupported data type");
+        }
+
+        for (int32_t i = indexRank; i < dataDims.nbDims; i++)
+        {
+            rowSize *= dataDims.d[i];
+        }
+
+        calculateTransformCoeff(dataDims, indexRank, transformCoeff);
+
+        scatterNDInference(stream, transformCoeff, dataDims.nbDims, indexRank, nSlices, rowSize, copySize,
+            elementSizeInBytes, inputs[indexTensorIdx], inputs[updateTensorIdx], inputs[dataTensorIdx], outputs[0],
+            workspace);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+        return STATUS_FAILURE;
     }
 
-    for (int32_t i = indexRank; i < dataDims.nbDims; i++)
-    {
-        rowSize *= dataDims.d[i];
-    }
-
-    calculateTransformCoeff(dataDims, indexRank, transformCoeff);
-
-    scatterNDInference(stream, transformCoeff, dataDims.nbDims, indexRank, nSlices, rowSize, copySize,
-        elementSizeInBytes, inputs[indexTensorIdx], inputs[updateTensorIdx], inputs[dataTensorIdx], outputs[0],
-        workspace);
-
-    return 0;
+    return STATUS_SUCCESS;
 }
 
 size_t ScatterND::getSerializationSize() const noexcept

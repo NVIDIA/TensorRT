@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #include "common/serialize.hpp"
 #include "scatterElementsPlugin.h"
@@ -120,9 +121,13 @@ int32_t ScatterElementsPluginV3::enqueue(PluginTensorDesc const* inputDesc, Plug
     {
         PLUGIN_ASSERT(inputDesc[kINDICES_TENSOR_IDX].type == DataType::kINT64);
 
+        int32_t const rank = inputDesc[kDATA_TENSOR_IDX].dims.nbDims;
+        int32_t const axis = (mAxis < 0) ? (mAxis + rank) : mAxis;
+        PLUGIN_VALIDATE(0 <= axis && axis < rank, "ScatterElements: axis out of range for data tensor rank");
+
         runScatterElementsKernel(outputs[kOUTPUT_TENSOR_IDX], inputs[kDATA_TENSOR_IDX], inputs[kUPDATES_TENSOR_IDX],
             inputs[kINDICES_TENSOR_IDX], outputDesc[kOUTPUT_TENSOR_IDX], inputDesc[kDATA_TENSOR_IDX],
-            inputDesc[kUPDATES_TENSOR_IDX], inputDesc[kINDICES_TENSOR_IDX], mAxis, mReduction, stream);
+            inputDesc[kUPDATES_TENSOR_IDX], inputDesc[kINDICES_TENSOR_IDX], axis, mReduction, stream);
         return pluginStatus_t::STATUS_SUCCESS;
     }
     catch (std::exception const& e)

@@ -19,6 +19,7 @@ import os
 import tempfile
 from textwrap import dedent
 
+import onnx
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util, constants
@@ -738,6 +739,21 @@ class TestInspectData:
         status = poly_inspect(["data", save_path])
         assert "0 runners" in status.stdout
 
+    # JSON that Polygraphy did not write deserializes to plain Python objects, which the display
+    # path used to dereference blindly. Each of these is a clean error, not an uncaught traceback.
+    @pytest.mark.parametrize(
+        "content",
+        ["4444", "1.5", '"x"', "true", "null", "[1, 2]", '{"a": 1}', '[{"a": 1}]'],
+    )
+    def test_non_data_json_errors_cleanly(self, poly_inspect, tmp_path, content):
+        path = tmp_path / "not_data.json"
+        path.write_text(content)
+
+        status = poly_inspect(["data", str(path)], expect_error=True)
+        output = status.stdout + status.stderr
+        assert "Could not interpret the contents of" in output
+        assert "Traceback" not in output
+
 
 TACTIC_REPLAY_CASES = [
     [
@@ -899,6 +915,53 @@ class TestInspectSparsity:
             ipath = ONNX_MODELS[model_name].path
             status = poly_inspect(["sparsity", ipath])
             assert status
+
+    # A corrupted model may store more or fewer values than the shape of a weight implies.
+    # This should be reported cleanly rather than crash with an uncaught exception.
+    @pytest.mark.parametrize(
+        "data_type, field, size",
+        [
+            (onnx.TensorProto.FLOAT, "raw_data", 16),
+            (onnx.TensorProto.FLOAT, "raw_data", 30),
+            (onnx.TensorProto.FLOAT, "float_data", 9),
+            (onnx.TensorProto.FLOAT16, "raw_data", 14),
+            (onnx.TensorProto.FLOAT16, "int32_data", 7),
+            (onnx.TensorProto.BFLOAT16, "raw_data", 14),
+            (onnx.TensorProto.BFLOAT16, "int32_data", 7),
+        ],
+        ids=[
+            "float-raw-short",
+            "float-raw-unaligned",
+            "float-typed-long",
+            "fp16-raw-short",
+            "fp16-typed-short",
+            "bf16-raw-short",
+            "bf16-typed-short",
+        ],
+    )
+    def test_malformed_weights_error_cleanly(
+        self, poly_inspect, tmp_path, data_type, field, size
+    ):
+        # `size` is in bytes for `raw_data` and in values otherwise; the shape below requires 8 values.
+        data = bytes(size) if field == "raw_data" else [0] * size
+        weight = onnx.TensorProto(
+            name="B", data_type=data_type, dims=[4, 2], **{field: data}
+        )
+        graph = onnx.helper.make_graph(
+            [onnx.helper.make_node("MatMul", ["A", "B"], ["C"])],
+            "malformed",
+            [onnx.helper.make_tensor_value_info("A", data_type, [3, 4])],
+            [onnx.helper.make_tensor_value_info("C", data_type, [3, 2])],
+            initializer=[weight],
+        )
+        path = str(tmp_path / "malformed.onnx")
+        onnx.save(onnx.helper.make_model(graph), path)
+
+        status = poly_inspect(["sparsity", path], expect_error=True)
+        output = status.stdout + status.stderr
+        assert "Weight tensor: B with shape: [4, 2] should have" in output
+        assert "The model may be corrupted" in output
+        assert "Traceback" not in output
 
 
 class TestDebugTensors:

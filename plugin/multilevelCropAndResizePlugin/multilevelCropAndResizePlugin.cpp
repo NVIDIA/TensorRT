@@ -303,11 +303,10 @@ void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbI
     int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
     bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
-    PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
-    check_valid_inputs(inputDims, nbInputs);
-
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_ASSERT(nbInputs == 1 + mFeatureMapCount);
+    PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
+    check_valid_inputs(inputDims, nbInputs);
 
     try
     {

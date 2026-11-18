@@ -108,10 +108,8 @@ namespace tensorrt
 
         static const auto add_plugin = [] (INetworkDefinition& self, py::tuple pyTuple)
         {
-            auto const tupleInput = pyTuple.cast<std::tuple<std::vector<ITensor*>, std::vector<ITensor*>, IPluginV3*>>();
-            std::vector<ITensor*> const& inputs = std::get<0>(tupleInput);
-            std::vector<ITensor*> const& shapeInputs = std::get<1>(tupleInput);
-            IPluginV3* plugin = std::get<2>(tupleInput);
+            auto const [inputs, shapeInputs, plugin]
+                = pyTuple.cast<std::tuple<std::vector<ITensor*>, std::vector<ITensor*>, IPluginV3*>>();
             return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), *plugin);
         };
 
@@ -411,7 +409,7 @@ namespace tensorrt
             .def_property("shape", utils::throwingDimsGetter(&ITensor::getDimensions, "tensor shape"),
                 &ITensor::setDimensions)
             .def_property_readonly("dtype", &ITensor::getType)
-            .def_property("broadcast_across_batch", utils::deprecateMember(&ITensor::getBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"), utils::deprecateMember(&ITensor::setBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"))
+            .def_property("broadcast_across_batch", utils::deprecate(&ITensor::getBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"), utils::deprecate(&ITensor::setBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"))
             .def_property("location", &ITensor::getLocation, &ITensor::setLocation)
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
             .def_property_readonly("is_network_input", &ITensor::isNetworkInput)
@@ -1076,7 +1074,7 @@ namespace tensorrt
             .def_property_readonly("num_layers", &INetworkDefinition::getNbLayers)
             .def_property_readonly("num_inputs", &INetworkDefinition::getNbInputs)
             .def_property_readonly("num_outputs", &INetworkDefinition::getNbOutputs)
-            .def_property_readonly("has_implicit_batch_dimension", utils::deprecateMember(&INetworkDefinition::hasImplicitBatchDimension, "Implicit batch dimensions support has been removed"))
+            .def_property_readonly("has_implicit_batch_dimension", utils::deprecate(&INetworkDefinition::hasImplicitBatchDimension, "Implicit batch dimensions support has been removed"))
             .def_property("error_recorder", &INetworkDefinition::getErrorRecorder,
                 py::cpp_function(&INetworkDefinition::setErrorRecorder, py::keep_alive<1, 2>{}))
             .def("mark_output", &INetworkDefinition::markOutput, "tensor"_a, INetworkDefinitionDoc::mark_output)
@@ -1227,8 +1225,10 @@ namespace tensorrt
             .def("mark_unfused_tensors_as_debug_tensors", &INetworkDefinition::markUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::mark_unfused_tensors_as_debug_tensors)
             .def("unmark_unfused_tensors_as_debug_tensors", &INetworkDefinition::unmarkUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::unmark_unfused_tensors_as_debug_tensors)
             .def("add_squeeze",
-                py::overload_cast<ITensor&, ITensor*>(&INetworkDefinition::addSqueeze),
-                "input"_a, "axes"_a = nullptr, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
+                utils::deprecate(
+                    &INetworkDefinition::addSqueeze, "Deprecated in TensorRT 11.4. Superseded by add_squeeze_v2."),
+                "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
+            .def("add_squeeze_v2", &INetworkDefinition::addSqueezeV2, "input"_a, "axes"_a = nullptr, INetworkDefinitionDoc::add_squeeze_v2, py::return_value_policy::reference_internal)
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
             .def("add_normalization_v2", &INetworkDefinition::addNormalizationV2, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization_v2,
                 py::return_value_policy::reference_internal)

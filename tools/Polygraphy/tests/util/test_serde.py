@@ -103,6 +103,21 @@ class TestDecoder:
 
         assert list(decoded[0].keys()) == [name]
         assert np.array_equal(decoded[0][name], feed_dicts[0][name])
+    @pytest.mark.parametrize(
+        "malformed",
+        [
+            # Missing the "lst" field -> decoder raises a raw KeyError.
+            '{"polygraphy_class": "RunResults"}',
+            # Wrong-typed "lst" field -> decoder raises a raw TypeError.
+            '{"polygraphy_class": "RunResults", "lst": 5}',
+        ],
+    )
+    def test_error_on_malformed_json(self, malformed):
+        # A decode-time error from a registered decoder (e.g. a missing/wrong-typed field) must
+        # surface as the documented PolygraphyException, not a raw KeyError/TypeError leaking out
+        # of json.loads (see the from_json/load "Raises: PolygraphyException" contract).
+        with pytest.raises(PolygraphyException, match="Could not decode serialized type"):
+            RunResults.from_json(malformed)
 
     def test_names_correct(self):
         # Trigger `try_register_common_json`

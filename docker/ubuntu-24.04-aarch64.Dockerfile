@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.4.1
+ARG CUDA_VERSION=13.5.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION=11.4.0.106
+ENV TRT_VERSION=11.5.0.63
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -114,7 +114,7 @@ RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_arm64.zip 
 ARG CUDA_VERSION
 COPY docker/downloadTRT.sh /tmp/downloadTRT.sh
 RUN case "${CUDA_VERSION}" in \
-        13.*) TRT_CUDA_VERSION=13.4 ;; \
+        13.*) TRT_CUDA_VERSION=13.5 ;; \
         12.*) TRT_CUDA_VERSION=12.9 ;; \
         *) echo "Unsupported CUDA_VERSION: ${CUDA_VERSION}" && exit 1 ;; \
     esac && \

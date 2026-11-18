@@ -132,6 +132,7 @@ struct SampleSafePluginBuildParams : public samplesCommon::OnnxSampleParams
     std::string remoteAutoTuningConfig{};
     bool std{false};
     int32_t maxAuxStreams{0};
+    bool cpuOnly{false};
 };
 
 //!
@@ -156,6 +157,7 @@ SampleSafePluginBuildParams initializeSampleParams(SampleSafePluginBuildArgs con
     params.engineFileName = args.engineFileName;
     params.remoteAutoTuningConfig = args.remoteAutoTuningConfig;
     params.maxAuxStreams = args.maxAuxStreams;
+    params.cpuOnly = args.cpuOnly;
     return params;
 }
 
@@ -229,6 +231,10 @@ bool SampleSafePlugin::build()
     {
         return false;
     }
+    if (mParams.cpuOnly)
+    {
+        config->setFlag(BuilderFlag::kCPU_ONLY);
+    }
 
     auto parser
         = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
@@ -267,11 +273,24 @@ bool SampleSafePlugin::build()
         config->setRemoteAutoTuningConfig(mParams.remoteAutoTuningConfig.c_str());
     }
 
+#if ENABLE_UNIFIED_BUILDER
+    // A safety engine's generated host code lives in a companion library, and only this entry point hands
+    // back the two together. The other entry points return a single blob and so refuse a safety build
+    // once companion libraries are required.
+    auto const artifacts = std::unique_ptr<nvinfer1::ISafeSerializedNetworkArtifacts>(
+        builder->buildSerializedSafeNetwork(*network, *config, /*emitCheckerBlob=*/false));
+    if (!artifacts)
+    {
+        return false;
+    }
+    auto const* const buffer = artifacts->getSerializedNetwork();
+#else
     auto buffer = std::unique_ptr<nvinfer1::IHostMemory>(builder->buildSerializedNetwork(*network, *config));
     if (!buffer)
     {
         return false;
     }
+#endif // ENABLE_UNIFIED_BUILDER
 
     ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
@@ -287,6 +306,23 @@ bool SampleSafePlugin::build()
     }
     file.write(reinterpret_cast<char const*>(buffer->data()), buffer->size());
     file.close();
+
+#if ENABLE_UNIFIED_BUILDER
+    // The engine cannot be loaded without its companion library, and the inference sample looks for it
+    // beside the engine.
+    if (auto const* const companionSo = artifacts->getCompanionSo())
+    {
+        std::string const companionSoFile = engineFile + ".so";
+        std::ofstream soFile(companionSoFile, std::ios::binary);
+        if (!soFile)
+        {
+            sample::gLogError << "Failed to open file to save companion library: " << companionSoFile << std::endl;
+            return false;
+        }
+        soFile.write(reinterpret_cast<char const*>(companionSo->data()), companionSo->size());
+        soFile.close();
+    }
+#endif // ENABLE_UNIFIED_BUILDER
 
     return true;
 }
@@ -367,10 +403,6 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
         sample::gLogInfo << "Setting CPU-only mode" << std::endl;
-        if (!samplesSafeCommon::applyCpuOnlyMode())
-        {
-            return EXIT_FAILURE;
-        }
     }
 
     if (!args.cpuOnly && !samplesCommon::isSmSafe())

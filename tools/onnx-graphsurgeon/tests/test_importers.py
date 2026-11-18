@@ -28,7 +28,10 @@ from onnx_graphsurgeon.ir.function import Function
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.logger import G_LOGGER
-from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
+from onnx_graphsurgeon.util.exception import (
+    OnnxGraphSurgeonException,
+    OnnxGraphSurgeonResourceError,
+)
 
 from onnx_models import (
     dim_param_model,
@@ -43,6 +46,17 @@ from onnx_models import (
 )
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
+
+
+def make_sparse_tensor(index_shape, indices, dense_shape):
+    """Build a SparseTensorProto holding a single non-zero with the given index layout."""
+    return onnx.helper.make_sparse_tensor(
+        onnx.helper.make_tensor("w_sparse", onnx.TensorProto.FLOAT, [1], [1.0]),
+        onnx.helper.make_tensor(
+            "indices", onnx.TensorProto.INT64, index_shape, indices
+        ),
+        dense_shape,
+    )
 
 
 class TestOnnxImporter(object):
@@ -423,19 +437,84 @@ class TestOnnxImporter(object):
     def test_import_sparse_tensor_rejects_out_of_bounds_indices(
         self, indices, index_shape, dense_shape
     ):
-        values = onnx.helper.make_tensor(
-            "w_sparse", onnx.TensorProto.FLOAT, [1], [1.0]
+        tensor = OnnxImporter.import_tensor(
+            make_sparse_tensor(index_shape, indices, dense_shape)
         )
-        indices_tensor = onnx.helper.make_tensor(
-            "indices", onnx.TensorProto.INT64, index_shape, indices
-        )
-        sparse_tensor = onnx.helper.make_sparse_tensor(
-            values, indices_tensor, dense_shape
-        )
-
-        tensor = OnnxImporter.import_tensor(sparse_tensor)
         with pytest.raises(OnnxGraphSurgeonException, match="out of bounds"):
             _ = tensor.values
+
+    @pytest.mark.parametrize(
+        "index_shape, indices, dense_shape",
+        [
+            ([1], [0], [50000, 50000]),  # 1-D linearized-index layout
+            ([1, 2], [0, 0], [50000, 50000]),  # 2-D [nnz, rank] layout
+            # A dense element count that overflows int64: misc.volume() uses
+            # Python big-ints so the cap cannot be bypassed by overflow.
+            ([1], [0], [2**32, 2**32]),
+        ],
+    )
+    def test_import_sparse_tensor_rejects_oversized_dense_shape(
+        self, index_shape, indices, dense_shape
+    ):
+        # A tiny sparse tensor (one non-zero) that declares a huge dense shape
+        # must be rejected before load() attempts to densify it, otherwise
+        # np.zeros() allocates ~20 GB from a ~100-byte model.
+        tensor = OnnxImporter.import_tensor(
+            make_sparse_tensor(index_shape, indices, dense_shape)
+        )
+        # The precise exception type is raised (not just one of its bases)...
+        with pytest.raises(
+            OnnxGraphSurgeonResourceError, match="exceeds the maximum"
+        ):
+            _ = tensor.values
+        # ...and it must also surface as a standard RuntimeError so callers can
+        # guard against it without importing the GS exception type.
+        with pytest.raises(RuntimeError, match="exceeds the maximum"):
+            _ = tensor.values
+
+    @pytest.mark.parametrize(
+        "index_shape, indices, dense_shape",
+        [
+            ([1], [0], [-1, 4]),  # 1-D linearized-index layout
+            ([1, 2], [0, 0], [-1, 4]),  # 2-D [nnz, rank] layout
+        ],
+    )
+    def test_import_sparse_tensor_rejects_negative_dense_dim(
+        self, index_shape, indices, dense_shape
+    ):
+        # A negative dimension would flip the sign of the element count and let
+        # an arbitrarily large dense shape slip past the size cap.
+        tensor = OnnxImporter.import_tensor(
+            make_sparse_tensor(index_shape, indices, dense_shape)
+        )
+        with pytest.raises(OnnxGraphSurgeonException, match="negative dimension"):
+            _ = tensor.values
+
+    def test_import_sparse_tensor_dense_size_cap_boundary(self, monkeypatch):
+        # With a small patched cap, a dense shape just over the cap is rejected
+        # while one exactly at the cap still densifies successfully. This pins
+        # the boundary without allocating a real multi-GB array.
+        from onnx_graphsurgeon.ir import tensor as gs_tensor
+
+        itemsize = np.dtype(np.float64).itemsize
+        monkeypatch.setattr(
+            gs_tensor, "MAX_DENSE_SPARSE_TENSOR_BYTES", 8 * itemsize
+        )
+
+        def densify(dense_shape):
+            return OnnxImporter.import_tensor(
+                make_sparse_tensor([1], [0], dense_shape)
+            ).values
+
+        # 9 elements > cap -> rejected.
+        with pytest.raises(OnnxGraphSurgeonResourceError, match="exceeds the maximum"):
+            _ = densify([9])
+
+        # 8 elements == cap -> still densifies to a dense array.
+        at_cap = densify([8])
+        assert at_cap.shape == (8,)
+        assert at_cap[0] == 1.0
+        assert np.count_nonzero(at_cap) == 1
 
     def test_import_fp4_tensor(self):
         name = "test_fp4"

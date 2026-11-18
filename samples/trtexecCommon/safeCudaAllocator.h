@@ -22,6 +22,7 @@
 #include "cuda_runtime.h"
 #include "safeCommon.h"
 #include "safeErrorRecorder.h"
+#include "safeMemoryTracker.h"
 #include <cuda.h>
 
 namespace nvinfer2::safe
@@ -44,8 +45,14 @@ public:
     SafeMemAllocator& operator=(SafeMemAllocator const&) & = delete;
     SafeMemAllocator& operator=(SafeMemAllocator&&) & = delete;
 
+    //! Returns the tool's allocation tracker, disabled until --debug enables it.
+    samplesSafeCommon::SafeMemoryTracker& memoryTracker() noexcept
+    {
+        return mMemoryTracker;
+    }
+
 private:
-    constexpr SafeMemAllocator() noexcept = default;
+    SafeMemAllocator() noexcept = default;
     ~SafeMemAllocator() noexcept final = default;
 
     void* allocate(uint64_t const size, uint64_t const alignment, MemoryPlacement const flags, MemoryUsage const usage,
@@ -111,6 +118,15 @@ private:
             safeLogError(recorder, e.what());
             return nullptr;
         }
+        using Tracker = samplesSafeCommon::SafeMemoryTracker;
+        auto const kind = flags == MemoryPlacement::kGPU ? Tracker::Kind::kGPU
+            : flags == MemoryPlacement::kCPU_PINNED      ? Tracker::Kind::kPINNED
+                                                         : Tracker::Kind::kCPU;
+        auto const purpose = usage == MemoryUsage::kIMMUTABLE ? Tracker::Purpose::kIMMUTABLE
+            : usage == MemoryUsage::kSCRATCH                  ? Tracker::Purpose::kSCRATCH
+            : usage == MemoryUsage::kIOTENSOR                 ? Tracker::Purpose::kIO
+                                                              : Tracker::Purpose::kOTHER;
+        mMemoryTracker.recordAllocation(memory, size, kind, purpose);
         return memory;
     }
 
@@ -123,36 +139,40 @@ private:
         }
         try
         {
-            switch (flags)
-            {
-            case MemoryPlacement::kCPU_PINNED:
-            {
-                return cudaFreeHost(memory) == cudaSuccess;
-            }
-            case MemoryPlacement::kGPU:
-            {
-                return cudaFree(memory) == cudaSuccess;
-            }
-            case MemoryPlacement::kCPU:
-            {
-                free(memory);
-                return true;
-            }
-            case MemoryPlacement::kMANAGED:
-            case MemoryPlacement::kNONE:
-            {
-                safeLogError(recorder, "MemoryPlacement::kMANAGED and MemoryPlacement::kNONE are not allowed.");
+            return mMemoryTracker.release(memory, [&] {
+                switch (flags)
+                {
+                case MemoryPlacement::kCPU_PINNED:
+                {
+                    return cudaFreeHost(memory) == cudaSuccess;
+                }
+                case MemoryPlacement::kGPU:
+                {
+                    return cudaFree(memory) == cudaSuccess;
+                }
+                case MemoryPlacement::kCPU:
+                {
+                    free(memory);
+                    return true;
+                }
+                case MemoryPlacement::kMANAGED:
+                case MemoryPlacement::kNONE:
+                {
+                    safeLogError(recorder, "MemoryPlacement::kMANAGED and MemoryPlacement::kNONE are not allowed.");
+                    return false;
+                }
+                }
                 return false;
-            }
-            }
+            });
         }
         catch (std::exception const& e)
         {
             safeLogError(recorder, e.what());
             return false;
         }
-        return false;
     }
+
+    samplesSafeCommon::SafeMemoryTracker mMemoryTracker;
 };
 
 inline ISafeMemAllocator& getSafeMemAllocator() noexcept

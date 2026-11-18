@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,9 @@
 #include "NvInferPlugin.h"
 #include "common/cublasWrapper.h"
 #include "zeroPadding2d.h"
+#include <cstddef>
 #include <math.h>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -91,7 +93,8 @@ public:
 
     virtual size_t getSerializationSize() const noexcept;
     virtual void serialize(void* buffer) const noexcept;
-    virtual void deserialize(void const* data, size_t length);
+    //! Restore the runner state serialized by serialize(). Reads are bounds-checked against data.size().
+    virtual void deserialize(std::span<std::byte const> data);
 
     virtual size_t getWorkspaceSize() const = 0;
 
@@ -135,7 +138,7 @@ public:
 
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
-    void deserialize(void const* data, size_t length) override;
+    void deserialize(std::span<std::byte const> data) override;
     bool isValid(int32_t headSize, int32_t s) const override;
 
 private:
@@ -163,7 +166,7 @@ public:
 
     size_t getWorkspaceSize() const override;
 
-    void deserialize(void const* data, size_t length) override;
+    void deserialize(std::span<std::byte const> data) override;
 
     bool isValid(int32_t headSize, int32_t s) const override;
 
@@ -191,7 +194,7 @@ public:
 
     size_t getWorkspaceSize() const override;
 
-    void deserialize(void const* data, size_t length) override;
+    void deserialize(std::span<std::byte const> data) override;
 
     bool isValid(int32_t headSize, int32_t s) const override;
 
@@ -220,7 +223,7 @@ public:
 
     size_t getWorkspaceSize() const override;
 
-    void deserialize(void const* data, size_t length) override;
+    void deserialize(std::span<std::byte const> data) override;
 
     bool isValid(int32_t headSize, int32_t s) const override;
 
@@ -248,7 +251,7 @@ public:
 
     size_t getWorkspaceSize() const override;
 
-    void deserialize(void const* data, size_t length) override;
+    void deserialize(std::span<std::byte const> data) override;
 
     bool isValid(int32_t headSize, int32_t s) const override;
 

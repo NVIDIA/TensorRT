@@ -9850,7 +9850,9 @@ public:
     //!
     //! \return The new Squeeze layer, or nullptr if it could not be created.
     //!
-    ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept
+    //! \deprecated Deprecated in TensorRT 11.4. Superseded by addSqueezeV2().
+    //!
+    TRT_DEPRECATED ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept
     {
         return mImpl->addSqueeze(input, axes);
     }
@@ -9879,7 +9881,7 @@ public:
     //!
     //! \return The new Squeeze layer, or nullptr if it could not be created.
     //!
-    ISqueezeLayer* addSqueeze(ITensor& input, ITensor* axes) noexcept
+    ISqueezeLayer* addSqueezeV2(ITensor& input, ITensor* axes) noexcept
     {
         return mImpl->addSqueezeV2(input, axes);
     }
@@ -10041,7 +10043,7 @@ enum class BuilderFlag : int32_t
     //! for the plan.
     //!
     //! This flag is only supported by NVIDIA Volta and later GPUs.
-    //! This flag is not supported in NVIDIA Drive(R) products.
+    //! This flag is not supported for NVIDIA DriveOS(R) QNX or safety packages.
     kVERSION_COMPATIBLE = 12,
 
     //! Exclude lean runtime from the plan when version forward compatability is enabled.
@@ -10142,6 +10144,17 @@ enum class BuilderFlag : int32_t
     kDISTRIBUTIVE_INDEPENDENCE = 27,
 
 
+    //! Build without using local GPU resources.
+    //! Supported for safety builds, TensorRT-RTX, and platforms with CPU-only builder support.
+    //! Enabled by default in TensorRT-RTX, and in Windows on Arm with DLA when GPU compute is unsupported.
+    //! Disabled by default otherwise.
+    kCPU_ONLY = 29,
+
+    //! Build each graph and optimization profile with an independent weight layout.
+    //!
+    //! By default, TensorRT may share compatible weight layouts across graphs and optimization profiles to reduce
+    //! engine size. Enabling this flag disables that sharing for both Standard and Safety engines.
+    kINDEPENDENT_WEIGHT_LAYOUTS = 30,
 
 };
 
@@ -10153,7 +10166,7 @@ enum class BuilderFlag : int32_t
 template <>
 struct impl::EnumMaxImpl<BuilderFlag>
 {
-    static constexpr int32_t kVALUE = 28;
+    static constexpr int32_t kVALUE = 31;
 };
 
 namespace v_1_0
@@ -11259,11 +11272,11 @@ public:
     //! parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance.
     //!
     //! \note Allowing more auxiliary streams does not always give better performance since there will be
-    //! synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by
+    //! synchronization overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by
     //! cross-stream synchronizations.
     //!
-    //! \note Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not
-    //! be able to be reused.
+    //! \note Using more auxiliary streams leads to more memory usage at runtime since some activation memory blocks
+    //! will not be able to be reused.
     //!
     //! \param nbStreams The maximum number of auxiliary streams that TRT is allowed to use. Must be non-negative.
     //!
@@ -11572,6 +11585,53 @@ struct impl::EnumMaxImpl<NetworkDefinitionCreationFlag>
     static constexpr int32_t kVALUE = 3;
 };
 
+//! \class ISafeSerializedNetworkArtifacts
+//!
+//! \brief Contains the artifacts produced when serializing a safety engine.
+//!
+//! A successful safety build produces a matched set of artifacts: the serialized safety engine artifact and
+//! its companion library. The companion library contains generated executable host code and selected
+//! generated device code.
+//!
+//! The IHostMemory objects returned by this interface are owned by the ISafeSerializedNetworkArtifacts
+//! object and become invalid when it is destroyed.
+//!
+//! \see IBuilder::buildSerializedSafeNetwork()
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+class ISafeSerializedNetworkArtifacts : public INoCopy
+{
+public:
+    //! \brief Destroy the artifacts, invalidating every IHostMemory object obtained from this object.
+    virtual ~ISafeSerializedNetworkArtifacts() noexcept = 0;
+
+    //! \return A non-null pointer to the serialized network consumed by the safety runtime. Owned by this
+    //! object and valid only until it is destroyed.
+    TRT_NODISCARD IHostMemory const* getSerializedNetwork() const noexcept
+    {
+        return mImpl->getSerializedNetwork();
+    }
+
+    //! \return A non-null pointer to the companion .so for the serialized safety network. Owned by this
+    //! object and valid only until it is destroyed.
+    TRT_NODISCARD IHostMemory const* getCompanionSo() const noexcept
+    {
+        return mImpl->getCompanionSo();
+    }
+
+    //! \return The checker blob (generated kernel sources and reference-check
+    //!         metadata), or nullptr if it was not requested or none was produced.
+    //!         Owned by this object and valid only until it is destroyed.
+    TRT_NODISCARD IHostMemory const* getCheckerBlob() const noexcept
+    {
+        return mImpl->getCheckerBlob();
+    }
+
+protected:
+    apiv::VSafeSerializedNetworkArtifacts* mImpl;
+};
+
+inline ISafeSerializedNetworkArtifacts::~ISafeSerializedNetworkArtifacts() noexcept = default;
 
 //!
 //! \class IBuilder
@@ -11734,6 +11794,9 @@ public:
     //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
     //!       profile-specific stream before returning.
     //!
+    //! \note Where a safety engine requires a companion library, this function cannot supply it and fails
+    //!       for EngineCapability::kSAFETY. Use IBuilder::buildSerializedSafeNetwork() for those networks.
+    //!
     //! \see INetworkDefinition, IBuilderConfig, IHostMemory, ICudaEngine
     //!
     nvinfer1::IHostMemory* buildSerializedNetwork(INetworkDefinition& network, IBuilderConfig& config) noexcept
@@ -11755,6 +11818,9 @@ public:
     //!
     //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
     //!       profile-specific stream before returning.
+    //!
+    //! \note Where a safety engine requires a companion library, this function cannot supply it and fails
+    //!       for EngineCapability::kSAFETY. Use IBuilder::buildSerializedSafeNetwork() for those networks.
     //!
     //! \see INetworkDefinition, IBuilderConfig, IStreamWriter, ICudaEngine
     //!
@@ -11781,14 +11847,50 @@ public:
     //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() and every
     //!       profile-specific stream before returning.
     //!
+    //! \note Where a safety engine requires a companion library, this function cannot supply it and fails
+    //!       for EngineCapability::kSAFETY. Use IBuilder::buildSerializedSafeNetwork() for those networks.
+    //!
+    //! \deprecated Deprecated in TensorRT 11.3. Superseded by IBuilder::buildSerializedSafeNetwork().
+    //!
     //! \see INetworkDefinition, IBuilderConfig, IHostMemory, ICudaEngine
     //!
+    TRT_DEPRECATED
     nvinfer1::IHostMemory* buildSerializedNetwork(
         INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept
     {
         return mImpl->buildSerializedNetworkWithKernelText(network, config, kernelText);
     }
 
+    //! \brief Builds and serializes a safety network.
+    //!
+    //! This function builds and serializes an engine for EngineCapability::kSAFETY. A successful call
+    //! returns the serialized safety engine data artifact together with the matching companion library,
+    //! where the safety runtime requires one.
+    //!
+    //! \param network Network definition.
+    //! \param config Builder configuration. The engine capability must be EngineCapability::kSAFETY.
+    //! \param emitCheckerBlob Whether to emit the checker blob (generated kernel
+    //!        sources and reference-check metadata).
+    //!
+    //! \return A pointer to an ISafeSerializedNetworkArtifacts object that contains the serialized safety
+    //!         engine artifacts, or nullptr if the build fails. On success,
+    //!         ISafeSerializedNetworkArtifacts::getSerializedNetwork() and
+    //!         ISafeSerializedNetworkArtifacts::getCompanionSo() returns non-null. The caller owns the
+    //!         ISafeSerializedNetworkArtifacts object
+    //!         returned by buildSerializedSafeNetwork() and must destroy it with operator delete.
+    //!
+    //! \note This function will return nullptr and record an error for networks with engine capabilities
+    //!       other than EngineCapability::kSAFETY.
+    //!
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before
+    //!       returning.
+    //!
+    //! \see INetworkDefinition, IBuilderConfig, ISafeSerializedNetworkArtifacts
+    TRT_NODISCARD ISafeSerializedNetworkArtifacts* buildSerializedSafeNetwork(
+        INetworkDefinition& network, IBuilderConfig& config, bool emitCheckerBlob) noexcept
+    {
+        return mImpl->buildSerializedSafeNetwork(network, config, emitCheckerBlob);
+    }
 
     //!
     //! \brief Builds a network for the given INetworkDefinition and IBuilderConfig.

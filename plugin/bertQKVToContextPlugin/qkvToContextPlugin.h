@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,9 @@
 #include "common/cublasWrapper.h"
 #include "mhaRunner.h"
 #include "zeroPadding2d.h"
+#include <cstddef>
 #include <math.h>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -58,14 +60,19 @@ class QKVToContextPluginDynamic : public IPluginV3,
                                   public IPluginV3OneRuntime
 {
 public:
-    QKVToContextPluginDynamic(const std::string name, const nvinfer1::DataType type, const int32_t hiddenSize,
-        const int32_t numHeads, float const dqProbs, bool hasImask = false);
+    //! Build-phase constructor: the dispatchers are created later, from the shapes seen at
+    //! configurePlugin() time.
+    QKVToContextPluginDynamic(std::string const name, nvinfer1::DataType const type, int32_t const hiddenSize,
+        int32_t const numHeads, float const dqProbs, bool hasImask = false);
 
-    // constructor that also takes in MHARunner state
-    // this constructor should only be called during runtime plugin creation after engine deserialization
-    QKVToContextPluginDynamic(const std::string name, const DataType type, const int32_t S, const int32_t B,
-        const int32_t SM, const int32_t hiddenSize, const int32_t numHeads, float const dqProbs, bool hasImask,
-        bool hasUnfusedDispatcher, void const* runnerStateBuffer);
+    //! Runtime constructor that restores the unfused MHARunner state serialized in the
+    //! "runnerStateBuffer" plugin field. May be called only during runtime-phase plugin creation
+    //! after engine deserialization.
+    //! \p runnerStateBuffer must hold exactly the dispatcher's serialized state when
+    //! \p hasUnfusedDispatcher is set; it is read during construction only.
+    QKVToContextPluginDynamic(std::string const name, DataType const type, int32_t const S, int32_t const B,
+        int32_t const SM, int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask,
+        bool hasUnfusedDispatcher, std::span<std::byte const> runnerStateBuffer);
 
     // It doesn't make sense to make QKVToContextPluginDynamic without arguments, so we
     // delete default constructor.
@@ -187,13 +194,20 @@ class QKVToContextVarSeqlenPlugin : public IPluginV3,
                                     public IPluginV3OneRuntime
 {
 public:
+    //! Build-phase constructor: the dispatcher is created later, from the shapes seen at
+    //! configurePlugin() time.
     QKVToContextVarSeqlenPlugin(std::string const name, nvinfer1::DataType const type, int32_t const hiddenSize,
         int32_t const numHeads, float const dqProbs, bool hasImask = false, bool varSeqlen = false,
         bool const useInt8ScaleMax = true);
 
+    //! Runtime constructor that restores the dispatcher state serialized in the "runnerStateBuffer"
+    //! plugin field. May be called only during runtime-phase plugin creation after engine
+    //! deserialization.
+    //! \p runnerStateBuffer must hold exactly the dispatcher's serialized state; it is read during
+    //! construction only.
     QKVToContextVarSeqlenPlugin(std::string const name, int32_t const s, int32_t b, nvinfer1::DataType const type,
         int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask, bool varSeqlen,
-        bool const useInt8ScaleMax, void const* runnerStateBuffer);
+        bool const useInt8ScaleMax, std::span<std::byte const> runnerStateBuffer);
 
     // It doesn't make sense to make QKVToContextVarSeqlenPlugin without arguments, so we
     // delete default constructor.

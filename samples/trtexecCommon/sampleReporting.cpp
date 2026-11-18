@@ -326,7 +326,7 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingO
     int32_t batchSize = infOpts.batch;
     float const warmupMs = infOpts.warmup;
     auto const isNotWarmup = [&warmupMs](InferenceTrace const& a) { return a.computeStart >= warmupMs; };
-    auto const noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
+    auto const noWarmup = std::ranges::find_if(trace, isNotWarmup);
     int32_t const warmups = noWarmup - trace.begin();
     float const benchTime = trace.back().d2hEnd - noWarmup->h2dStart;
     // treat inference with explicit batch as a single query and report the throughput
@@ -379,7 +379,7 @@ void Profiler::reportLayerTime(char const* layerName, float timeMs) noexcept
 {
     if (mIterator == mLayers.end())
     {
-        bool const first = !mLayers.empty() && mLayers.begin()->name == layerName;
+        bool const first = !mLayers.empty() && mLayers.front().name == layerName;
         mUpdatesCount += mLayers.empty() || first;
         if (first)
         {

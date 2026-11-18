@@ -28,6 +28,7 @@
 #include <iostream>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,15 +41,9 @@ namespace sample
 {
 using LibraryPtr = std::unique_ptr<samplesCommon::DynamicLibrary>;
 
-#if TRT_WINML
-std::string const TRT_NVINFER_NAME = "tensorrt_rtx";
-std::string const TRT_ONNXPARSER_NAME = "tensorrt_onnxparser_rtx";
-std::string const TRT_LIB_SUFFIX = "_" + std::to_string(NV_TENSORRT_MINOR);
-#else
 std::string const TRT_NVINFER_NAME = "nvinfer";
 std::string const TRT_ONNXPARSER_NAME = "nvonnxparser";
 std::string const TRT_LIB_SUFFIX = "";
-#endif
 
 #if !TRT_STATIC
 #if defined(_WIN32)
@@ -137,6 +132,7 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings);
 //! \param graph: Pointer to the safe TRT graph to be created
 //! \param blob: Pointer to the serialized engine data
 //! \param size: Size of the serialized engine data
+//! \param companionSoPath: Path to the engine's companion library, or nullptr when it needs none
 //! \param recorder: Reference to the safe recorder
 //! \param useManaged: Flag indicating whether to use managed memory
 //! \param allocator: Pointer to the safe memory allocator
@@ -144,7 +140,8 @@ bool initNvinferSafe(SafeRuntimeSettings const& settings);
 //! \return Error code indicating the success or failure of the operation
 //!
 nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings);
+    nvinfer2::safe::AsciiChar const* companionSoPath, ISafeRecorder& recorder, bool useManaged,
+    ISafeMemAllocator* allocator, SafeRuntimeSettings const& settings);
 
 //!
 //! \brief Destroy a safe TRT graph and release resources
@@ -183,6 +180,7 @@ struct InferenceEnvironmentBase
         : greenContexts(std::move(bEnv.greenContexts))
         , engine(std::move(bEnv.engine))
         , safe(bEnv.engine.isSafe())
+        , companionSoPath(bEnv.companionSoPath)
         , cmdline(bEnv.cmdline)
     {
     }
@@ -198,9 +196,12 @@ struct InferenceEnvironmentBase
     std::unordered_map<std::string, double> accuracyLossValues; //< Per-tensor accuracy values from the last validation
 
     bool safe{false};
+
+    //! Path to the engine's companion library, std::nullopt when the engine needs none.
+    std::optional<std::string> companionSoPath;
     std::string cmdline;
 
-#if !defined(_WIN32) && !TRT_WINML
+#if !defined(_WIN32)
     //! Reference outputs for accuracy validation (tuner feature, Linux enterprise/auto-only).
     //! Map from tensor name to host buffer containing reference data.
     //! Guarded because MSVC cannot instantiate vector<unordered_map<string, unique_ptr<T>>>,
@@ -220,12 +221,6 @@ struct InferenceEnvironmentStd : public InferenceEnvironmentBase
         : InferenceEnvironmentBase(bEnv)
     {
     }
-#if TRT_WINML
-    //! Storage for IRuntimeConfig objects passed non-owningly to createExecutionContext.
-    //! Declared before contexts so it outlives them — the context references the config
-    //! and serializeRuntimeCache reaches the config via context->getRuntimeConfig() at end of run.
-    std::vector<std::unique_ptr<nvinfer1::IRuntimeConfig>> runtimeConfigs;
-#endif
     std::vector<std::unique_ptr<nvinfer1::IExecutionContext>> contexts;
     std::vector<std::unique_ptr<BindingsStd>> bindings;
 
@@ -276,13 +271,6 @@ inline nvinfer1::IExecutionContext* InferenceEnvironmentStd::getContext(int32_t 
 //!
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system);
 
-#if TRT_WINML
-//! \brief Drive JIT compilation for a deferred-deserialized engine without running inference.
-//! Creates a one-shot IExecutionContext (which forces JIT) and saves the runtime cache if
-//! --runtimeCacheFile was supplied via \p inference.
-//! \return true on success, false if context creation or cache serialization fails.
-bool populateRuntimeCacheForDeferredJit(nvinfer1::ICudaEngine& engine, InferenceOptions const& inference);
-#endif // TRT_WINML
 
 #if ENABLE_UNIFIED_BUILDER
 //!
@@ -307,7 +295,7 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys);
 bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& iEnv, int32_t device,
     std::vector<InferenceTrace>& trace, ReportingOptions const& reporting);
 
-#if !defined(_WIN32) && !TRT_WINML
+#if !defined(_WIN32)
 //!
 //! \brief Load reference outputs from files into InferenceEnvironmentBase::refOutputsAll.
 //! \param pairIndex Index of the refPair to use (default 0 for backward compatibility).
@@ -478,13 +466,11 @@ public:
     void dumpBindings(nvinfer1::IExecutionContext const& context, std::function<bool(Binding const&)> predicate,
         std::ostream& os) const
     {
-        for (auto const& n : mNames)
+        for (auto const& [name, binding] : mNames)
         {
-            auto const name = n.first;
-            auto const binding = n.second;
             if (predicate(mBindings[binding]))
             {
-                os << n.first << ": (";
+                os << name << ": (";
                 dumpBindingDimensions(name, context, os);
                 os << ")" << std::endl;
 
@@ -534,13 +520,11 @@ public:
 
     void dumpBindings(ITRTGraph const& graph, std::function<bool(Binding const&)> predicate, std::ostream& os) const
     {
-        for (auto const& n : mNames)
+        for (auto const& [name, binding] : mNames)
         {
-            auto const name = n.first;
-            auto const binding = n.second;
             if (predicate(mBindings[binding]))
             {
-                os << n.first << ": (";
+                os << name << ": (";
                 dumpBindingDimensions(name, graph, os);
                 os << ")" << std::endl;
 

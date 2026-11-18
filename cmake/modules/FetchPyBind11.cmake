@@ -26,6 +26,9 @@ set(PYBIND11_TAG "v3.0.1" CACHE STRING "The commit hash to FetchContent_Declare 
 set(TRT_THIRD_PARTY_DL_DIR "$ENV{HOME}/storage" CACHE PATH "Directory to download third party dependencies to")
 file(TO_CMAKE_PATH "${TRT_THIRD_PARTY_DL_DIR}" TRT_THIRD_PARTY_DL_DIR)
 
+include(ReuseSharedClone)
+trt_reuse_shared_clone(pybind11 "${TRT_THIRD_PARTY_DL_DIR}/pybind11/${PYBIND11_TAG}" "${PYBIND11_TAG}")
+
 FetchContent_Declare(
     pybind11
     PREFIX              "${CMAKE_BINARY_DIR}/third_party/pybind11"

@@ -171,42 +171,6 @@ void bindOnnx(py::module& m)
 {
     py::bind_vector<std::vector<size_t>>(m, "NodeIndices");
 
-    py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
-        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
-        // constructors. https://github.com/pybind/pybind11/issues/2856
-        .def(py::init([](nvinfer1::INetworkDefinition& network, nvinfer1::ILogger& logger) {
-            return nvonnxparser::createParser(network, logger);
-        }),
-            "network"_a, "logger"_a, OnnxParserDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
-        .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse)
-        .def("parse_from_file", lambdas::parseFromFile, "model"_a, OnnxParserDoc::parse_from_file,
-            py::call_guard<py::gil_scoped_release>{})
-        .def("supports_operator", &IParser::supportsOperator, "op_name"_a, OnnxParserDoc::supports_operator)
-        .def("supports_model_v2", lambdas::supportsModelV2, "model"_a, "path"_a = nullptr,
-            OnnxParserDoc::supports_model_v2)
-        .def_property_readonly("num_subgraphs", &IParser::getNbSubgraphs)
-        .def("is_subgraph_supported", lambdas::isSubgraphSupported, "index"_a, OnnxParserDoc::is_subgraph_supported)
-        .def("get_subgraph_nodes", lambdas::getSubgraphNodes, "index"_a, OnnxParserDoc::get_subgraph_nodes)
-        .def_property_readonly("num_errors", &IParser::getNbErrors)
-        .def("get_error", &IParser::getError, "index"_a, OnnxParserDoc::get_error)
-        .def("clear_errors", &IParser::clearErrors, OnnxParserDoc::clear_errors)
-        .def_property("flags", &IParser::getFlags, &IParser::setFlags)
-        .def("clear_flag", &IParser::clearFlag, "flag"_a, OnnxParserDoc::clear_flag)
-        .def("set_flag", &IParser::setFlag, "flag"_a, OnnxParserDoc::set_flag)
-        .def("get_flag", &IParser::getFlag, "flag"_a, OnnxParserDoc::get_flag)
-        .def("get_layer_output_tensor", &IParser::getLayerOutputTensor, "name"_a, "i"_a,
-            OnnxParserDoc::get_layer_output_tensor)
-        .def("get_used_vc_plugin_libraries", lambdas::get_used_vc_plugin_libraries,
-            OnnxParserDoc::get_used_vc_plugin_libraries)
-        .def("__del__", &utils::doNothingDel<IParser>)
-        .def("load_model_proto", lambdas::pLoadModelProto, "model"_a, "path"_a = nullptr,
-            OnnxParserDoc::load_model_proto, py::call_guard<py::gil_scoped_release>{})
-        .def("load_initializer", lambdas::pLoadInitializer, "name"_a, "data"_a, "size"_a,
-            OnnxParserDoc::load_initializer)
-        .def("parse_model_proto", &IParser::parseModelProto, OnnxParserDoc::parse_model_proto)
-        .def("set_builder_config", &IParser::setBuilderConfig, "builder_config"_a, OnnxParserDoc::set_builder_config,
-            py::keep_alive<1, 2>{});
-
     py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
         .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM)
         .value("ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA",
@@ -251,6 +215,42 @@ void bindOnnx(py::module& m)
             ParserErrorDoc::local_function_stack_size)
         .def("__str__", &pyonnx2trt::parserErrorStr)
         .def("__repr__", &pyonnx2trt::parserErrorStr);
+
+    py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init([](nvinfer1::INetworkDefinition& network, nvinfer1::ILogger& logger) {
+            return nvonnxparser::createParser(network, logger);
+        }),
+            "network"_a, "logger"_a, OnnxParserDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
+        .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse)
+        .def("parse_from_file", lambdas::parseFromFile, "model"_a, OnnxParserDoc::parse_from_file,
+            py::call_guard<py::gil_scoped_release>{})
+        .def("supports_operator", &IParser::supportsOperator, "op_name"_a, OnnxParserDoc::supports_operator)
+        .def("supports_model_v2", lambdas::supportsModelV2, "model"_a, "path"_a = nullptr,
+            OnnxParserDoc::supports_model_v2)
+        .def_property_readonly("num_subgraphs", &IParser::getNbSubgraphs)
+        .def("is_subgraph_supported", lambdas::isSubgraphSupported, "index"_a, OnnxParserDoc::is_subgraph_supported)
+        .def("get_subgraph_nodes", lambdas::getSubgraphNodes, "index"_a, OnnxParserDoc::get_subgraph_nodes)
+        .def_property_readonly("num_errors", &IParser::getNbErrors)
+        .def("get_error", &IParser::getError, "index"_a, OnnxParserDoc::get_error)
+        .def("clear_errors", &IParser::clearErrors, OnnxParserDoc::clear_errors)
+        .def_property("flags", &IParser::getFlags, &IParser::setFlags)
+        .def("clear_flag", &IParser::clearFlag, "flag"_a, OnnxParserDoc::clear_flag)
+        .def("set_flag", &IParser::setFlag, "flag"_a, OnnxParserDoc::set_flag)
+        .def("get_flag", &IParser::getFlag, "flag"_a, OnnxParserDoc::get_flag)
+        .def("get_layer_output_tensor", &IParser::getLayerOutputTensor, "name"_a, "i"_a,
+            OnnxParserDoc::get_layer_output_tensor)
+        .def("get_used_vc_plugin_libraries", lambdas::get_used_vc_plugin_libraries,
+            OnnxParserDoc::get_used_vc_plugin_libraries)
+        .def("__del__", &utils::doNothingDel<IParser>)
+        .def("load_model_proto", lambdas::pLoadModelProto, "model"_a, "path"_a = nullptr,
+            OnnxParserDoc::load_model_proto, py::call_guard<py::gil_scoped_release>{})
+        .def("load_initializer", lambdas::pLoadInitializer, "name"_a, "data"_a, "size"_a,
+            OnnxParserDoc::load_initializer)
+        .def("parse_model_proto", &IParser::parseModelProto, OnnxParserDoc::parse_model_proto)
+        .def("set_builder_config", &IParser::setBuilderConfig, "builder_config"_a, OnnxParserDoc::set_builder_config,
+            py::keep_alive<1, 2>{});
 
     py::class_<IParserRefitter>(m, "OnnxParserRefitter", OnnxParserRefitterDoc::descr, py::module_local())
         // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as

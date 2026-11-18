@@ -36,7 +36,7 @@
 //
 // Note: this library defaults to HALF_ROUND_TIES_TO_EVEN=0 (ties away from zero), which differs
 // from IEEE 754 round-to-nearest-even. Define HALF_ROUND_TIES_TO_EVEN=1 before including this
-// header to opt into IEEE-conformant rounding. parsers/onnxOpenSource/half.h does this.
+// header to opt into IEEE-conformant rounding. projects/onnx_parser/src/onnx2trt/half.h does this.
 
 /// \file
 /// Main header file for half precision functionality.

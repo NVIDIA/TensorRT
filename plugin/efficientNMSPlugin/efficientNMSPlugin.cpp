@@ -236,6 +236,18 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
 bool EfficientNMSPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
+    if (mParam.outputONNXIndices)
+    {
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
+    }
+    else
+    {
+        PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
+        PLUGIN_ASSERT(nbOutputs == 4);
+    }
+    PLUGIN_ASSERT(0 <= pos && pos < nbInputs + nbOutputs);
+
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
         return false;
@@ -243,9 +255,6 @@ bool EfficientNMSPlugin::supportsFormatCombination(
 
     if (mParam.outputONNXIndices)
     {
-        PLUGIN_ASSERT(nbInputs == 2);
-        PLUGIN_ASSERT(nbOutputs == 1);
-
         // detection_indices output: int32_t
         if (pos == 2)
         {
@@ -255,17 +264,6 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         // boxes and scores input: fp32 or fp16
         return (inOut[pos].type == DataType::kHALF || inOut[pos].type == DataType::kFLOAT)
             && (inOut[0].type == inOut[pos].type);
-    }
-
-    PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
-    PLUGIN_ASSERT(nbOutputs == 4);
-    if (nbInputs == 2)
-    {
-        PLUGIN_ASSERT(0 <= pos && pos <= 5);
-    }
-    if (nbInputs == 3)
-    {
-        PLUGIN_ASSERT(0 <= pos && pos <= 6);
     }
 
     // num_detections and detection_classes output: int32_t

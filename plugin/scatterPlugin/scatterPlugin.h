@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -83,6 +83,23 @@ private:
     int32_t calculateNumSlices(Dims indexTensorDims) const noexcept;
     int32_t calculateCopySize(Dims const& dataDims) const noexcept;
     void calculateTransformCoeff(Dims const& dataTensorDims, int32_t indexRank, int32_t* transformCoeff) const noexcept;
+
+    //! \brief Copy the index tensor to host and validate every index component is in range for its
+    //!     corresponding data dimension.
+    //!
+    //! \param deviceIndices Device pointer to the index tensor, \p nSlices rows of \p indexRank
+    //!     int32_t components each.
+    //! \param nSlices Number of index rows (see calculateNumSlices()).
+    //! \param indexRank Number of index components per row.
+    //! \param dataDims Dimensions of the data tensor being scattered into; index component \c i must
+    //!     lie in <tt>[0, dataDims.d[i])</tt>.
+    //! \param stream Stream the index tensor was produced on; the device-to-host copy is synchronized
+    //!     against it before the host-side scan.
+    //!
+    //! \throw nvinfer1::plugin::PluginError if any index component is out of range.
+    void validateIndices(
+        void const* deviceIndices, int32_t nSlices, int32_t indexRank, Dims const& dataDims, cudaStream_t stream) const;
+
     std::string mPluginNamespace;
 
     static constexpr int32_t indexTensorIdx = 1;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -465,11 +465,13 @@ void MHARunner::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mHeadSize);
 }
 
-void MHARunner::deserialize(const void* data, size_t length)
+void MHARunner::deserialize(std::span<std::byte const> data)
 {
-    deserialize_value(&data, &length, &mS);
-    deserialize_value(&data, &length, &mB);
-    deserialize_value(&data, &length, &mHeadSize);
+    void const* ptr = data.data();
+    size_t length = data.size();
+    deserialize_value(&ptr, &length, &mS);
+    deserialize_value(&ptr, &length, &mB);
+    deserialize_value(&ptr, &length, &mHeadSize);
     setup(mS, mB, mHeadSize);
 }
 
@@ -498,12 +500,14 @@ void UnfusedMHARunner::serialize(void* buffer) const noexcept
     MHARunner::serialize(buffer);
 }
 
-void UnfusedMHARunner::deserialize(const void* data, size_t length)
+void UnfusedMHARunner::deserialize(std::span<std::byte const> data)
 {
     mIsBestAlgoFound = true;
-    deserialize_value(&data, &length, &mAlgoBatchedEx1);
-    deserialize_value(&data, &length, &mAlgoBatchedEx2);
-    MHARunner::deserialize(data, length);
+    void const* ptr = data.data();
+    size_t length = data.size();
+    deserialize_value(&ptr, &length, &mAlgoBatchedEx1);
+    deserialize_value(&ptr, &length, &mAlgoBatchedEx2);
+    MHARunner::deserialize({static_cast<std::byte const*>(ptr), length});
 }
 
 void UnfusedMHARunner::setup(int32_t S, int32_t B, int32_t headSize)
@@ -745,9 +749,9 @@ size_t FusedMHARunnerFP16::getWorkspaceSize() const
     return 0;
 }
 
-void FusedMHARunnerFP16::deserialize(const void* data, size_t length)
+void FusedMHARunnerFP16::deserialize(std::span<std::byte const> data)
 {
-    MHARunner::deserialize(data, length);
+    MHARunner::deserialize(data);
     setup(mS, mB, mHeadSize);
 }
 
@@ -894,9 +898,9 @@ size_t FusedMHARunnerInt8::getWorkspaceSize() const
     return 0;
 }
 
-void FusedMHARunnerInt8::deserialize(const void* data, size_t length)
+void FusedMHARunnerInt8::deserialize(std::span<std::byte const> data)
 {
-    MHARunner::deserialize(data, length);
+    MHARunner::deserialize(data);
     setup(mS, mB, mHeadSize);
 }
 
@@ -1057,9 +1061,9 @@ size_t FusedMHARunnerFP16v2::getWorkspaceSize() const
     return 0;
 }
 
-void FusedMHARunnerFP16v2::deserialize(const void* data, size_t length)
+void FusedMHARunnerFP16v2::deserialize(std::span<std::byte const> data)
 {
-    MHARunner::deserialize(data, length);
+    MHARunner::deserialize(data);
     setup(mS, mB, mHeadSize);
 }
 
@@ -1240,9 +1244,9 @@ size_t FusedMHARunnerInt8v2::getWorkspaceSize() const
     return 0;
 }
 
-void FusedMHARunnerInt8v2::deserialize(const void* data, size_t length)
+void FusedMHARunnerInt8v2::deserialize(std::span<std::byte const> data)
 {
-    MHARunner::deserialize(data, length);
+    MHARunner::deserialize(data);
     setup(mS, mB, mHeadSize);
 }
 

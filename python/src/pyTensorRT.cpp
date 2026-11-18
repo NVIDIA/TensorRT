@@ -19,6 +19,7 @@
 #include "ForwardDeclarations.h"
 #include "NvInfer.h"
 #include "pyTensorRTDoc.h"
+#include "utils.h" // Every TU must see the same pybind11 type_caster specializations.
 #include <pybind11/stl_bind.h>
 
 namespace tensorrt

@@ -51,6 +51,62 @@ To see the full list of available options and their descriptions, use the `-h` o
 trtexec_safe [-h or --help]
 ```
 
+`--debug` controls debug logging independently and does not enable memory tracking.
+On Linux, `--reportMemoryUsage` automatically relaunches the tool under Compute
+Sanitizer memcheck with full leak checking and an error exit code of 99. Install
+`compute-sanitizer` on `PATH`; a missing sanitizer fails the command. Do not wrap
+this flag in a second Compute Sanitizer invocation. Sanitizer instrumentation
+affects timing and memory usage; use runs without this flag for performance measurements.
+On QNX, the same flag uses the internal allocation tracker without launching
+Compute Sanitizer. This does not change CI platform selection.
+Pass `--reportMemoryUsage` to report requested allocation peaks separately for normal inference
+and the tensor-profiling run. Placement breakdowns distinguish GPU, CPU, and pinned
+host memory; purpose breakdowns distinguish immutable/weights, scratch, I/O, and
+other allocations. Each category is an independent high-water mark: category peaks
+can occur at different times and must not be summed to reconstruct the total peak.
+
+Lifecycle snapshots show live bytes before graph creation, after creation/cloning,
+after scratch setup, after inference and I/O cleanup, and after graph/scratch cleanup.
+The callback tracker also captures transient allocation peaks between snapshots.
+Graph and external scratch cleanup runs on error paths as well as successful runs.
+
+To look for allocations retained across repeated graph lifetimes in the same process:
+
+```bash
+./trtexec_safe --loadEngine=model.mvmf --reportMemoryUsage --memoryCycles=5
+```
+
+`--memoryCycles` repeats the normal create/infer/destroy cycle (default 1, maximum
+1000, requires `--reportMemoryUsage`); the existing tensor-profiling run follows once. `--iterations`
+and `--avgRuns` still control inference execution within each graph lifetime.
+The cleanup check identifies allocations by generation, so releasing an older
+allocation and retaining a new allocation of the same size cannot hide a residual.
+A newly retained tracked allocation reports a possible leak and fails the tool;
+incomplete bookkeeping reports an inconclusive check. Previously live allocations
+are excluded from that cycle's check. Independent per-category outstanding bytes
+and counts help locate retained memory. Inference/cleanup failures return a nonzero
+exit status and stop further cycles.
+
+Tracking covers allocations through the supplied tool allocator and explicit
+`--useScratch` buffers. It excludes CUDA driver/context memory, allocator overhead,
+engine-file buffers, runtime host allocations outside that interface, and
+plugin-private allocations that bypass it. Zero tracked residual does not prove
+absence of all leaks. A persistent cache or driver reservation can also retain
+process/system memory without leaving a tracked allocation. QNX system-pool
+sampling and representative-network comparisons are separate measurements; see
+`tools/memory_usage_safe` and TRTS-11759. Debug logging and tensor profiling can
+affect timing and memory usage. No public runtime API is changed.
+
+On Linux, the command below runs both the internal tracker and Compute Sanitizer:
+
+```bash
+./trtexec_safe --loadEngine=model.mvmf --reportMemoryUsage --memoryCycles=5 --noCudaGraph
+```
+
+See [Compute Sanitizer leak checking](https://docs.nvidia.com/compute-sanitizer/ComputeSanitizer/index.html#leak-checking).
+This checks CUDA device allocations; it does not replace host-memory or QNX
+system-pool analysis.
+
 ## Additional resources
 
 The following resources provide more details about `trtexec_safe`:

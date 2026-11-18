@@ -2,15 +2,15 @@
 
 set -e
 
-TRT_VERSION="11.4.0.106"
+TRT_VERSION="11.5.0.63"
 
 usage() {
-    echo "Usage: $0 [--x86 | --aarch64] [--cuda 13.4 | --cuda 12.9]"
+    echo "Usage: $0 [--x86 | --aarch64] [--cuda 13.5 | --cuda 12.9]"
     exit 1
 }
 
 ARCH=""
-CUDA_VERSION="13.4"
+CUDA_VERSION="13.5"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -37,14 +37,14 @@ if [ -z "$ARCH" ]; then
 fi
 
 case "$CUDA_VERSION" in
-    13.4|12.9)
+    13.5|12.9)
         ;;
     *)
         usage
         ;;
 esac
 
-URL="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/tars/TensorRT-Enterprise-11.4.0.106-Linux-${ARCH}-cuda-${CUDA_VERSION}-Release-external.tar.zst"
+URL="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.5.0/tars/TensorRT-Enterprise-11.5.0.63-Linux-${ARCH}-cuda-${CUDA_VERSION}-Release-external.tar.zst"
 
 echo "Downloading TensorRT package from: $URL"
 cd /opt

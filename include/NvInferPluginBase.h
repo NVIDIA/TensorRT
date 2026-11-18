@@ -65,25 +65,32 @@ enum class PluginFieldType : int32_t
     kFP4 = 13,
 };
 
-//!
 //! \class PluginField
 //!
-//! \brief Structure containing plugin attribute field names and associated data
-//! This information can be parsed to decode necessary plugin metadata
-//!
-//!
+//! \brief Class containing plugin attribute field names and associated data.
+//! \details This information can be parsed to decode necessary plugin metadata for custom layers.
 class PluginField
 {
 public:
-    //! Plugin field attribute name
+    //! Plugin field attribute name.
     AsciiChar const* name;
-    //! Plugin field attribute data
+    //! Plugin field attribute data.
     void const* data;
-    //! Plugin field attribute type
+    //! Plugin field attribute type.
     PluginFieldType type;
-    //! Number of data entries in the Plugin attribute
+    //! Number of data entries in the plugin attribute.
     int32_t length;
 
+    //! \brief Construct a PluginField with optional name, data, type, and length.
+    //!
+    //! Initializes all members. The pointer arguments may be nullptr, and length may be zero.
+    //!
+    //! \param[in] name_ Optional field name; nullptr if not set.
+    //! \param[in] data_ Optional pointer to field data; nullptr if not set.
+    //! \param[in] type_ Field type; defaults to PluginFieldType::kUNKNOWN.
+    //! \param[in] length_ Number of data entries; defaults to zero.
+    //!
+    //! \post All members are initialized from the corresponding constructor arguments.
     PluginField(AsciiChar const* const name_ = nullptr, void const* const data_ = nullptr,
         PluginFieldType const type_ = PluginFieldType::kUNKNOWN, int32_t const length_ = 0) noexcept
         : name(name_)
@@ -202,6 +209,15 @@ protected:
     IPluginCreatorInterface& operator=(IPluginCreatorInterface&&) & = default;
 };
 
+//! \class IPluginV3
+//!
+//! \brief Plugin class for the V3 generation of user-implemented layers.
+//!
+//! IPluginV3 acts as a wrapper around the plugin capability interfaces that define the actual behavior of the plugin.
+//!
+//! \see IPluginCapability
+//! \see IPluginCreatorV3One
+//! \see IPluginRegistry
 class IPluginV3 : public IVersionedInterface
 {
 public:
@@ -259,17 +275,6 @@ using IPluginResource = v_1_0::IPluginResource;
 //!
 using IPluginCreatorInterface = v_1_0::IPluginCreatorInterface;
 
-//!
-//! \class IPluginV3
-//!
-//! \brief Plugin class for the V3 generation of user-implemented layers.
-//!
-//! IPluginV3 acts as a wrapper around the plugin capability interfaces that define the actual behavior of the plugin.
-//!
-//! \see IPluginCapability
-//! \see IPluginCreatorV3One
-//! \see IPluginRegistry
-//!
 using IPluginV3 = v_1_0::IPluginV3;
 
 //!

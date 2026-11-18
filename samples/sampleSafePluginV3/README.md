@@ -51,7 +51,7 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 
 ### Register safe plugin creator
 
-`ISafePluginCreatorV3One` will be used by TensorRT's builder for engine creation. You would need to register the safe plugin creator into the safePluginRegistry for engine generation and validation. The current sample registers MaxPoolCreator in namespace "" to parse and verify model `mnist_safe_plugin.onnx`.
+`ISafePluginCreatorV3One` will be used by TensorRT's builder for engine creation. You would need to register the safe plugin creator into the safePluginRegistry for engine generation and validation. The current sample registers MaxPoolCreator in namespace "" to parse and verify model `mnist_safe_plugin_ds.onnx`.
 ```
   auto safePluginRegistry = nvinfer2::safe::getSafePluginRegistry(g_recorder);
   safePluginRegistry->registerCreator(maxPoolPluginCreator, "", g_recorder);
@@ -62,9 +62,15 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 
 See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
+2. Build host for a QNX target
+
+Building a safe engine for a QNX target on a Linux x86_64 host (`sample_plugin_safe_build` with `--remoteAutoTuningConfig`, or `trtexec --safe` with `--remoteConfig`) needs:
+- A CUDA toolkit, with its `bin` and `nvvm/bin` directories on `PATH`. The builder compiles CUDA code on the build host, also with `--cpuOnly`.
+- The QNX SDP: `q++` on `PATH`, and `QNX_HOST` and `QNX_TARGET` set, for example by sourcing `qnxsdp-env.sh`. The builder uses it to compile the engine's companion library. Without it the build fails with `Assertion companionSoSize > 0 failed. Expected a non-empty companion library`.
+
 ## Running the sample
 
-1. Verify that the MNIST images are in `$TRT_DATADIR/mnist` and the ONNX network `mnist_safe_plugin.onnx` is in `$TRT_DATADIR/safe_plugin`.
+1. Verify that the MNIST images are in `$TRT_DATADIR/mnist`, and that the ONNX networks `mnist_safe_plugin_ds.onnx` (used by `sample_plugin_safe_build`) and `mnist_safe_plugin.onnx` (used by the `trtexec` example below) are in `$TRT_DATADIR/safe_plugin`.
 
 2. Compile the sample by following the build instructions in the [TensorRT README](https://github.com/NVIDIA/TensorRT/). This will build the sample binaries, including `sample_plugin_safe_build` and `sample_plugin_safe_infer`.
 
@@ -76,16 +82,18 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 4.  Run the sample to build a TensorRT safe engine.
 	```
-	./sample_plugin_safe_build [--datadir=/path/to/data/dir/] [--remoteAutoTuningConfig=<config>] [--cpuOnly]
+	./sample_plugin_safe_build [--datadir=/path/to/data/dir/] [--saveEngine=FILE] [--remoteAutoTuningConfig=<config>] [--cpuOnly]
 	```
 
-	This sample generates `safe_plugin.engine`, which is a binary file that contains the serialized engine data.
+	This sample generates `safe_plugin.engine`, which is a binary file that contains the serialized engine data, and its companion library `safe_plugin.engine.so`.
 
 	This sample reads ONNX model to build the network:
 
-        - `mnist_safe_plugin.onnx` - The ONNX model that contains the network design with maxPoolPlugin, version 1, namespace ""
+        - `mnist_safe_plugin_ds.onnx` - The ONNX model that contains the network design with maxPoolPlugin, version 1, namespace "". Its batch dimension is dynamic, and the sample builds two optimization profiles, for batch 1 and batch 5.
 
 	**Note:** By default, this sample expects these files to be in either the `data/samples/safe_plugin/` or `data/safe_plugin/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
+
+	**Note:** Without `--cpuOnly`, the build needs a local GPU whose compute capability is supported for safety (7.5, 8.0, 8.6, 8.7, 10.0 or 11.0). On any other GPU the sample prints `Skip safe mode test on unsupported platforms.` and exits without building an engine, and on a host without a GPU it stops with a CUDA error. To build on such a host for a remote target, pass `--remoteAutoTuningConfig=<config> --cpuOnly`, see [When to use remoteAutoTuningConfig](#when-to-use-remoteautotuningconfig).
 
 5. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
@@ -125,6 +133,10 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 	`./sample_plugin_safe_infer`
 
 	**Note:** This sample expects `./sample_plugin_safe_build` has been run to generate a safe engine file. It loads input image from `data/samples/mnist` directory, and walks back 10 directories to locate the image.
+
+	**Note:** Copy the engine and its companion library to the target and keep them in one directory. The sample loads `safe_plugin.engine`, or the file given with `--loadEngine=FILE`, and the companion library from the same path with `.so` appended. Without the companion library it fails with `Engine requires a companion .so but no path was provided to createTRTGraph`.
+
+	**Note:** `sample_plugin_safe_infer` requires an engine with two optimization profiles, as `sample_plugin_safe_build` builds it. An engine with one profile fails with `Assertion failure: nbIOProfile == 2`. To build an equivalent engine with `trtexec`, see [Using the plugin library with trtexec and trtexec_safe](#using-the-plugin-library-with-trtexec-and-trtexec_safe).
 
 7. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 0:
     ```
@@ -227,13 +239,20 @@ Please refer to `maxPoolPluginCreatorInterface.cpp` and `maxPoolPluginRuntimeCre
 
 Both `trtexec` and `trtexec_safe` support the `--safetyPlugins` argument, where you specify safety plugins to load from a safety plugin library that implements the manual-registration protocol. The sample plugin and its creator interface will be built into the shared libraries libsample_safe_plugin_v3.so(Linux x86_64 platform) for BUILD and RUNTIME capability and libsample_safe_plugin_v3_safe.so(QNX-safe platform) for RUNTIME only capability.
 
-Sample command to build, validate, and save the safety engine on Linux x86_64 platform.
+Sample command to build, validate, and save the safety engine on a Linux x86_64 host for a QNX-safe target, with remote auto-tuning on that target. `trtexec` takes the remote target as `--remoteConfig`, in the same format as the sample's `--remoteAutoTuningConfig`, and also accepts `--remoteAutoTuningConfig` as an alias. The network is strongly typed, so the precision comes from the ONNX model and the command passes no precision flag. `trtexec` also saves the companion library `sample.engine.so` next to the engine.
 ```
-trtexec --onnx=$TRT_DATADIR/safe_plugin/mnist_safe_plugin.onnx --safe --skipInference --fp16 --consistency --safetyPlugins=libsample_safe_plugin_v3.so[::MaxPoolPlugin] --saveEngine=sample.engine
+trtexec --onnx=$TRT_DATADIR/safe_plugin/mnist_safe_plugin.onnx --safe --skipInference --consistency --safetyPlugins=libsample_safe_plugin_v3.so[::MaxPoolPlugin] --saveEngine=sample.engine --remoteConfig=<config> --cpuOnly
 ```
-Sample command to run the pre-built engine on the QNX-safe platform.
+Sample command to run the pre-built engine on the QNX-safe platform. Copy `sample.engine` and `sample.engine.so` into one directory on the target first.
 ```
 trtexec_safe --loadEngine=sample.engine --safetyPlugins=libsample_safe_plugin_v3_safe.so[::MaxPoolPlugin]
+```
+Sample command to build an engine that `sample_plugin_safe_infer` can run. It uses the dynamic-batch model and declares the same two optimization profiles as `sample_plugin_safe_build`.
+```
+trtexec --onnx=$TRT_DATADIR/safe_plugin/mnist_safe_plugin_ds.onnx --safe --skipInference --consistency --safetyPlugins=libsample_safe_plugin_v3.so[::MaxPoolPlugin] \
+    --profile=0 --minShapes=Input3:1x1x28x28 --optShapes=Input3:1x1x28x28 --maxShapes=Input3:1x1x28x28 \
+    --profile=1 --minShapes=Input3:5x1x28x28 --optShapes=Input3:5x1x28x28 --maxShapes=Input3:5x1x28x28 \
+    --saveEngine=safe_plugin.engine --remoteConfig=<config> --cpuOnly
 ```
 
 ## Additional resources
@@ -264,6 +283,9 @@ This sample was updated to use the CMake-based build system.
 
 Apr. 2026
 This sample was updated to add the `--cpuOnly` build option for remote auto-tuning workflows without requiring a local GPU on the build host.
+
+Oct. 2026
+Documented the build host requirements for a QNX target, the companion library, and the two optimization profiles that `sample_plugin_safe_infer` requires. The `trtexec` example now uses remote auto-tuning (`--remoteConfig`) and no longer passes `--fp16`.
 
 ## Known issues
 

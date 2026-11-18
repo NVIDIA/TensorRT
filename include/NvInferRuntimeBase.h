@@ -23,48 +23,51 @@
 #include <cstdint>
 #include <cuda_runtime_api.h>
 
+// Expands to no tokens.
+#define TRT_DETAIL_EMPTY
+
 // Items that are marked as deprecated will be removed in a future release.
 #if __cplusplus >= 201402L
 #define TRT_DEPRECATED [[deprecated]]
-#define TRT_DEPRECATED_BECAUSE(REASON) [[deprecated(REASON)]]
+#define TRT_DEPRECATED_BECAUSE(REASON) [[deprecated(REASON)]] TRT_DETAIL##_EMPTY
 #define TRT_DEPRECATED_ENUM TRT_DEPRECATED
 #ifdef _MSC_VER
-#define TRT_DEPRECATED_API __declspec(dllexport)
+#define TRT_DEPRECATED_API __declspec(dllexport) TRT_DETAIL##_EMPTY
 #else
-#define TRT_DEPRECATED_API [[deprecated]] __attribute__((visibility("default")))
+#define TRT_DEPRECATED_API [[deprecated]] __attribute__((visibility("default"))) TRT_DETAIL##_EMPTY
 #endif
 #else
 #ifdef _MSC_VER
 #define TRT_DEPRECATED
 #define TRT_DEPRECATED_ENUM
-#define TRT_DEPRECATED_API __declspec(dllexport)
+#define TRT_DEPRECATED_API __declspec(dllexport) TRT_DETAIL##_EMPTY
 #else
-#define TRT_DEPRECATED __attribute__((deprecated))
+#define TRT_DEPRECATED __attribute__((deprecated)) TRT_DETAIL##_EMPTY
 #define TRT_DEPRECATED_ENUM
-#define TRT_DEPRECATED_API __attribute__((deprecated, visibility("default")))
+#define TRT_DEPRECATED_API __attribute__((deprecated, visibility("default"))) TRT_DETAIL##_EMPTY
 #endif
-#define TRT_DEPRECATED_BECAUSE(REASON) TRT_DEPRECATED
+#define TRT_DEPRECATED_BECAUSE(REASON) TRT_DEPRECATED TRT_DETAIL##_EMPTY
 #endif
 
 //! A stand-in for `[[nodiscard]]` and `[[nodiscard(REASON)]]` that works with older compilers.
 #if __cplusplus >= 201907L
 #define TRT_NODISCARD [[nodiscard]]
-#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard(REASON)]]
+#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard(REASON)]] TRT_DETAIL##_EMPTY
 #elif __cplusplus >= 201603L
 #define TRT_NODISCARD [[nodiscard]]
-#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard]]
+#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard]] TRT_DETAIL##_EMPTY
 #else
 #define TRT_NODISCARD
-#define TRT_NODISCARD_BECAUSE(REASON)
+#define TRT_NODISCARD_BECAUSE(REASON) TRT_DETAIL##_EMPTY
 #endif
 
 // Defines which symbols are exported.
 #ifdef TENSORRT_BUILD_LIB
 #ifdef _MSC_VER
-//On Windows, exports are controlled by .def files; not by dllexport.
+// On Windows, exports are controlled by .def files; not by dllexport.
 #define TENSORRTAPI
 #else
-#define TENSORRTAPI __attribute__((visibility("default")))
+#define TENSORRTAPI __attribute__((visibility("default"))) TRT_DETAIL##_EMPTY
 #endif
 #else
 #define TENSORRTAPI
@@ -95,11 +98,13 @@ extern "C"
 
 //! Construct a single integer denoting TensorRT version.
 //! Usable in preprocessor expressions.
-#define NV_TENSORRT_VERSION_INT(major, minor, patch) ((major) *10000L + (minor) *100L + (patch) *1L)
+#define NV_TENSORRT_VERSION_INT(major, minor, patch)                                                                   \
+    ((major) * 10000L + (minor) * 100L + (patch) * 1L) TRT_DETAIL##_EMPTY
 
 //! TensorRT version as a single integer.
 //! Usable in preprocessor expressions.
-#define NV_TENSORRT_VERSION NV_TENSORRT_VERSION_INT(NV_TENSORRT_MAJOR, NV_TENSORRT_MINOR, NV_TENSORRT_PATCH)
+#define NV_TENSORRT_VERSION                                                                                            \
+    NV_TENSORRT_VERSION_INT(NV_TENSORRT_MAJOR, NV_TENSORRT_MINOR, NV_TENSORRT_PATCH) TRT_DETAIL##_EMPTY
 
 //!
 //! \namespace nvinfer1
@@ -240,24 +245,22 @@ using Dims = Dims64;
 
 using InterfaceKind = char const*;
 
-//!
 //! \class InterfaceInfo
 //!
-//! \brief Version information associated with a TRT interface
-//!
+//! \brief Holds version and kind information for a TensorRT interface.
+//! \details Used to identify an interface kind and its major and minor version.
 class InterfaceInfo
 {
 public:
-    InterfaceKind kind;
+    InterfaceKind kind; //!< Interface identifier. Must remain valid for use.
     int32_t major;
     int32_t minor;
 };
 
-//!
 //! \enum APILanguage
 //!
-//! \brief Programming language used in the implementation of a TRT interface
-//!
+//! \brief Programming language used in the implementation of a TensorRT interface.
+//! \details Indicates whether the interface is implemented in C++ or Python.
 enum class APILanguage : int32_t
 {
     kCPP = 0,
@@ -417,6 +420,9 @@ struct EnumMaxImpl<ErrorCode>
 
 namespace v_1_0
 {
+//! \class IErrorRecorder
+//! \brief Interface for recording and querying errors reported by TensorRT.
+//! \details Implementations receive errors from TensorRT and expose recorded errors to the application.
 class IErrorRecorder : public IVersionedInterface
 {
 public:
@@ -525,7 +531,8 @@ public:
     //! errors have been dropped due to lack of storage capacity. This is especially important in the
     //! automotive safety case where the internal error handling mechanisms cannot allocate memory.
     //!
-    //! \return true if errors have been dropped due to overflowing the error stack.
+    //! \return True if errors have been dropped due to overflowing the error stack; false if no errors have been
+    //!         dropped and the error stack has not overflowed.
     //!
     //! \usage
     //! - Allowed context for the API call

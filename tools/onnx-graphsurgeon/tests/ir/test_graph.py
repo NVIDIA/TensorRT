@@ -1073,6 +1073,7 @@ class TestCopy(object):
             outputs=[Variable("test")],
             name="test-name",
             doc_string="test-docstring",
+            model_doc_string="test-model-docstring",
             import_domains=["fake-import-domain"],
             opset=-1,
         )
@@ -1084,6 +1085,7 @@ class TestCopy(object):
         assert new_graph.outputs == graph.outputs
         assert new_graph.name == graph.name
         assert new_graph.doc_string == graph.doc_string
+        assert new_graph.model_doc_string == graph.model_doc_string
         assert new_graph.import_domains == graph.import_domains
         assert new_graph.opset == graph.opset
 

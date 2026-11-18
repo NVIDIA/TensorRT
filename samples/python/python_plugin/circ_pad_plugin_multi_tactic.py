@@ -100,7 +100,7 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
 
         # Set the timing cache ID to prevent unnecessary timing of second plugin instance
         self.timing_cache_id = ""
-        
+
         self.tactic = None
 
         if fc is not None:
@@ -108,7 +108,7 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
                 if f.name == "pads":
                     self.pads = f.data
                 elif f.name == "per_format_tactics":
-                    self.per_format_tactics = int(f.data)
+                    self.per_format_tactics = int(f.data[0])
 
         if phase is not None:
             self.phase = phase
@@ -193,7 +193,7 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         c_ptr = cp.cuda.MemoryPointer(c_mem, 0)
 
         c_d = cp.ndarray((volume(output_desc[0].dims)), dtype=inp_dtype, memptr=c_ptr)
-        
+
         if self.phase == trt.TensorRTPhase.BUILD:
             logger.info(f"Timing tactic: {self.tactic}")
 
@@ -234,10 +234,10 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             )
         else:
             raise RuntimeError("Invalid tactic")
-    
+
     def attach_to_context(self, context):
         return self.clone()
-    
+
     def get_valid_tactics(self):
         assert self.curr_type is not None
         if self.per_format_tactics and self.curr_type == trt.float16:
@@ -256,13 +256,13 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
 
-    # 
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 

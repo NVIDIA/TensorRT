@@ -275,6 +275,7 @@ list of routes that the loop will try:
 |---------|----------|
 | `fast`  | (default) baseline run with each knob at its default, plus one-off variations that change one knob at a time. Linear in the number of variable knobs. |
 | `full`  | Cartesian product over every variable knob. Exponential — use for small expressions. |
+| `mixed-fast` | A `fast` scan, then combinations of the best value of each of the seven most beneficial knobs. Phase 2 has at most 120 routes. |
 | `mixed` | A `fast` scan first to identify which knob values improve performance, then a full sweep over only those "positive" knobs. A pragmatic middle ground for larger spaces. |
 
 To make the difference concrete, take an expression with three binary
@@ -289,9 +290,26 @@ knobs `-A=[on|off] -B=[on|off] -C=[on|off]` and defaults `A=on, B=on, C=on`:
   second pass (e.g. if A and C improved, phase 2 sweeps the 4 routes of
   A × C with B pinned to its default).
 
+- **`mixed-fast`** runs the same 4 phase-1 routes. If all three knobs improve,
+  with C fastest and A slowest, phase 2 tries ABC, BC, AC, and AB. For a knob
+  with several improving values, only its fastest value is retained. Knobs
+  are ranked by their successful GPU time; ties use expression position and
+  value text. At most seven distinct knobs enter phase 2, giving
+  `2^n - 1 - n` additional routes (zero when fewer than two knobs improve).
+  Subsets use descending mask order, with the fastest knobs in the highest bits.
+  Failed builds, failed accuracy checks, and invalid timings cannot qualify.
+  Fixed values remain fixed, and unselected knobs stay at their defaults.
+
+Both mixed searches read phase-1 measurements from `--tuningCacheFile`, rank
+distinct knobs by their best measured GPU time, and select the top knobs.
+`mixed` keeps up to ten knobs and explores their full value lists;
+`mixed-fast` keeps up to seven and uses only each knob's best value.
+An empty `--tuningCacheFile` is rejected for these searches.
+
 `--dryRun` enumerates the route list and exits without building any engine —
 useful for sanity-checking a large expression before paying for it.
-`--dryRun` cannot be combined with `--tuningSearch=mixed`.
+`--dryRun` cannot be combined with `--tuningSearch=mixed` or `mixed-fast`,
+because phase 2 depends on measured performance.
 
 ```
 ./trtexec --onnx=model.onnx \
@@ -371,12 +389,42 @@ If the run is interrupted (Ctrl-C, OOM, timeout), resume it with:
 ./trtexec --continue --tuningCacheFile=tune.jsonl
 ```
 
-`--continue` accepts **only** `--tuningCacheFile=<path>` — passing
+`--continue` reads `best_config.json` in the current working directory by default.
+Use `--tuningCacheFile=<path>` to select a different cache. If the selected cache
+cannot be read, the command reports an error; it does not search other directories.
+
+`--continue` accepts **only** the optional `--tuningCacheFile=<path>` — passing
 `--onnx`, `--tuneBuildRoutes`, `--accuracyThreshold`, or any other flag
 alongside it is rejected. The cache file carries everything needed to
 continue the original run, and existing iteration results in it are
 kept. The sweep picks up at the next iteration after the last one
 already recorded.
+
+Resume from the original working directory so relative paths retain their meaning.
+The expanded route expression is cached; the original route file may be removed.
+
+For `mixed-fast`, a header-only cache starts phase 1. A partial phase-1 cache
+restores completed measurements before finishing that phase. Once phase 1
+is complete, the tuner rereads its cache rows to reconstruct the same ranked phase-2 routes;
+a partial phase-2 cache resumes at the next combination. An already complete
+cache restores the winner without repeating the search. Iteration numbers
+are continuous across both phases, including `--saveAllEngines` filenames.
+Malformed rows or rows that do not match the reconstructed search are rejected.
+If interruption leaves a truncated final JSON line, remove that incomplete
+line before resuming; its iteration will run again.
+
+To extend a completed `fast` scan with `mixed-fast`, keep only the header and
+phase-1 rows, change `--tuningSearch=fast` to `--tuningSearch=mixed-fast` in the
+header's **`argv`** array, and update `searching_algorithm` for readability.
+Changing `command_line` alone does not change the resumed search.
+
+With `--saveEngine`, each new winner is checkpointed to the requested path.
+New cache rows may include `engine_path` for restoring the exact trial engine.
+Existing caches without this optional field remain readable. If a cached
+winner's trial engine is unavailable, the tuner rebuilds its route to restore
+`--saveEngine`; this recovery does not append another search iteration and
+can produce different engine bytes. Preserve trial engines when exact
+reproduction matters.
 
 #### 7.7: Other useful flags
 
@@ -442,6 +490,19 @@ A few things to keep in mind when relying on a tuning result in production:
 ## Tool command line arguments
 
 To see the full list of available options and their descriptions, issue the `./trtexec --help` command.
+
+For Standard engines, `trtexec` shares compatible weight layouts across graphs and optimization
+profiles by default (Myelin Session On). With `--safe`, it defaults to independent weight layouts
+(Myelin Session Off), preserving the existing Safety behavior. Pass `--independentWeightLayouts`
+or `--independentWeightLayouts=1` to select independent layouts explicitly, or
+`--independentWeightLayouts=0` to share compatible layouts, including for Safety engines.
+This mode-dependent default is specific to `trtexec`; it does not change the C++/Python API defaults.
+
+```bash
+trtexec --onnx=model.onnx                               # Standard: Session On
+trtexec --safe --onnx=model.onnx                        # Safety: Session Off
+trtexec --safe --onnx=model.onnx --independentWeightLayouts=0  # Safety: Session On
+```
 
 **Note:** Specifying the `--safe` parameter turns the safety mode switch `ON`. By default, the `--safe` parameter is not specified; the safety mode switch is `OFF`. The layers and parameters that are contained within the `--safe` subset are restricted if the switch is set to `ON`. The switch is used for prototyping the safety restricted flows until the TensorRT safety runtime is made available. This parameter is required when loading or saving safe engines with the standard TensorRT package. For more information, see the [Working With Automotive Safety section in the TensorRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html).
 

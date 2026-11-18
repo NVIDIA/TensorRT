@@ -5,6 +5,9 @@ from onnx_graphsurgeon.ir.function import Function
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
-from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
+from onnx_graphsurgeon.util.exception import (
+    OnnxGraphSurgeonException,
+    OnnxGraphSurgeonResourceError,
+)
 
 __version__ = "0.6.2"

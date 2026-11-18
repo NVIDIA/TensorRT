@@ -38,7 +38,7 @@
 #include <memory>
 #include <optional>
 #include <sys/stat.h>
-#if !defined(_WIN32) && !TRT_WINML
+#if !defined(_WIN32)
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -46,9 +46,7 @@
 #include <vector>
 
 #include "NvInfer.h"
-#if !TRT_WINML
 #include "NvInferPlugin.h"
-#endif
 
 #include "buffers.h"
 #include "common.h"
@@ -99,7 +97,7 @@ bool initNvinfer()
             pCreateInferRefitterInternal
                 = l.symbolAddress<void*(void*, void*, int32_t)>("createInferRefitter_INTERNAL");
         }
-        catch (const std::exception& e)
+        catch (std::exception const& e)
         {
             sample::gLogWarning << "Could not load function createInferRefitter_INTERNAL : " << e.what() << std::endl;
         }
@@ -136,6 +134,36 @@ bool initNvonnxparser()
 }
 
 } // namespace
+
+int32_t sample::reportRuntimeVersion()
+{
+    int32_t major{};
+    int32_t minor{};
+    int32_t patch{};
+    int32_t build{};
+
+#if !TRT_STATIC
+    LibraryPtr libnvinferPtr{};
+    auto getVersion = [&](samplesCommon::DynamicLibrary& library) {
+        major = library.symbolAddress<int32_t()>("getInferLibMajorVersion")();
+        minor = library.symbolAddress<int32_t()>("getInferLibMinorVersion")();
+        patch = library.symbolAddress<int32_t()>("getInferLibPatchVersion")();
+        build = library.symbolAddress<int32_t()>("getInferLibBuildVersion")();
+    };
+    if (!initLibrary(libnvinferPtr, getRuntimeLibraryName(RuntimeMode::kFULL), getVersion))
+    {
+        return EXIT_FAILURE;
+    }
+#else
+    major = getInferLibMajorVersion();
+    minor = getInferLibMinorVersion();
+    patch = getInferLibPatchVersion();
+    build = getInferLibBuildVersion();
+#endif
+
+    std::cout << major << "." << minor << "." << patch << "." << build << std::endl;
+    return EXIT_SUCCESS;
+}
 
 IRuntime* createRuntime()
 {
@@ -255,26 +283,9 @@ constexpr int32_t kCONTINUE_MAIN{-1};
 //! with CUDA graphs disabled. On TRT-Enterprise, the existing context is reused and the profiler is attached in place.
 bool prepareProfileRun(InferenceEnvironmentBase& iEnv, InferenceOptions& infOpts, SystemOptions const& sysOpts)
 {
-#if TRT_WINML
-    InferenceEnvironmentStd& stdEnv = static_cast<InferenceEnvironmentStd&>(iEnv);
-    if (infOpts.rtxCudaGraphStrategy != CudaGraphStrategy::kDISABLED)
-    {
-        sample::gLogWarning << "Disabling RTX CUDA graph for the profile run to avoid obscuring per-layer timings."
-                            << std::endl;
-        infOpts.rtxCudaGraphStrategy = CudaGraphStrategy::kDISABLED;
-    }
-    stdEnv.contexts.clear();
-    stdEnv.bindings.clear();
-    if (!setUpInference(iEnv, infOpts, sysOpts))
-    {
-        sample::gLogError << "Inference set up failed for profile run" << std::endl;
-        return false;
-    }
-#else
     IExecutionContext& ctx = *static_cast<InferenceEnvironmentStd&>(iEnv).contexts.front();
     ctx.setProfiler(iEnv.profiler.get());
     ctx.setEnqueueEmitsProfile(false);
-#endif
     return true;
 }
 
@@ -287,12 +298,6 @@ bool prepareProfileRun(InferenceEnvironmentBase& iEnv, InferenceOptions& infOpts
 //! linked in, so this returns EXIT_FAILURE with a diagnostic.
 int32_t printBuildRouteHelp(std::string const& knobName)
 {
-#if !ENABLE_FEATURE_GLOBAL_PERF_TUNER
-    (void) knobName;
-    sample::gLogError << "--helpBuildRoute requires a build with ENABLE_FEATURE_GLOBAL_PERF_TUNER. "
-                      << "Rebuild TensorRT with the global perf tuner feature enabled." << std::endl;
-    return EXIT_FAILURE;
-#else
     std::unique_ptr<IBuilder> builder{createBuilder()};
     if (!builder)
     {
@@ -368,7 +373,6 @@ int32_t printBuildRouteHelp(std::string const& knobName)
     filtered["tuner_options"] = std::move(filteredOptions);
     std::cout << filtered.dump(/*indent=*/2) << std::endl;
     return EXIT_SUCCESS;
-#endif // ENABLE_FEATURE_GLOBAL_PERF_TUNER
 }
 
 // \param quiet If true, suppress option banner printing (used by child workers to avoid
@@ -376,11 +380,7 @@ int32_t printBuildRouteHelp(std::string const& knobName)
 int32_t parseArgs(Logger::TestAtom& sampleTest, Arguments& args, AllOptions& options, bool quiet = false)
 {
     // For DLA pre-procssing
-#if TRT_WINML && !TRT_WINML_PLUGIN
-    bool const kENABLE_STATIC_PLUGINS = false;
-#else
     bool const kENABLE_STATIC_PLUGINS = true;
-#endif // TRT_WINML && !TRT_WINML_PLUGIN
     options.system.enableStaticPlugins = kENABLE_STATIC_PLUGINS;
 
     // Start parsing
@@ -432,7 +432,7 @@ int32_t parseArgs(Logger::TestAtom& sampleTest, Arguments& args, AllOptions& opt
         return EXIT_SUCCESS;
     }
 
-#if defined(_WIN32) || TRT_WINML
+#if defined(_WIN32)
     if (options.tuning.helpBuildRoute || !options.build.buildRoute.empty())
     {
         sample::gLogError << "--helpBuildRoute and --setBuildRoute are not supported on Windows." << std::endl;
@@ -465,32 +465,18 @@ int32_t runOnceBuildAndInfer(
     {
         sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
     }
-#if TRT_WINML
-    std::string const jitInVersion = " RTX";
-#else
     std::string const jitInVersion;
     if (!options.build.cpuOnly)
     {
         setCudaDevice(options.system.device, sample::gLogInfo);
     }
-#endif /* TRT_WINML */
     sample::gLogInfo << std::endl;
     sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
                      << NV_TENSORRT_PATCH << jitInVersion << std::endl;
 
     // Record specified runtime
     gUseRuntime = options.build.useRuntime;
-#if TRT_WINML && TRT_WINML_PLUGIN
-    std::vector<LibraryPtr> pluginLibs;
-    for (auto const& pluginPath : options.system.plugins)
-    {
-        sample::gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
-        pluginLibs.emplace_back(loadLibrary(pluginPath));
-    }
-#endif // TRT_WINML && TRT_WINML_PLUGIN
 
-#if !TRT_WINML
-#if !ENABLE_WOA
 #if !TRT_STATIC
     LibraryPtr nvinferPluginLib{};
 #endif /* TRT_STATIC */
@@ -556,7 +542,6 @@ int32_t runOnceBuildAndInfer(
         }
     }
 #endif // ENABLE_UNIFIED_BUILDER
-#endif // !ENABLE_WOA
     if (options.build.safe && !sample::hasSafeRuntime())
     {
         sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -575,36 +560,8 @@ int32_t runOnceBuildAndInfer(
         options.build.reference = false;
     }
 
-#if ENABLE_FEATURE_WEAK_TYPING
-    if (options.build.safe)
-    {
-        sample::gLogInfo << "StronglyTyped is enabled by default on safety mode." << std::endl;
-        options.build.stronglyTyped = true;
-    }
-#endif // ENABLE_FEATURE_WEAK_TYPING
 
-#endif // !TRT_WINML
 
-    // Windows does not have setenv call
-#if !defined(_WIN32)
-    // Set CPU-only environment variable if the option is enabled
-    if (options.build.cpuOnly)
-    {
-        // The use of `TRT_INTERNAL_OPTIONS` is special to TensorRT 10.15 and will disappear in later releases.
-        sample::gLogInfo << "Setting CPU-only mode" << std::endl;
-        char* internalOptions = std::getenv("TRT_INTERNAL_OPTIONS");
-        std::string internalOptionsStr;
-        if (internalOptions)
-        {
-            internalOptionsStr = std::string(internalOptions) + " --cpu_only=1";
-        }
-        else
-        {
-            internalOptionsStr = "--cpu_only=1";
-        }
-        setenv("TRT_INTERNAL_OPTIONS", internalOptionsStr.c_str(), 1);
-    }
-#endif // !defined(_WIN32)
     // Start engine building phase.
     std::unique_ptr<BuildEnvironment> bEnv(
         new BuildEnvironment(options.build.safe, options.build.versionCompatible, options.system.DLACore,
@@ -616,13 +573,8 @@ int32_t runOnceBuildAndInfer(
         return EXIT_FAILURE;
     }
 
-#if !TRT_WINML
     bEnv->engine.setDLAWorkspaceAllocationStrategy(options.system.dlaWorkspaceAllocationStrategy);
-#endif // !TRT_WINML
 
-#if TRT_WINML
-    bEnv->engine.setDeferredWeightsLoading(options.build.deferWeightsLoading);
-#endif // TRT_WINML
 
     bool buildPass
         = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError, postConfigHook);
@@ -639,56 +591,9 @@ int32_t runOnceBuildAndInfer(
         return EXIT_SUCCESS;
     }
 
-#if TRT_WINML
-    if (options.build.deferWeightsLoading)
-    {
-        // Force engine deserialization (already deferred via the runtime flag set above)
-        // and drive JIT compilation by creating a one-shot execution context. If
-        // --runtimeCacheFile was supplied, the runtime cache is populated from this JIT pass.
-        auto* engineForDeferredJit = bEnv->engine.get();
-        if (engineForDeferredJit == nullptr
-            || !sample::populateRuntimeCacheForDeferredJit(*engineForDeferredJit, options.inference))
-        {
-            sample::gLogError << "Deferred JIT compilation failed." << std::endl;
-            return sample::gLogger.reportFail(sampleTest);
-        }
 
-        if (options.build.skipInference)
-        {
-            sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
-            return sample::gLogger.reportPass(sampleTest);
-        }
-
-        // Inference requested: bring weights onto the GPU before falling through to the
-        // standard setUpInference / runInference path.
-        bool const weightsOk
-            = sample::loadDeferredWeightsFromEngineFile(*engineForDeferredJit, options.build.engine, sample::gLogError);
-        if (!weightsOk)
-        {
-            sample::gLogError << "Loading deferred weights failed." << std::endl;
-            return sample::gLogger.reportFail(sampleTest);
-        }
-    }
-    else if (options.build.skipInference)
-    {
-        if (options.build.runtimePlatform == nvinfer1::RuntimePlatform::kSAME_AS_BUILD)
-        {
-            printLayerInfo(options.reporting, bEnv->engine.get(), nullptr);
-            printOptimizationProfileInfo(options.reporting, bEnv->engine.get());
-        }
-        sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
-        return EXIT_SUCCESS;
-    }
-
-    setCudaDevice(options.system.device, sample::gLogInfo);
-#endif
-
-#if !TRT_WINML || TRT_WINML_PLUGIN
-#if !ENABLE_WOA
     // dynamicPlugins may have been updated by getEngineBuildEnv above
     bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
-#endif // !ENABLE_WOA
-#endif // !TRT_WINML || TRT_WINML_PLUGIN
     // When some options are enabled, engine deserialization is not supported on the platform that the engine was
     // built.
     bool const supportDeserialization = !options.build.safe && !options.build.buildDLAStandalone
@@ -740,13 +645,6 @@ int32_t runOnceBuildAndInfer(
         return EXIT_SUCCESS;
     }
 
-#if TRT_WINML
-    if (options.build.safe)
-    {
-        sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
-        return EXIT_FAILURE;
-    }
-#endif
     std::unique_ptr<InferenceEnvironmentBase> iEnv;
 
     if (!options.build.safe)
@@ -763,7 +661,6 @@ int32_t runOnceBuildAndInfer(
 #endif
     }
 
-#if !TRT_WINML || TRT_WINML_PLUGIN
     // We avoid re-loading some dynamic plugins while deserializing
     // if they were already serialized with `setPluginsToSerialize`.
     std::vector<std::string> dynamicPluginsNotSerialized;
@@ -778,7 +675,6 @@ int32_t runOnceBuildAndInfer(
     }
 
     iEnv->engine.setDynamicPlugins(dynamicPluginsNotSerialized);
-#endif /* TRT_WINML || TRT_WINML_PLUGIN */
     // Delete build environment.
     bEnv.reset();
 
@@ -790,7 +686,6 @@ int32_t runOnceBuildAndInfer(
         }
         return EXIT_SUCCESS;
     }
-#if !TRT_WINML
     if (options.build.safe && options.system.DLACore >= 0)
     {
         sample::gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
@@ -799,10 +694,8 @@ int32_t runOnceBuildAndInfer(
                          << std::endl;
         return EXIT_FAILURE;
     }
-#endif /* TRT_WINML */
     bool const profilerEnabled = options.reporting.profile || !options.reporting.exportProfile.empty();
 
-#if !TRT_WINML
     bool const layerInfoEnabled = options.reporting.layerInfo || !options.reporting.exportLayerInfo.empty();
     if (iEnv->safe && (profilerEnabled || layerInfoEnabled))
     {
@@ -812,7 +705,6 @@ int32_t runOnceBuildAndInfer(
                           << std::endl;
         return EXIT_FAILURE;
     }
-#endif /* !TRT_WINML */
     if (!setUpInference(*iEnv, options.inference, options.system))
     {
         sample::gLogError << "Inference set up failed" << std::endl;
@@ -828,7 +720,7 @@ int32_t runOnceBuildAndInfer(
     std::vector<InferenceTrace> trace;
     sample::gLogInfo << "Starting inference" << std::endl;
 
-#if !defined(_WIN32) && !TRT_WINML
+#if !defined(_WIN32)
     // Load ALL reference outputs for accuracy validation (if provided)
     // This loads all refPairs upfront since they will be used in the inner loop
     if (!options.build.safe)
@@ -928,11 +820,7 @@ int32_t runOnceBuildAndInfer(
 
 int sample::trtexecMain(int argc, char** argv, PostConfigCallback const& postConfigHook)
 {
-#if TRT_WINML
-    std::string const sampleName = "TensorRT-RTX.tensorrt_rtx";
-#else
     std::string const sampleName = "TensorRT.trtexec";
-#endif
 
     auto sampleTest = sample::gLogger.defineTest(sampleName, argc, argv);
 
@@ -974,20 +862,11 @@ int sample::trtexecMain(int argc, char** argv, PostConfigCallback const& postCon
 // implementation is needed.
 // ============================================================================
 
-#if defined(_WIN32) || TRT_WINML
+#if defined(_WIN32)
 
 int32_t sample::runTuningLoop(int32_t /*argc*/, char** /*argv*/)
 {
     sample::gLogError << "--tuneBuildRoutes is not supported on Windows (no fork())." << std::endl;
-    return EXIT_FAILURE;
-}
-
-#elif !ENABLE_FEATURE_GLOBAL_PERF_TUNER
-
-int32_t sample::runTuningLoop(int32_t /*argc*/, char** /*argv*/)
-{
-    sample::gLogError << "--tuneBuildRoutes requires a build with ENABLE_FEATURE_GLOBAL_PERF_TUNER. "
-                      << "Rebuild TensorRT with the global perf tuner feature enabled." << std::endl;
     return EXIT_FAILURE;
 }
 
@@ -1041,16 +920,17 @@ IterationResult readChildResult(std::string const& jsonPath)
     return r;
 }
 
-//! Fork+exec one child trtexec invocation for the given route. Reads the
-//! resulting JSON and returns an IterationResult. Never throws — failures
-//! are reported as `crashed=true` with a brief errorMessage.
-IterationResult runChildForOneRoute(int32_t argc, char** argv, BigInt const& globalIndex, std::string const& route,
-    std::string const& enginePath, std::string const& resultJsonPath)
+//! \brief Fork and execute one child trtexec invocation for a concrete route.
+//! Strip parent-only tuning arguments, then supply the route, engine path, and result-JSON path.
+//! Wait for the child and combine its reported timing/accuracy with its exit status. Process launch,
+//! wait, signal, or missing-result failures are returned as crashed results with an error message.
+//! A reported accuracy failure may have a nonzero exit status without being classified as a crash.
+IterationResult runChildForOneRoute(int32_t argc, char** argv, std::string const& route, std::string const& enginePath,
+    std::string const& resultJsonPath)
 {
     std::vector<std::string> storage;
     auto const childArgv = buildTuningChildArgv(argc, argv, route, enginePath, resultJsonPath, storage);
 
-    sample::gLogInfo << "Tuning iteration [" << globalIndex.toString() << "]: " << route << std::endl;
     // Ensure stale result files from a previous iteration aren't mistaken for this one's output.
     std::remove(resultJsonPath.c_str());
 
@@ -1112,12 +992,14 @@ IterationResult runChildForOneRoute(int32_t argc, char** argv, BigInt const& glo
     return r;
 }
 
-//! Resolve the tuning context up-front: parse the user's expression, query the
-//! knob database from --setBuildRoute's empty-route side-effect path (the
-//! default-constructed BuilderConfig populates `allBuildRoutes` from Myelin),
-//! and expand into a TuningContext.
+//! \brief Parse the tuning expression and construct its search strategy without expanding routes.
+//! Query getAllBuildRoutes() on a builder configuration for knob definitions, validate candidate
+//! values, and retain parsed expressions, defaults, and version metadata in the context.
 //!
-//! Returns false (and logs) if the expression is malformed or empty.
+//! \param tuning Parsed expression, algorithm selection, and cache path.
+//! \param[out] ctx Context owning the configured strategy and its common search inputs.
+//! \return False with a diagnostic if builder/configuration creation fails, knob metadata is
+//! unavailable or invalid, or the expression cannot be parsed; true when the context is ready.
 bool buildTuningContext(TuningOptions const& tuning, TuningContext& ctx)
 {
     // Get the knob database JSON by spinning up a default BuilderConfig.
@@ -1138,7 +1020,7 @@ bool buildTuningContext(TuningOptions const& tuning, TuningContext& ctx)
     if (allRoutesStr.empty())
     {
         sample::gLogError << "IBuilderConfig::getAllBuildRoutes() returned empty — "
-                          << "tuning requires the Myelin knob database, which is only available on "
+                          << "tuning requires the knob database, which is only available on "
                           << "enterprise TRT (non-RTX, non-WoA)." << std::endl;
         return false;
     }
@@ -1156,7 +1038,7 @@ bool buildTuningContext(TuningOptions const& tuning, TuningContext& ctx)
         return false;
     }
     ctx.parsedExprs = std::move(*parsed);
-    ctx.searchAlgorithm = tuning.tuningSearchAlgorithm;
+    ctx.searchStrategy = createSearchStrategy(tuning.tuningSearchAlgorithm, tuning.tuningCacheFile);
     ctx.tunerVersion = db.getTunerVersion();
     ctx.defaultBuildRoute = db.buildDefaultPath();
     // Fill defaultValues parallel to parsedExprs (used by fast / mixed mode).
@@ -1166,43 +1048,59 @@ bool buildTuningContext(TuningOptions const& tuning, TuningContext& ctx)
     {
         ctx.defaultValues.emplace_back(db.getDefaultValue(p.mKnobName));
     }
-    ctx.totalCount = ctx.count();
-    sample::gLogInfo << "Expanded to " << ctx.totalCount.toString() << " build route configurations" << std::endl;
+    if (auto const total = ctx.count())
+    {
+        sample::gLogInfo << "Expanded to " << total->toString() << " build route configurations" << std::endl;
+    }
     return true;
 }
 
-//! Storage + view of an argv reconstructed from a tuning-cache header. The caller
-//! reads `argc` / `argv()` and passes them to parseArgs(); `resumeFromIter` is the
-//! iteration index to skip up to. `storage` owns the strings backing `argvPtrs`.
+//! \brief Own the arguments and cached progress needed to start a continued run.
+//!
+//! The cache is read before option parsing because its header supplies the original arguments.
+//! Keep the record count and best measurement here until runTuningLoop() constructs TuningContext
+//! and TuningState. They initialize the execution index and winner without a second full cache scan.
+//! The default values also describe a fresh run: start at zero with no successful measurement.
 struct ContinueResumeState
 {
-    std::vector<std::string> storage;
-    std::vector<char*> argvPtrs;
-    int32_t argc{0};
-    int64_t resumeFromIter{0};
+    std::vector<std::string> storage; //!< Owns the strings used by the reconstructed argv.
+    std::vector<char*> argvPtrs;      //!< Pointers into storage, followed by a null sentinel.
+    int32_t argc{0};                  //!< Argument count, excluding the sentinel.
+    BigInt resumeFromIter{0};         //!< Completed record count; becomes ctx.globalIndex, without narrowing.
+    BigInt successCount{0};           //!< Successful cached measurements, including the saved winner.
 
+    //! Fastest successful cached measurement; absent for an empty cache or when every trial failed.
+    //! Its time, route, and engine path preserve the winner even if no new trial improves on it.
+    std::optional<CachedIterationResult> bestResult;
+
+    //! \brief Return the null-terminated argument array owned by this state.
+    //! The pointers remain valid while storage is unchanged and this state remains alive.
     [[nodiscard]] char** argv() noexcept
     {
         return argvPtrs.data();
     }
 };
 
-//! \brief Validate the bare-`--continue` invocation and rebuild argv from the cache header.
+//! \brief Restore the arguments and completed progress for a --continue invocation.
 //!
-//! The user must pass exactly `--continue` + `--tuningCacheFile=<path>` (in any order) and
-//! no other options — the cache header is the source of truth for everything else. The
-//! function logs and returns false on validation or I/O errors so the caller can fail fast.
+//! The user may pass `--tuningCacheFile=<path>` with `--continue` to override the default
+//! cache in the current directory. The cache header supplies all other options. The
+//! function scans iteration records line by line to recover the count, success count, and winner.
+//! Saved route strings and iteration numbers are not compared with generated routes or indices.
 //!
-//! On success, `state` carries the reconstructed argv (with absolute paths) and the resume
-//! iteration index. Caller must pass the SAME argv[0] as the running binary, since the cache
-//! stores the original argv[0] which may not match a relocated trtexec.
+//! \param argc Number of arguments in the current invocation.
+//! \param argv Current arguments, including the running executable at argv[0]. This executable
+//! replaces the cached argv[0], which may name an older build or a relocated binary.
+//! \param[out] state Owns the reconstructed arguments and the summary of completed iterations.
+//! \return True on success; false with a diagnostic for invalid arguments, malformed cache data,
+//! or an I/O error. Does not launch children or write the cache.
 bool reconstructArgvForContinue(int32_t argc, char** argv, ContinueResumeState& state)
 {
     constexpr char const* kCACHE_FLAG = "--tuningCacheFile=";
     uint64_t const flagLen = std::strlen(kCACHE_FLAG);
 
     // Pre-check: the only allowed args are `--continue` and `--tuningCacheFile=<path>`.
-    std::string cachePath;
+    std::string cachePath = TuningOptions{}.tuningCacheFile;
     for (int32_t i = 1; i < argc; ++i)
     {
         if (argv[i] == nullptr)
@@ -1214,7 +1112,7 @@ bool reconstructArgvForContinue(int32_t argc, char** argv, ContinueResumeState& 
         bool const isCacheFile = (std::strncmp(argv[i], kCACHE_FLAG, flagLen) == 0);
         if (!isContinue && !isCacheFile)
         {
-            sample::gLogError << "--continue requires exactly --tuningCacheFile=<path>; "
+            sample::gLogError << "--continue accepts only an optional --tuningCacheFile=<path>; "
                               << "no other options are allowed (got '" << arg << "'). "
                               << "All options come from the cache header." << std::endl;
             return false;
@@ -1226,7 +1124,7 @@ bool reconstructArgvForContinue(int32_t argc, char** argv, ContinueResumeState& 
     }
     if (cachePath.empty())
     {
-        sample::gLogError << "--continue requires --tuningCacheFile=<path> on the command line." << std::endl;
+        sample::gLogError << "--continue requires a nonempty --tuningCacheFile path." << std::endl;
         return false;
     }
 
@@ -1237,6 +1135,8 @@ bool reconstructArgvForContinue(int32_t argc, char** argv, ContinueResumeState& 
         return false;
     }
     state.resumeFromIter = header->completedIterations;
+    state.successCount = header->successCount;
+    state.bestResult = std::move(header->bestResult);
     state.storage = reconstructArgvFromCacheHeader(*header, argv[0], cachePath);
     state.argvPtrs.reserve(state.storage.size() + 1);
     for (auto& s : state.storage)
@@ -1245,8 +1145,8 @@ bool reconstructArgvForContinue(int32_t argc, char** argv, ContinueResumeState& 
     }
     state.argvPtrs.emplace_back(nullptr);
     state.argc = static_cast<int32_t>(state.storage.size());
-    sample::gLogInfo << "--continue: resuming from iteration " << state.resumeFromIter << " using " << state.argc
-                     << " args reconstructed from cache header." << std::endl;
+    sample::gLogInfo << "--continue: resuming from iteration " << state.resumeFromIter.toString() << " using "
+                     << state.argc << " args reconstructed from cache header." << std::endl;
     return true;
 }
 
@@ -1271,166 +1171,222 @@ bool validateTuningOptions(AllOptions const& options)
     return true;
 }
 
-//! \brief Print the dryRun enumeration of routes. No engine work is performed.
-void emitDryRunListing(TuningContext const& ctx)
+//! \brief Print indexed routes for a search whose total count is already known.
+//! Generates one route at a time without launching children or changing ctx.globalIndex.
+//! \throws std::invalid_argument if the search needs measurements to determine its routes.
+void emitDryRunListing(TuningContext& ctx)
 {
-    sample::gLogInfo << "--dryRun: " << ctx.totalCount.toString() << " build routes would be tried:" << std::endl;
-    for (BigInt i{0}; i < ctx.totalCount; ++i)
+    auto const total = ctx.count();
+    if (!total)
     {
-        sample::gLogInfo << "[" << i.toString() << "]:" << ctx.getPathAtIndex(i) << std::endl;
+        throw std::invalid_argument("This search requires measurements and does not support --dryRun");
+    }
+    sample::gLogInfo << "--dryRun: " << total->toString() << " build routes would be tried:" << std::endl;
+    for (BigInt i{0}; i < *total; ++i)
+    {
+        sample::gLogInfo << "[" << i.toString() << "]:" << ctx.getBuildRouteAtIndex(i).value() << std::endl;
     }
 }
 
-//! Shared mutable state for a phase (or phase 1 + phase 2 of mixed-mode) of the tuning loop.
-//! Aggregated into a single struct so runOnePhase can be a free function instead of a deeply
-//! nested lambda.
-struct PhaseState
+//! \brief Execution state shared by measurement, checkpointing, and final engine recovery.
+//! References remain valid for the lifetime of runTuningLoop(). Cached progress initializes the
+//! success count and winner; subsequent measurements update them without retaining trial history.
+struct TuningState
 {
     AllOptions const& options;                             //!< Parsed options for this run.
+    TuningContext& ctx;                                    //!< Owns the strategy and next unfinished index.
     Logger::TestAtom const& sampleTest;                    //!< For TASK_BEGIN/END/ABORT banners.
-    pid_t const ppid{};                                    //!< Parent PID, used in temp filenames.
-    std::chrono::steady_clock::time_point const startTime; //!< Loop start, for --tuningTimeOut.
-    int32_t const argc{};                                  //!< Parent argv (passed verbatim to children).
-    char** const argv{};                                   //!< Parent argv (passed verbatim to children).
-    // Mutable across iterations and across phases:
-    BigInt successCount{0};
-    double bestGpuTimeMs{std::numeric_limits<double>::infinity()};
-    std::string bestEnginePath;
-    std::string bestRoute;
+    pid_t const ppid{};                                    //!< Parent PID, used in temporary filenames.
+    std::chrono::steady_clock::time_point const startTime; //!< Start of this invocation's tuning budget.
+    int32_t const argc{};                                  //!< Argument count used to construct child commands.
+    char** const argv{};                                   //!< Original build arguments, restored when continuing.
+    BigInt successCount{0};                                //!< Successful cached and newly measured iterations.
+    double bestGpuTimeMs{std::numeric_limits<double>::infinity()}; //!< Infinity until a trial succeeds.
+    std::string bestEnginePath;                                    //!< Winning iteration's engine, if it was retained.
+    std::string bestRoute;                                         //!< Route used to build the winning engine.
+    std::string temporaryBestEnginePath;                           //!< Winning temporary file owned by this process.
+    bool failed{false}; //!< Checkpoint/cache failure requiring the run to stop.
 };
 
-//! Build the temp-engine path for one iteration. With --saveAllEngines, use a stable
-//! per-iteration name under the user's --saveEngine (matches the format the turtle
-//! tests assert against: `<engine>.iter<N>`). Without it, use a pid-scoped temp
-//! that gets unlinked at promotion time. The phase label disambiguates the temp
-//! path so mixed-mode phase 2 cannot overwrite a phase-1 file mid-flight.
-std::string makeIterationEnginePath(PhaseState const& state, char const* phaseLabel, BigInt const& i)
+//! \brief Name the engine by global iteration, using a process-local path unless all engines are saved.
+//! With --saveAllEngines, return <saveEngine>.iter<N>. Otherwise include the parent PID and global
+//! index so different iterations in this invocation do not overwrite each other's temporary engine.
+//! Uses state.ctx.globalIndex without advancing it; does not create the file.
+std::string makeIterationEnginePath(TuningState const& state)
 {
+    auto const index = state.ctx.globalIndex.toString();
     if (state.options.build.saveAllEngines)
     {
-        return state.options.build.engine + ".iter" + i.toString();
+        return state.options.build.engine + ".iter" + index;
     }
-    return "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter" + phaseLabel + "_" + i.toString() + ".plan";
+    return "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter_" + index + ".plan";
 }
 
-//! \brief Run one phase of the tuning loop (phase 1, or phase 2 of mixed mode).
-//!
-//! Iterates phaseCtx.totalCount times, fork+execs a child per iteration, and updates
-//! `state` with the best route seen. When `positiveKnobs` is non-null and we're past
-//! the baseline iteration (i==0), records each iteration that beats the baseline so
-//! mixed-mode can build its phase-2 sub-context.
-//!
-//! Returns false if --tuningTimeOut tripped (so the caller stops chaining phases),
-//! true on normal completion.
-//!
-//! NOLINT: orchestrator function that touches every per-iteration concern (timeout, route
-//! enumeration, child invocation, best-tracker update, mixed-mode positive-knob collection,
-//! cache writing, temp-file cleanup, TASK_BEGIN/END/ABORT logging). Further extraction would
-//! either fragment one logical iteration step across multiple functions or require passing
-//! the same PhaseState everywhere — both make the per-iteration story harder to read.
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-bool runOnePhase(PhaseState& state, TuningContext const& phaseCtx, char const* phaseLabel,
-    std::vector<MixedSearchKnobResult>* positiveKnobs, double* baselineGpuTimeMsOut, int64_t skipUntil)
+//! \brief Copy the winner to --saveEngine through a temporary file and rename.
+//! The rename replaces the destination only after the copy completes. The iteration's source file
+//! remains available for cache-based recovery if the process stops before its record is appended.
+//! This protects the engine replacement; it is not a transaction spanning the engine and cache.
+//! \return True when no copy is needed or the replacement succeeds. On I/O failure, return false
+//! and set state.failed so the caller stops without recording the new winner.
+bool checkpointBestEngine(TuningState& state)
 {
-    sample::gLogInfo << "Tuning " << phaseLabel << ": " << phaseCtx.totalCount.toString() << " iterations."
-                     << std::endl;
-    double baselineGpuTimeMs = std::numeric_limits<double>::infinity();
-    for (BigInt i{0}; i < phaseCtx.totalCount; ++i)
+    auto const& destination = state.options.build.engine;
+    if (destination.empty() || destination == state.bestEnginePath)
     {
-        // --continue: skip iterations already in the cache.
-        if (skipUntil > 0 && i < BigInt{static_cast<uint64_t>(skipUntil)})
-        {
-            continue;
-        }
-        if (state.options.tuning.timeout > 0)
-        {
-            auto const elapsedS
-                = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - state.startTime)
-                      .count();
-            if (elapsedS >= state.options.tuning.timeout)
-            {
-                sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout << "s); stopping early."
-                                 << std::endl;
-                return false;
-            }
-        }
-
-        std::string const route = phaseCtx.getPathAtIndex(i);
-        std::string const enginePath = makeIterationEnginePath(state, phaseLabel, i);
-        std::string const jsonPath
-            = "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter" + i.toString() + ".json";
-
-        sample::gLogger.reportTaskBegin(state.sampleTest, i.toString(), route);
-
-        IterationResult const result = runChildForOneRoute(state.argc, state.argv, i, route, enginePath, jsonPath);
-
-        if (!result.crashed && result.exitCode == EXIT_SUCCESS)
-        {
-            ++state.successCount;
-            if (result.gpuTimeMs < state.bestGpuTimeMs)
-            {
-                state.bestGpuTimeMs = result.gpuTimeMs;
-                state.bestEnginePath = enginePath;
-                state.bestRoute = route;
-            }
-            // Track baseline (index 0) so mixed-mode can decide "positive knob".
-            if (i.isZero())
-            {
-                baselineGpuTimeMs = result.gpuTimeMs;
-            }
-            sample::gLogger.reportTaskEnd(state.sampleTest, i.toString(), route);
-        }
-        else
-        {
-            sample::gLogWarning << "Iteration [" << i.toString()
-                                << "] failed: " << (result.errorMessage.empty() ? "(no message)" : result.errorMessage)
-                                << std::endl;
-            sample::gLogger.reportTaskAbort(state.sampleTest, i.toString(), route);
-        }
-        // For mixed-mode phase 1, collect knobs that beat the baseline.
-        if (positiveKnobs != nullptr && !i.isZero() && baselineGpuTimeMs != std::numeric_limits<double>::infinity())
-        {
-            collectPositiveKnobFromResult(
-                result.crashed, result.gpuTimeMs, baselineGpuTimeMs, i, phaseCtx, *positiveKnobs);
-        }
-        // Append this iteration's result to the tuning cache file (--tuningCacheFile).
-        if (!state.options.tuning.tuningCacheFile.empty())
-        {
-            writeTuningCacheIteration(state.options.tuning.tuningCacheFile, i.toUint64(), route, result.crashed,
-                result.errorMessage, result.accuracyLossValues, result.gpuTimeMs);
-        }
-        std::remove(jsonPath.c_str());
+        return true;
     }
-    if (baselineGpuTimeMsOut != nullptr)
+    std::string const temporary = destination + ".tuning." + std::to_string(state.ppid) + ".tmp";
+    std::ifstream src(state.bestEnginePath, std::ios::binary);
+    std::ofstream dst(temporary, std::ios::binary);
+    if (!src || !dst || !(dst << src.rdbuf()))
     {
-        *baselineGpuTimeMsOut = baselineGpuTimeMs;
+        sample::gLogError << "Could not checkpoint best engine to " << destination << std::endl;
+        state.failed = true;
+        return false;
     }
+    dst.close();
+    if (!dst || std::rename(temporary.c_str(), destination.c_str()) != 0)
+    {
+        sample::gLogError << "Could not replace best engine at " << destination << std::endl;
+        state.failed = true;
+        return false;
+    }
+    // Keep the winning iteration's file: the cache points to that exact engine,
+    // even if interruption occurs between replacing saveEngine and appending a row.
     return true;
 }
 
-//! \brief Copy the best-iteration engine to the user's --saveEngine path and emit the
-//! final summary. Cleans up the per-iteration temp engine if --saveAllEngines was off.
-//! Returns the trtexec exit code (pass if any iteration succeeded, fail otherwise).
-int32_t finalizeBestEngine(PhaseState const& state, BigInt const& totalCount)
+//! \brief Run and checkpoint one new iteration, then append its cache row.
+//!
+//! Uses state.ctx.globalIndex to name and report the trial, leaving advancement to runTuningLoop().
+//! A failed build, accuracy check, or unusable timing is recorded as a failed trial. Successful
+//! measurements compete with the restored winner using mean GPU time; equal times keep that winner.
+//! A better engine is checkpointed before its row is appended. The previous temporary winner owned
+//! by this process is deleted only after the replacement measurement has been recorded successfully.
+//!
+//! \param[in,out] state Child arguments, execution index, winner, and persistence-error status.
+//! \param route One concrete build route to pass to the child.
+//! \throws std::overflow_error before launching a child if the index cannot fit the cache format.
+//! Checkpoint or cache-write errors set state.failed; an individual trial failure does not.
+void measureIteration(TuningState& state, std::string const& route)
 {
-    if (state.bestEnginePath.empty())
+    auto const& index = state.ctx.globalIndex;
+    if (!state.options.tuning.tuningCacheFile.empty() && index > BigInt{std::numeric_limits<uint64_t>::max()})
     {
-        sample::gLogError << "No tuning iteration succeeded; no engine written." << std::endl;
-        return sample::gLogger.reportFail(state.sampleTest);
+        throw std::overflow_error("Iteration index exceeds the tuning cache integer range");
     }
-    if (state.bestEnginePath != state.options.build.engine)
+    auto const previousTemporaryBest = state.temporaryBestEnginePath;
+    std::string const enginePath = makeIterationEnginePath(state);
+    std::string const jsonPath
+        = "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_iter" + index.toString() + ".json";
+    sample::gLogger.reportTaskBegin(state.sampleTest, index.toString(), route);
+    sample::gLogInfo << "Tuning iteration [" << index.toString() << "]: " << route << std::endl;
+    auto result = runChildForOneRoute(state.argc, state.argv, route, enginePath, jsonPath);
+    bool const succeeded = !result.crashed && result.exitCode == EXIT_SUCCESS && !result.accuracyFailed
+        && std::isfinite(result.gpuTimeMs) && result.gpuTimeMs > 0.0;
+    if (succeeded)
     {
-        std::ifstream src(state.bestEnginePath, std::ios::binary);
-        std::ofstream dst(state.options.build.engine, std::ios::binary);
-        dst << src.rdbuf();
-        if (!state.options.build.saveAllEngines)
+        ++state.successCount;
+        if (result.gpuTimeMs < state.bestGpuTimeMs)
         {
-            // Per-iteration engine was a temp; clean it up now that it's been promoted.
-            std::remove(state.bestEnginePath.c_str());
+            state.bestGpuTimeMs = result.gpuTimeMs;
+            state.bestEnginePath = enginePath;
+            if (!state.options.build.saveAllEngines)
+            {
+                state.temporaryBestEnginePath = enginePath;
+            }
+            state.bestRoute = route;
+            checkpointBestEngine(state);
         }
+        sample::gLogger.reportTaskEnd(state.sampleTest, index.toString(), route);
+    }
+    else
+    {
+        if (result.errorMessage.empty())
+        {
+            result.errorMessage = "Iteration failed accuracy validation or produced no finite positive GPU time";
+        }
+        sample::gLogWarning << "Iteration [" << index.toString() << "] failed: " << result.errorMessage << std::endl;
+        sample::gLogger.reportTaskAbort(state.sampleTest, index.toString(), route);
+    }
+    if (!state.failed && !state.options.tuning.tuningCacheFile.empty())
+    {
+        state.failed = !writeTuningCacheIteration(state.options.tuning.tuningCacheFile, index.toUint64(), route,
+            result.crashed, result.errorMessage, result.accuracyLossValues, result.gpuTimeMs,
+            succeeded && !state.options.build.engine.empty() ? enginePath : std::string{});
+    }
+    // Delete only files created by this process, after the replacement is recorded.
+    if (!state.failed && !previousTemporaryBest.empty() && previousTemporaryBest != state.temporaryBestEnginePath)
+    {
+        std::remove(previousTemporaryBest.c_str());
+    }
+    std::remove(jsonPath.c_str());
+    if (!state.options.build.saveAllEngines
+        && (enginePath != state.bestEnginePath || state.options.build.engine.empty()))
+    {
+        std::remove(enginePath.c_str());
+    }
+}
+
+//! \brief Whether the wall-clock tuning budget has expired.
+//! A nonpositive timeout disables the budget. The loop checks between trials, allowing a running
+//! child to finish and its measurement to be recorded before stopping.
+bool tuningTimedOut(TuningState const& state)
+{
+    auto const elapsed
+        = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - state.startTime).count();
+    if (state.options.tuning.timeout > 0 && elapsed >= state.options.tuning.timeout)
+    {
+        sample::gLogInfo << "Tuning timeout reached (" << state.options.tuning.timeout << "s); stopping early."
+                         << std::endl;
+        return true;
+    }
+    return false;
+}
+
+//! \brief Recover a missing saved engine for the best cached route without redoing the search.
+//! Copy the retained winning engine when available; otherwise rebuild bestRoute in one child and
+//! require a successful build and accuracy check. Recovery neither appends a trial nor advances
+//! ctx.globalIndex. With no --saveEngine destination, there is no artifact to recover.
+//! \return Whether the winning engine is available at the requested destination.
+bool recoverBestEngine(TuningState& state)
+{
+    if (state.options.build.engine.empty())
+    {
+        return true;
+    }
+    if (std::ifstream(state.bestEnginePath, std::ios::binary).good())
+    {
+        return checkpointBestEngine(state);
+    }
+    sample::gLogInfo << "Rebuilding the best cached route because its saved engine is unavailable." << std::endl;
+    auto const enginePath = "/tmp/trtexec_tuning_" + std::to_string(state.ppid) + "_best_recovery.plan";
+    auto const jsonPath = enginePath + ".json";
+    auto const result = runChildForOneRoute(state.argc, state.argv, state.bestRoute, enginePath, jsonPath);
+    std::remove(jsonPath.c_str());
+    if (result.crashed || result.exitCode != EXIT_SUCCESS || result.accuracyFailed)
+    {
+        sample::gLogError << "Could not rebuild the best cached engine: " << result.errorMessage << std::endl;
+        return false;
+    }
+    state.bestEnginePath = enginePath;
+    return checkpointBestEngine(state);
+}
+
+//! \brief Emit the best result, including results restored from an already completed cache.
+//! Recover the winning artifact before reporting success. Fail if persistence failed, no measurement
+//! succeeded, or recovery failed. If the strategy's final count is still unknown after a timeout,
+//! report the completed count instead of treating the initial scan's count as the final total.
+int32_t finalizeBestEngine(TuningState& state)
+{
+    if (state.failed || state.successCount.isZero() || !recoverBestEngine(state))
+    {
+        sample::gLogError << "Tuning did not produce an available successful result." << std::endl;
+        return sample::gLogger.reportFail(state.sampleTest);
     }
     sample::gLogInfo << "Best iteration: " << state.bestRoute << " (gpu_time_ms=" << state.bestGpuTimeMs << ")"
                      << std::endl;
+    auto const totalCount = state.ctx.count().value_or(state.ctx.globalIndex);
     sample::gLogInfo << "Tuning summary: " << state.successCount.toString() << " / " << totalCount.toString()
                      << " iterations succeeded." << std::endl;
     return sample::gLogger.reportPass(state.sampleTest);
@@ -1441,16 +1397,12 @@ int32_t finalizeBestEngine(PhaseState const& state, BigInt const& totalCount)
 int32_t sample::runTuningLoop(int32_t argc, char** argv)
 {
     std::string const sampleName =
-#if TRT_WINML
-        "TensorRT-RTX.tensorrt_rtx";
-#else
         "TensorRT.trtexec";
-#endif
     auto sampleTest = sample::gLogger.defineTest(sampleName, argc, argv);
     sample::gLogger.reportTestStart(sampleTest);
 
-    // 1. --continue: rebuild argv from the cache header. The header stores the original argv
-    //    with absolute paths and the expanded tuning expression; everything else is rejected.
+    // --continue rebuilds argv from the cache header and accepts only a cache-path override.
+    // The header stores resolved file paths and the tuning expression, without expanding its routes.
     ContinueResumeState resume;
     int32_t effectiveArgc = argc;
     char** effectiveArgv = argv;
@@ -1464,7 +1416,7 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
         effectiveArgv = resume.argv();
     }
 
-    // 2. Parse options against the effective argv (cache-reconstructed for --continue, raw otherwise).
+    // Parse options against the effective argv (cache-reconstructed for --continue, raw otherwise).
     AllOptions options;
     try
     {
@@ -1481,8 +1433,8 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
 
-    // 3. Resume mode: the reconstructed argv has no --continue, so parseArgs left continueFromCache
-    //    false. Re-assert it now so the cache-header writer below preserves existing rows.
+    // The reconstructed argv has no --continue, so parseArgs left continueFromCache false.
+    // Re-assert it now so the cache-header writer below preserves existing rows.
     if (effectiveArgv != argv)
     {
         options.tuning.continueFromCache = true;
@@ -1493,7 +1445,7 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
 
-    // 4. Expand the tuning expression into a TuningContext.
+    // Parse the expression and select its enumeration strategy; do not expand the route space.
     TuningContext ctx;
     if (!buildTuningContext(options.tuning, ctx))
     {
@@ -1506,39 +1458,49 @@ int32_t sample::runTuningLoop(int32_t argc, char** argv)
         return sample::gLogger.reportPass(sampleTest);
     }
 
-    // 5. Fresh tuning runs write a cache header; resumed runs skip it (the file already has one).
+    // Fresh tuning runs write a cache header; resumed runs preserve the existing header and rows.
     if (!options.tuning.tuningCacheFile.empty() && !options.tuning.continueFromCache)
     {
-        writeTuningCacheHeader(
-            options.tuning.tuningCacheFile, options, argc, argv, ctx.tunerVersion, ctx.defaultBuildRoute);
+        if (!writeTuningCacheHeader(
+                options.tuning.tuningCacheFile, options, argc, argv, ctx.tunerVersion, ctx.defaultBuildRoute))
+        {
+            return sample::gLogger.reportFail(sampleTest);
+        }
     }
 
-    // 6. Phase 1 — always runs. For mixed mode, may be followed by a phase 2 over positive knobs.
-    // Children must see the reconstructed argv when resuming — the user's bare
-    // `--continue --tuningCacheFile=path` argv has none of the original build/inference flags.
-    PhaseState state{options, sampleTest, getpid(), std::chrono::steady_clock::now(), effectiveArgc, effectiveArgv};
-    std::vector<MixedSearchKnobResult> positiveKnobs;
-    double phase1BaselineMs{std::numeric_limits<double>::infinity()};
-    bool const isMixed = options.tuning.tuningSearchAlgorithm == TuningSearchAlgorithm::kMIXED;
-    bool const phase1Completed = runOnePhase(
-        state, ctx, "phase1", isMixed ? &positiveKnobs : nullptr, &phase1BaselineMs, resume.resumeFromIter);
-
-    if (phase1Completed && isMixed && positiveKnobs.size() > 1)
+    // Children use the original build/inference arguments reconstructed from the cache.
+    TuningState state{
+        options, ctx, sampleTest, getpid(), std::chrono::steady_clock::now(), effectiveArgc, effectiveArgv};
+    ctx.globalIndex = resume.resumeFromIter;
+    state.successCount = resume.successCount;
+    // Preserve earlier improvements, including when the cache already covers the whole search.
+    if (resume.bestResult)
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knobs identified; entering phase 2."
-                         << std::endl;
-        TuningContext const phase2Ctx = buildMixedPhase2Context(ctx, positiveKnobs);
-        // Phase 2 always starts fresh (no resume mid-phase-2).
-        (void) runOnePhase(state, phase2Ctx, "phase2", nullptr, nullptr, 0);
+        state.bestGpuTimeMs = resume.bestResult->gpuTimeMs;
+        state.bestRoute = resume.bestResult->buildRoute;
+        state.bestEnginePath = resume.bestResult->enginePath;
     }
-    else if (isMixed)
+    try
     {
-        sample::gLogInfo << "Mixed search: " << positiveKnobs.size() << " positive knob(s); skipping phase 2 (need >1)."
-                         << std::endl;
+        // Route lookup determines whether more work exists; adaptive counts may still be unknown.
+        // Start directly at the cache's record count and advance only after the trial is recorded.
+        for (auto route = ctx.getBuildRouteAtIndex(ctx.globalIndex); route && !tuningTimedOut(state);
+             route = ctx.getBuildRouteAtIndex(ctx.globalIndex))
+        {
+            measureIteration(state, *route);
+            if (state.failed)
+            {
+                return sample::gLogger.reportFail(sampleTest);
+            }
+            ++ctx.globalIndex;
+        }
     }
-
-    // 7. Promote the best iteration's engine to the user's --saveEngine path.
-    return finalizeBestEngine(state, ctx.totalCount);
+    catch (std::exception const& e)
+    {
+        sample::gLogError << "Tuning failed: " << e.what() << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
+    }
+    return finalizeBestEngine(state);
 }
 
 #endif // POSIX && ENABLE_FEATURE_GLOBAL_PERF_TUNER

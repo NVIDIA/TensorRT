@@ -236,10 +236,12 @@ class Logger(object):
     def error(self, message, mode=LogMode.EACH):
         self.log(message, Logger.ERROR, mode=mode, stack_depth=3)
 
-    # Like error, but immediately exits.
-    def critical(self, message):
+    # Like error, but immediately exits by raising ExceptionType, which defaults
+    # to OnnxGraphSurgeonException.
+    def critical(self, message, ExceptionType=None):
         self.log(message, Logger.CRITICAL, stack_depth=3)
-        raise OnnxGraphSurgeonException(message) from None  # Erase exception chain
+        ExceptionType = ExceptionType or OnnxGraphSurgeonException
+        raise ExceptionType(message) from None  # Erase exception chain
 
 
 global G_LOGGER

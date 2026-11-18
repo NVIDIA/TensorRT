@@ -22,3 +22,16 @@ class OnnxGraphSurgeonException(Exception):
     """
 
     pass
+
+
+class OnnxGraphSurgeonResourceError(OnnxGraphSurgeonException, RuntimeError):
+    """
+    Raised when an operation would consume an unreasonable amount of resources,
+    such as densifying a sparse tensor whose declared dense shape is far larger
+    than the data it actually stores.
+
+    It also derives from the built-in ``RuntimeError`` so that callers can guard
+    against resource-exhaustion attempts without importing ONNX-GraphSurgeon.
+    """
+
+    pass

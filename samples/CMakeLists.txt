@@ -29,7 +29,9 @@ endmacro()
 if(TRT_SAFETY_INFERENCE_ONLY)
     add_sample(sampleSafeMNIST)
     add_sample(sampleSafePluginV3)
-    add_sample(trtSafeExec)
+    if(NOT TRT_SKIP_TRTEXEC)
+        add_sample(trtSafeExec)
+    endif()
 else()
     # Require the ONNX parser to build samples.
     if(${TRT_BUILD_SAMPLES} AND NOT TARGET nvonnxparser)
@@ -59,7 +61,9 @@ else()
 
     # OSS samples need the ONNX parser path to be included when each sample is built
     add_subdirectory(common)
-    add_subdirectory(trtexecCommon)
+    if(NOT TRT_SKIP_TRTEXEC)
+        add_subdirectory(trtexecCommon)
+    endif()
 
     if(${TRT_BUILD_SAMPLES})
         # Public (OSS) Samples
@@ -69,8 +73,11 @@ else()
             sampleNamedDimensions
             sampleOnnxMNIST
             sampleProgressMonitor
-            trtexec
         )
+
+        if(NOT TRT_SKIP_TRTEXEC)
+            add_sample(trtexec)
+        endif()
 
         if (NOT ${TRT_PRODUCT_IS_RTX})
             add_sample(
@@ -105,6 +112,9 @@ else()
     if((${TRT_BUILD_ENABLE_UNIFIED_BUILDER} AND ${TRT_BUILD_SAMPLES}) OR BUILD_SAFE_SAMPLES)
         add_sample(sampleSafeMNIST)
         add_sample(sampleSafePluginV3)
+        if(NOT TRT_SKIP_TRTEXEC)
+            add_sample(trtSafeExec)
+        endif()
     endif()
 endif()
 

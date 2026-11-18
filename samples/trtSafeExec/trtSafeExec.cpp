@@ -16,27 +16,38 @@
  */
 
 #include "NvInferSafeRuntime.h" // TRTS-10206: NvInferSafeRuntime.h may be refactored
+#include "companionSo.h"
 #include "cuda_runtime.h"
 #include "delayStreamKernel.h"
+#include "idleWait.h"
 #include "safeCommon.h"
 #include "safeCudaAllocator.h"
 #include "safeErrorRecorder.h"
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
+
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 
 using namespace nvinfer1;
 using namespace samplesSafeCommon;
@@ -60,6 +71,7 @@ class SafeExecArgs
 {
 public:
     std::string engineFile{"sample.engine"};
+    std::string engineSoFile{};
     int32_t iterations{10};
     int32_t avgRuns{10};
     int32_t warmUp{1};
@@ -72,14 +84,19 @@ public:
     bool spin{false};
     bool verbose{false};
     bool debug{false};
+    bool reportMemoryUsage{false};
     bool help{false};
     bool useCudaGraph{true};
     bool useScratchMemory{false};
     int32_t threads{1};
+    int32_t memoryCycles{1};
     int64_t ioProfile{0};
     SafetyPluginArguments pluginLibraries;
     std::unordered_map<std::string, std::string>
         loadInputs; //!< Map of tensor names to file paths for loading custom input data
+    //!< Directory to write output tensors as <dir>/<tensorName>.bin after the final iteration.
+    //!< Empty = disabled.
+    std::string dumpOutputDir{};
 };
 
 //!
@@ -101,6 +118,9 @@ namespace
 
 //! Default alignment for memory allocations
 constexpr uint64_t kDEFAULT_ALIGNMENT{256U};
+
+//! Maximum number of bytes requested by one engine file read.
+constexpr size_t kFILE_READ_CHUNK_BYTES{64U * 1024U * 1024U};
 
 //!
 //! \brief RAII wrapper for SafeMemAllocator to ensure automatic cleanup.
@@ -520,12 +540,56 @@ int64_t volume(TDims const& dims, TDims const& strides, uint64_t bytesPerCompone
     return volume * bytesPerComponent;
 }
 
+//! Parses the bounded number of graph lifetimes without growing the general option parser.
+bool parseMemoryCycles(std::string const& cycleCountText, int32_t& memoryCycles)
+{
+    constexpr int32_t kMIN_MEMORY_CYCLES{1};
+    constexpr int32_t kMAX_MEMORY_CYCLES{1000};
+    try
+    {
+        size_t parsedCharacterCount{};
+        int32_t const requestedCycles = std::stoi(cycleCountText, &parsedCharacterCount);
+        if (parsedCharacterCount != cycleCountText.size() || requestedCycles < kMIN_MEMORY_CYCLES
+            || requestedCycles > kMAX_MEMORY_CYCLES)
+        {
+            throw std::out_of_range("memoryCycles");
+        }
+        memoryCycles = requestedCycles;
+        return true;
+    }
+    catch (std::exception const&)
+    {
+        safeLogError(*gSafeRecorder,
+            "memoryCycles must be an integer in [" + std::to_string(kMIN_MEMORY_CYCLES) + ", "
+                + std::to_string(kMAX_MEMORY_CYCLES) + "].");
+        return false;
+    }
+}
+
+//! Validates dependencies between options and the required engine path.
+bool validateSafeExecArgs(SafeExecArgs const& args, bool memoryCyclesRequested)
+{
+    if (memoryCyclesRequested && !args.reportMemoryUsage && !args.help)
+    {
+        safeLogError(*gSafeRecorder, "--memoryCycles requires --reportMemoryUsage.");
+        return false;
+    }
+    bool const hasRequired = !args.engineFile.empty();
+    if (!hasRequired && !args.help)
+    {
+        safeLogError(*gSafeRecorder, "Engine file is required.");
+        return false;
+    }
+    return true;
+}
+
 //!
 //! \brief This function parses arguments specific to the sample
 //!
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
 {
+    bool memoryCyclesRequested{false};
     safeLogInfo(*gSafeRecorder, "Parsing input arguments...");
     for (int32_t i = 1; i < argc; ++i)
     {
@@ -533,6 +597,10 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         if (auto value = loggedParseString(arg, "loadEngine"))
         {
             args.engineFile = std::move(*value);
+        }
+        else if (auto value = loggedParseString(arg, "loadEngineSo"))
+        {
+            args.engineSoFile = std::move(*value);
         }
         else if (SafetyPluginLibraryArgument pluginArg; parseSafetyPluginLibrary(arg, "safetyPlugins", pluginArg))
         {
@@ -582,6 +650,18 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
         {
             args.debug = true;
         }
+        else if (loggedParseBool(arg, "reportMemoryUsage"))
+        {
+            args.reportMemoryUsage = true;
+        }
+        else if (auto const cycleCountText = loggedParseString(arg, "memoryCycles"))
+        {
+            memoryCyclesRequested = true;
+            if (!parseMemoryCycles(*cycleCountText, args.memoryCycles))
+            {
+                return false;
+            }
+        }
         else if (loggedParseBool(arg, "help", 'h'))
         {
             args.help = true;
@@ -630,19 +710,22 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
                 return false;
             }
         }
+        else if (auto const value = loggedParseString(arg, "dumpOutputDir"))
+        {
+            if (value->empty())
+            {
+                safeLogError(*gSafeRecorder, "--dumpOutputDir requires a non-empty directory path.");
+                return false;
+            }
+            args.dumpOutputDir = std::move(*value);
+        }
         else
         {
             safeLogError(*gSafeRecorder, "Invalid Argument: " + arg);
             return false;
         }
     }
-    bool const hasRequired = !args.engineFile.empty();
-    if (!hasRequired && !args.help)
-    {
-        safeLogError(*gSafeRecorder, "Engine file is required.");
-        return false;
-    }
-    return true;
+    return validateSafeExecArgs(args, memoryCyclesRequested);
 }
 
 //!
@@ -656,9 +739,14 @@ Required params:
   --loadEngine=FILE  Load the serialized engine from FILE.
 
 General optional params:
+  --loadEngineSo=FILE
+                     Load the safe engine's companion library from FILE. Without it,
+                     <loadEngine>.so is used when that file exists.
   --help or -h       Display help information
   --verbose          Use verbose logging
   --debug            Use debug logging
+  --reportMemoryUsage
+                     Report tracked memory and cleanup; on Linux, also launch Compute Sanitizer memcheck
   --useScratch       Use separately allocated scratch memory
   --safetyPlugins=spec
                      Load safety plugin libraries (can be specified multiple times)
@@ -669,6 +757,11 @@ General optional params:
                      Input values spec ::= Ival[\",\"spec]
                                   Ival ::= name\":\"file
                      Example: --loadInputs=\"input1\":data1.bin,\"input2\":data2.bin
+  --dumpOutputDir=DIR
+                     Write each output tensor's raw bytes to DIR/<tensorName>.bin
+                     after the final inference iteration. DIR must already exist.
+                     Format is bit-exact bytes, suitable for round-tripping via
+                     --loadInputs on a subsequent run. (default = no dump)
 
 Perf measurement params:
   --device=N         Set cuda device to N (default = )"
@@ -698,6 +791,7 @@ Perf measurement params:
                      [Deprecated] Separate profile run is now always enabled. This flag is a no-op.
 
 I/O profile params:
+  --memoryCycles=N  Repeat create/infer/destroy for memory diagnostics; requires --reportMemoryUsage (default = 1).
   --ioProfileId=N    Select the I/O profile index to use (default = )"
               << defArgs.ioProfile << R"()
 )";
@@ -765,24 +859,52 @@ void registerSafetyPlugins(nvinfer2::safe::ISafeRecorder& recorder, SafetyPlugin
 }
 
 //!
-//! \brief Load a prebuilt TensorRT safe engine.
-//!
+//! \brief Load a prebuilt TensorRT safe engine using bounded read requests.
+//! \param engineFile Path to the serialized engine.
+//! \return Buffer containing the complete serialized engine.
+//! \throws std::runtime_error if the file size is invalid or any read is incomplete.
 std::vector<char> loadEngine(std::string const& engineFile)
 {
-    std::string const& filename = engineFile;
-    std::vector<char> modelBuffer;
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.good())
+    std::ifstream file(engineFile, std::ios::binary | std::ios::ate);
+    if (!file)
     {
-        safeLogError(*gSafeRecorder, "Could not open input engine file or file is empty. File name: " + filename);
-        return modelBuffer;
+        throw std::runtime_error("Failed to open engine file: " + engineFile);
     }
-    file.seekg(0, std::ifstream::end);
-    auto size = file.tellg();
-    file.seekg(0, std::ifstream::beg);
-    modelBuffer.resize(size);
-    file.read(modelBuffer.data(), size);
-    file.close();
+
+    std::streamoff const fileSize{file.tellg()};
+    if (fileSize <= 0)
+    {
+        throw std::runtime_error("Engine file is empty or has an invalid size: " + engineFile);
+    }
+    if (static_cast<uint64_t>(fileSize) > std::numeric_limits<size_t>::max())
+    {
+        throw std::runtime_error("Engine file is too large to load into memory: " + engineFile);
+    }
+
+    file.seekg(0, std::ios::beg);
+    if (!file)
+    {
+        throw std::runtime_error("Failed to seek to the beginning of engine file: " + engineFile);
+    }
+
+    size_t const size{static_cast<size_t>(fileSize)};
+    std::vector<char> modelBuffer(size);
+    size_t offset{0U};
+    while (offset < size)
+    {
+        size_t const bytesToRead{std::min(kFILE_READ_CHUNK_BYTES, size - offset)};
+        file.read(modelBuffer.data() + offset, static_cast<std::streamsize>(bytesToRead));
+        std::streamsize const bytesRead{file.gcount()};
+        if (bytesRead != static_cast<std::streamsize>(bytesToRead) || file.fail() || file.bad())
+        {
+            std::ostringstream message;
+            message << "Failed to read complete engine file: " << engineFile << " at offset " << offset << ". Expected "
+                    << bytesToRead << " bytes, read " << bytesRead << " (eof=" << file.eof() << ", fail=" << file.fail()
+                    << ", bad=" << file.bad() << ")";
+            throw std::runtime_error(message.str());
+        }
+        offset += bytesToRead;
+    }
     return modelBuffer;
 }
 
@@ -914,6 +1036,120 @@ ScopedSafeMemory setTensorBuffer(nvinfer2::safe::ITRTGraph* graph, nvinfer2::saf
     return tensorBuffer;
 }
 
+//!
+//! \brief Write each output tensor's raw bytes to <dumpDir>/<tensorName>.bin.
+//!
+//! Filters by ioMode == kOUTPUT; inputs and constants are skipped. For GPU-placed
+//! tensors, performs a synchronous D2H copy via a temporary pinned host buffer
+//! using the safety-approved stream-create / async-copy / sync / destroy pattern.
+//! CPU-placed tensors are written directly. Per-tensor failures are logged and
+//! the function continues with the remaining outputs; the return value is true
+//! iff every output wrote cleanly.
+//!
+//! \param[in] dumpDir Directory (must already exist) to write output files into
+//! \param[in] tensorNames Parallel vector of I/O tensor names
+//! \param[in] tensorDescs Parallel vector of I/O tensor descriptors
+//! \param[in] buffers Parallel vector of allocated I/O tensor buffers
+//! \param[in] recorder The safe recorder for error logging and API calls
+//!
+//! \return True if all output tensors were written successfully, false otherwise
+//!
+[[nodiscard]] bool dumpOutputTensors(std::string const& dumpDir, std::vector<std::string> const& tensorNames,
+    std::vector<nvinfer2::safe::TensorDescriptor> const& tensorDescs, std::vector<ScopedSafeMemory> const& buffers,
+    nvinfer2::safe::ISafeRecorder& recorder)
+{
+    SAFE_ASSERT(tensorNames.size() == tensorDescs.size());
+    SAFE_ASSERT(tensorNames.size() == buffers.size());
+
+    bool allOk{true};
+    int32_t nbWritten{0};
+
+    cudaStream_t stream;
+    CUDA_CALL(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), recorder);
+    for (size_t i = 0; i < tensorNames.size(); ++i)
+    {
+        auto const& desc = tensorDescs[i];
+        if (desc.ioMode != nvinfer2::safe::TensorIOMode::kOUTPUT)
+        {
+            continue;
+        }
+        std::string const& name = tensorNames[i];
+
+        uint64_t const expectedSize = std::max(
+            static_cast<uint64_t>(volume(desc.shape, desc.stride, desc.bytesPerComponent)), desc.sizeInBytes);
+        if (expectedSize == 0)
+        {
+            safeLogInfo(recorder, "Skipping dump for empty output tensor: " + name);
+            continue;
+        }
+
+        std::string const path = dumpDir + "/" + samplesSafeCommon::genFilenameSafeString(name) + ".bin";
+        bool const onGpu = desc.memPlacement == nvinfer2::safe::MemoryPlacement::kGPU
+            || desc.memPlacement == nvinfer2::safe::MemoryPlacement::kNONE;
+
+        // Stage GPU data into a pinned host buffer; CPU data is written directly.
+        // hostBuf is only used in the GPU branch but is declared here so srcPtr stays valid through the file write.
+        ScopedSafeMemory hostBuf(onGpu ? expectedSize : 0, kDEFAULT_ALIGNMENT,
+            nvinfer2::safe::MemoryPlacement::kCPU_PINNED, nvinfer2::safe::MemoryUsage::kIOTENSOR, recorder);
+        void const* srcPtr{nullptr};
+
+        if (onGpu)
+        {
+            if (!hostBuf)
+            {
+                safeLogError(recorder, "Failed to allocate host buffer for output tensor: " + name);
+                allOk = false;
+                continue;
+            }
+
+            CUDA_CALL(cudaMemcpyAsync(hostBuf.get(), buffers[i].get(), expectedSize, cudaMemcpyDeviceToHost, stream),
+                recorder);
+            CUDA_CALL(cudaStreamSynchronize(stream), recorder);
+            srcPtr = hostBuf.get();
+        }
+        else if (desc.memPlacement == nvinfer2::safe::MemoryPlacement::kCPU)
+        {
+            srcPtr = buffers[i].get();
+        }
+        else
+        {
+            safeLogError(recorder, "Invalid memory placement for output tensor: " + name);
+            allOk = false;
+            continue;
+        }
+
+        std::ofstream file(path, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+        {
+            safeLogError(recorder, "Cannot open output file: " + path);
+            allOk = false;
+            continue;
+        }
+        file.write(reinterpret_cast<char const*>(srcPtr), static_cast<std::streamsize>(expectedSize));
+        if (!file.good())
+        {
+            std::ostringstream msg;
+            msg << "Failed to write " << expectedSize << " bytes to " << path;
+            safeLogError(recorder, msg.str());
+            allOk = false;
+            file.close();
+            continue;
+        }
+        file.close();
+
+        std::ostringstream msg;
+        msg << "Dumped output tensor " << name << " (" << expectedSize << " bytes) to " << path;
+        safeLogInfo(recorder, msg.str());
+        ++nbWritten;
+    }
+
+    CUDA_CALL(cudaStreamDestroy(stream), recorder);
+    std::ostringstream summary;
+    summary << "Output dump complete: " << nbWritten << " tensor(s) written to " << dumpDir;
+    safeLogInfo(recorder, summary.str());
+    return allOk;
+}
+
 //! \brief Function to CUDA Graph capture
 bool graphCapture(cudaStream_t stream, TrtCudaGraphSafe& cudaGraph, nvinfer2::safe::ITRTGraph* graph,
     nvinfer2::safe::ISafeRecorder& recorder)
@@ -964,22 +1200,38 @@ bool graphCapture(cudaStream_t stream, TrtCudaGraphSafe& cudaGraph, nvinfer2::sa
 //! \param[in] graph Pointer to the TRT graph to execute
 //! \param[in] recorder Pointer to the safe recorder for error logging and API calls
 //! \param[in] isProfileRun Whether this is a profiling run or regular inference
+//! \param[in] threadIdx Index of this worker thread (only thread 0 dumps outputs when --dumpOutputDir is set)
 //!
 //! \return True if execution completed successfully, false otherwise
 //!
 bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::safe::ISafeRecorder* recorder,
-    bool isProfileRun)
+    bool isProfileRun, int32_t threadIdx)
 {
     int64_t nbIOs{};
     SAFE_API_CALL(graph->getNbIOTensors(nbIOs), *recorder);
     std::vector<ScopedSafeMemory> buffers;
     buffers.reserve(nbIOs);
+    std::vector<std::string> tensorNames;
+    tensorNames.reserve(nbIOs);
+    std::vector<nvinfer2::safe::TensorDescriptor> tensorDescs;
+    tensorDescs.reserve(nbIOs);
     // Set input tensor values
     for (int64_t i = 0; i < nbIOs; ++i)
     {
         char const* tensor;
         SAFE_API_CALL(graph->getIOTensorName(tensor, i), *recorder);
+        nvinfer2::safe::TensorDescriptor desc;
+        SAFE_API_CALL(graph->getIOTensorDescriptor(desc, tensor), *recorder);
+        tensorNames.emplace_back(tensor);
+        tensorDescs.emplace_back(desc);
         buffers.emplace_back(setTensorBuffer(graph, *recorder, tensor, args.loadInputs));
+    }
+
+    bool const dumpOutputs = !isProfileRun && !args.dumpOutputDir.empty() && threadIdx == 0;
+    if (!isProfileRun && !args.dumpOutputDir.empty() && args.threads > 1 && threadIdx == 0)
+    {
+        safeLogInfo(*recorder,
+            "--dumpOutputDir: dumping outputs only on thread 0 (threads=" + std::to_string(args.threads) + ").");
     }
     cudaEvent_t inputConsumedEvent;
     cudaEventCreate(&inputConsumedEvent);
@@ -1119,7 +1371,11 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
             totalEnqueueTime += enqueueTime;
 
             // Mimic waiting for user input data (default = 0)
-            std::this_thread::sleep_for(args.idle);
+            if (int32_t const error = samplesCommon::waitForIdle(args.idle.count()); error != 0)
+            {
+                safeLogError(*recorder, "Idle wait failed: " + std::string(std::strerror(error)));
+                return false;
+            }
         }
 
         if (isProfileRun)
@@ -1181,6 +1437,17 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
         }
     }
 
+    bool taskOk{true};
+    if (dumpOutputs)
+    {
+        CUDA_CALL(cudaStreamSynchronize(stream), *recorder);
+        if (!dumpOutputTensors(args.dumpOutputDir, tensorNames, tensorDescs, buffers, *recorder))
+        {
+            safeLogError(*recorder, "Output dump completed with errors.");
+            taskOk = false;
+        }
+    }
+
     // Destroy cuda events
     CUDA_CALL(cudaEventDestroy(startEvent), *recorder);
     CUDA_CALL(cudaEventDestroy(endEvent), *recorder);
@@ -1192,19 +1459,27 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
     CUDA_CALL(cudaStreamDestroy(stream), *recorder);
 
     // Buffers are automatically freed by ScopedSafeMemory destructors
-    return true;
+    return taskOk;
 }
 
-//!
-//! \brief Runs the TensorRT inference engine for this sample.
-//!
-//! \details This function is the main execution function of the sample. It loads the engine, allocates
-//!          the buffer, executes the engine and reports the performance.
-//!
-//! \param isProfileRun If true, the function will launch a separate profile run and dump safe profiling data.
-//!
-bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::time_point const& initStartTime,
-    bool isProfileRun = false)
+//! Reports a synchronized lifecycle boundary; callback peaks capture transient allocations between boundaries.
+void reportMemoryPhase(SafeExecArgs const& args, char const* phase)
+{
+    if (!args.reportMemoryUsage)
+    {
+        return;
+    }
+    auto const stats = nvinfer2::safe::SafeMemAllocator::instance().memoryTracker().snapshot();
+    safeLogInfo(*gSafeRecorder,
+        std::string("Memory lifecycle: ") + phase + ": live=" + std::to_string(stats.currentBytes) + " bytes, peak="
+            + std::to_string(stats.peakBytes) + " bytes, allocations=" + std::to_string(stats.outstandingAllocations));
+}
+
+//! Runs create/infer/destroy; plugin registration is performed only on the first cycle.
+//! @param isProfileRun Launch a separate run to dump safe tensor profiling data.
+//! @param registerPlugins Register plugin creators before creating the first graph.
+bool doInference(SafeExecArgs const& args, std::chrono::steady_clock::time_point const& initStartTime,
+    bool isProfileRun = false, bool registerPlugins = true)
 {
     int32_t numThreads = args.threads;
     if (isProfileRun)
@@ -1227,8 +1502,17 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     }
 
     // Load safe engine blob
-    std::vector<char> blob{loadEngine(args.engineFile)};
-    if (blob.data() == nullptr)
+    std::vector<char> blob;
+    try
+    {
+        blob = loadEngine(args.engineFile);
+    }
+    catch (std::exception const& error)
+    {
+        safeLogError(*recorders[0], std::string{"Failed to load engine: "} + error.what());
+        return false;
+    }
+    if (blob.empty())
     {
         safeLogError(*recorders[0], "Engine blob is empty.");
         return false;
@@ -1237,11 +1521,13 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     {
         // Register plugins only on the first run. doInference() is called twice (normal run then profile run);
         // registering again would assert with "existing plugins" error.
-        registerSafetyPlugins(*gSafeRecorder, args.pluginLibraries);
-
-        auto const initEndTime = std::chrono::high_resolution_clock::now();
-        auto const initTime = std::chrono::duration<float, std::milli>(initEndTime - initStartTime).count();
-        safeLogInfo(*recorders[0], "TensorRT init time is " + std::to_string(initTime) + " ms.");
+        if (registerPlugins)
+        {
+            registerSafetyPlugins(*gSafeRecorder, args.pluginLibraries);
+            auto const initEndTime = std::chrono::steady_clock::now();
+            auto const initTime = std::chrono::duration<float, std::milli>(initEndTime - initStartTime).count();
+            safeLogInfo(*recorders[0], "TensorRT init time is " + std::to_string(initTime) + " ms.");
+        }
     }
     else
     {
@@ -1251,7 +1537,46 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(numThreads);
     std::vector<void*> scratchs(numThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraphWithSo(graphs[0], blob.data(), blob.size(), nullptr, *recorders[0],
+    bool cleanupSucceeded{true};
+    // Declared before futures so every worker finishes before graph cleanup during unwinding.
+    auto resources = std::shared_ptr<void>(nullptr, [&](void*) noexcept {
+        for (int32_t k = 0; k < numThreads; ++k)
+        {
+            if (graphs[k] != nullptr && nvinfer2::safe::destroyTRTGraph(graphs[k]) != ErrorCode::kSUCCESS)
+            {
+                recorders[k]->reportError(ErrorCode::kFAILED_ALLOCATION, "Graph destruction failed during cleanup.");
+                cleanupSucceeded = false;
+            }
+            if (scratchs[k] != nullptr)
+            {
+                bool released{false};
+                try
+                {
+                    auto& tracker = nvinfer2::safe::SafeMemAllocator::instance().memoryTracker();
+                    released = tracker.release(scratchs[k], [&] { return cudaFree(scratchs[k]) == cudaSuccess; });
+                }
+                catch (...)
+                {
+                }
+                if (!released)
+                {
+                    recorders[k]->reportError(ErrorCode::kFAILED_ALLOCATION, "Scratch cleanup failed.");
+                    cleanupSucceeded = false;
+                }
+            }
+        }
+    });
+    // Whether an engine needs a companion library is recorded in the engine, so nothing is decided here:
+    // the library beside it is offered when it is there, and the runtime rejects a pair that does not match.
+    auto const companionSo = toolsCompanionSo::resolveCompanionSoPath(args.engineFile, args.engineSoFile);
+    std::string const companionSoPath = companionSo.value_or(std::string{});
+    if (companionSo)
+    {
+        safeLogInfo(*recorders[0], "Using companion library " + companionSoPath);
+    }
+    reportMemoryPhase(args, "before create");
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], blob.data(), blob.size(),
+                      companionSoPath.empty() ? nullptr : companionSoPath.c_str(), *recorders[0],
                       !args.useScratchMemory, &nvinfer2::safe::getSafeMemAllocator()),
         *recorders[0]);
     SAFE_API_CALL(graphs[0]->setIOProfile(args.ioProfile), *recorders[0]);
@@ -1262,6 +1587,8 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
         SAFE_API_CALL(graphs[k]->setIOProfile(args.ioProfile), *recorders[k]);
     }
 
+    reportMemoryPhase(args, "after create and clone");
+
     // Configure scratch memory
     if (args.useScratchMemory)
     {
@@ -1270,9 +1597,14 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
         for (int32_t k = 0; k < numThreads; ++k)
         {
             CUDA_CALL(cudaMalloc(&scratchs[k], scratchSize), *recorders[k]);
+            using Tracker = samplesSafeCommon::SafeMemoryTracker;
+            nvinfer2::safe::SafeMemAllocator::instance().memoryTracker().recordAllocation(
+                scratchs[k], scratchSize, Tracker::Kind::kGPU, Tracker::Purpose::kSCRATCH);
             SAFE_API_CALL(graphs[k]->setScratchMemory(scratchs[k]), *recorders[k]);
         }
     }
+
+    reportMemoryPhase(args, "after scratch setup");
 
     // Run the graphs in independent threads
     std::vector<std::future<bool>> futureResults;
@@ -1280,7 +1612,7 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     {
         // launch thread async
         futureResults.emplace_back(
-            std::async(std::launch::async, task, args, graphs[k], recorders[k].get(), isProfileRun));
+            std::async(std::launch::async, task, args, graphs[k], recorders[k].get(), isProfileRun, k));
     }
 
     for (auto& future : futureResults)
@@ -1292,22 +1624,64 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
         }
     }
 
-    if (args.useScratchMemory)
-    {
-        for (int32_t k = 0; k < numThreads; ++k)
+    reportMemoryPhase(args, "after inference and I/O cleanup");
+    resources.reset();
+    reportMemoryPhase(args, "after graph and scratch cleanup");
+    return cleanupSucceeded;
+}
+
+//! Reports allocation accounting after one inference run has released its graph and I/O.
+bool reportMemoryUsage(bool isProfileRun, samplesSafeCommon::SafeMemoryTracker::Checkpoint const& before)
+{
+    auto const stats = nvinfer2::safe::SafeMemAllocator::instance().memoryTracker().snapshot();
+    std::ostringstream message;
+    message
+        << "Memory allocation summary (" << (isProfileRun ? "tensor profiling" : "normal inference") << ")"
+        << "\n  Tracked allocation peak: " << stats.peakBytes << " bytes ("
+        << static_cast<double>(stats.peakBytes) / (1024.0 * 1024.0) << " MiB)"
+        << "\n  Outstanding after run cleanup: " << stats.currentBytes << " bytes in " << stats.outstandingAllocations
+        << " allocations"
+        << "\n  Scope: requested CPU, pinned and GPU allocations through the tool allocator, plus explicit scratch; "
+           "excludes CUDA driver/context memory, engine-file buffers and plugin-private allocations.";
+    constexpr std::array<char const*, 4> kKINDS{"CPU", "pinned", "GPU", "unknown"};
+    constexpr std::array<char const*, 4> kPURPOSES{"other", "immutable/weights", "scratch", "I/O"};
+    auto append = [&](auto const& labels, auto const& counters) {
+        for (size_t i = 0; i < labels.size(); ++i)
         {
-            CUDA_CALL(cudaFree(scratchs[k]), *recorders[k]);
-            scratchs[k] = nullptr;
-            SAFE_API_CALL(graphs[k]->setScratchMemory(nullptr), *recorders[k]);
+            message << "\n  " << labels[i] << ": peak=" << counters[i].peakBytes
+                    << " bytes, live=" << counters[i].currentBytes << " bytes in " << counters[i].outstandingAllocations
+                    << " allocations";
         }
-    }
-
-    for (int32_t k = 0; k < numThreads; ++k)
+    };
+    message << "\n  Independent peaks by placement:";
+    append(kKINDS, stats.byKind);
+    message << "\n  Independent peaks by purpose:";
+    append(kPURPOSES, stats.byPurpose);
+    safeLogInfo(*gSafeRecorder, message.str());
+    if (!stats.complete)
     {
-        SAFE_API_CALL(nvinfer2::safe::destroyTRTGraph(graphs[k]), *recorders[k]);
-        graphs[k] = nullptr;
+        safeLogWarning(
+            *gSafeRecorder, "Memory allocation accounting is incomplete; the reported peak is a lower bound.");
     }
-
+    auto const released = nvinfer2::safe::SafeMemAllocator::instance().memoryTracker().checkReleased(before);
+    if (released.outstandingAllocations != 0)
+    {
+        safeLogError(*gSafeRecorder,
+            "Tracked allocation cleanup check: FAILED; " + std::to_string(released.outstandingBytes) + " bytes in "
+                + std::to_string(released.outstandingAllocations)
+                + " allocations created during this run remain live (possible leak).");
+        return false;
+    }
+    if (!released.complete)
+    {
+        safeLogWarning(*gSafeRecorder, "Tracked allocation cleanup check: INCONCLUSIVE; accounting is incomplete.");
+    }
+    else
+    {
+        safeLogInfo(*gSafeRecorder,
+            "Tracked allocation cleanup check: PASSED; all allocations recorded during this "
+            "run were released. This does not check allocations outside the tracked allocator.");
+    }
     return true;
 }
 
@@ -1334,23 +1708,67 @@ bool setDevice(SafeExecArgs const& args)
     return true;
 }
 
+//! Reexecutes Linux memory reports under memcheck before CUDA initialization.
+//! QNX retains allocator tracking without requiring an external sanitizer.
+bool prepareMemorySanitizer(SafeExecArgs const& args, int32_t argc, char** argv)
+{
+    if (!args.reportMemoryUsage)
+    {
+        return true;
+    }
+#if defined(__linux__)
+    constexpr char const* kSANITIZER_ACTIVE_ENV{"TRTEXEC_SAFE_MEMORY_SANITIZER_ACTIVE"};
+    if (std::getenv(kSANITIZER_ACTIVE_ENV) != nullptr)
+    {
+        // Consume the marker so unrelated subprocesses can launch their own sanitizer.
+        if (unsetenv(kSANITIZER_ACTIVE_ENV) != 0)
+        {
+            safeLogError(*gSafeRecorder, "Cannot clear the Compute Sanitizer launch marker.");
+            return false;
+        }
+        return true;
+    }
+    std::vector<std::string> sanitizerArguments{
+        "compute-sanitizer", "--tool", "memcheck", "--leak-check", "full", "--error-exitcode", "99", "--"};
+    for (int32_t i = 0; i < argc; ++i)
+    {
+        sanitizerArguments.emplace_back(argv[i]);
+    }
+    std::vector<char*> sanitizerArgv;
+    for (auto& argument : sanitizerArguments)
+    {
+        sanitizerArgv.push_back(argument.data());
+    }
+    sanitizerArgv.push_back(nullptr);
+    if (setenv(kSANITIZER_ACTIVE_ENV, "1", 1) != 0)
+    {
+        safeLogError(*gSafeRecorder, "Cannot set the Compute Sanitizer launch marker.");
+        return false;
+    }
+    safeLogInfo(*gSafeRecorder,
+        "Launching Compute Sanitizer memcheck with full leak checking; timing includes sanitizer overhead.");
+    std::cout.flush();
+    std::cerr.flush();
+    execvp(sanitizerArgv[0], sanitizerArgv.data());
+    int32_t const launchError = errno;
+    unsetenv(kSANITIZER_ACTIVE_ENV);
+    safeLogError(*gSafeRecorder,
+        std::string("Cannot launch compute-sanitizer: ") + std::strerror(launchError)
+            + ". Install Compute Sanitizer and make compute-sanitizer available on PATH.");
+    return false;
+#else
+    safeLogInfo(
+        *gSafeRecorder, "Compute Sanitizer is not launched on this platform; reporting allocator-tracked memory only.");
+    return true;
+#endif
+}
+
 } // namespace
 
 int32_t main(int32_t argc, char** argv)
 {
-    reportTestStart("TensorRT.trtexec_safe", argc, argv);
     safetyCompliance::setPromgrAbility();
-    TestResult result = TestResult::kPASSED;
-    // CUDA initialization
-    int32_t currentDevice = 0;
-    if (cudaGetDevice(&currentDevice) != cudaSuccess)
-    {
-        safeLogError(*gSafeRecorder, "CUDA initialization failed!");
-        return EXIT_FAILURE;
-    }
-
     SafeExecArgs args;
-    auto const initStartTime = std::chrono::high_resolution_clock::now();
     if (!parseSafeExecArgs(args, argc, argv))
     {
         printHelpInfo();
@@ -1363,43 +1781,87 @@ int32_t main(int32_t argc, char** argv)
         return EXIT_SUCCESS;
     }
 
+    if (!prepareMemorySanitizer(args, argc, argv))
+    {
+        return EXIT_FAILURE;
+    }
+
+    reportTestStart("TensorRT.trtexec_safe", argc, argv);
+    TestResult result = TestResult::kPASSED;
+    // CUDA initialization
+    int32_t currentDevice = 0;
+    if (cudaGetDevice(&currentDevice) != cudaSuccess)
+    {
+        safeLogError(*gSafeRecorder, "CUDA initialization failed!");
+        return EXIT_FAILURE;
+    }
+
+    auto const initStartTime = std::chrono::steady_clock::now();
+
+    if (args.reportMemoryUsage)
+    {
+        nvinfer2::safe::SafeMemAllocator::instance().memoryTracker().enable();
+    }
+
     if (!setDevice(args))
     {
         result = TestResult::kFAILED;
     }
     else
     {
-        try
+        auto& tracker = nvinfer2::safe::SafeMemAllocator::instance().memoryTracker();
+        auto run = [&](bool isProfileRun, bool registerPlugins) {
+            auto const before = tracker.checkpoint();
+            bool success{false};
+            try
+            {
+                success = doInference(args, initStartTime, isProfileRun, registerPlugins);
+            }
+            catch (std::exception const& error)
+            {
+                safeLogError(*gSafeRecorder, error.what());
+            }
+            catch (ErrorCode)
+            {
+                // SAFE_API_CALL already recorded the failed API; scoped graph cleanup has run.
+            }
+            catch (cudaError_t)
+            {
+                // CUDA_CALL already recorded the failed CUDA operation.
+            }
+            if (args.reportMemoryUsage)
+            {
+                success = reportMemoryUsage(isProfileRun, before) && success;
+                tracker.resetPeak();
+            }
+            return success;
+        };
+        for (int32_t cycle = 0; cycle < args.memoryCycles; ++cycle)
         {
-            if (!doInference(args, initStartTime))
+            if (args.reportMemoryUsage)
+            {
+                safeLogInfo(*gSafeRecorder,
+                    "Memory lifecycle cycle " + std::to_string(cycle + 1) + "/" + std::to_string(args.memoryCycles));
+            }
+            if (!run(false, cycle == 0))
             {
                 result = TestResult::kFAILED;
+                break;
             }
-        }
-        catch (std::runtime_error& e)
-        {
-            safeLogError(*gSafeRecorder, e.what());
-            result = TestResult::kFAILED;
         }
 
-        // Separate profile run (always enabled)
-        setenv("ENABLE_SAFE_PROFILING", "1", 1);
-        try
+        if (result == TestResult::kPASSED)
         {
-            if (!doInference(args, initStartTime, /* isProfileRun = */ true))
+            setenv("ENABLE_SAFE_PROFILING", "1", 1);
+            if (!run(true, false))
             {
                 result = TestResult::kFAILED;
             }
+            unsetenv("ENABLE_SAFE_PROFILING");
         }
-        catch (std::runtime_error& e)
-        {
-            safeLogError(*gSafeRecorder, e.what());
-            result = TestResult::kFAILED;
-        }
-        unsetenv("ENABLE_SAFE_PROFILING");
     }
 
     reportTestResult("TensorRT.trtexec_safe", result, argc, argv);
 
-    return EXIT_SUCCESS;
+    return result == TestResult::kPASSED ? EXIT_SUCCESS : EXIT_FAILURE;
 }

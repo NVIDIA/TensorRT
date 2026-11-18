@@ -31,14 +31,28 @@ from cuda.bindings import runtime as cudart
 from ctypes import py_object, pythonapi, c_void_p, c_char_p
 from typing import Optional
 
+# mpi4py and nccl4py are only needed for multi-device runs.
+# Both bind to a native library while being imported, so catch all potential
+# errors when these libraries are missing.
+OPTIONAL_IMPORT_ERRORS = (ImportError, OSError, RuntimeError)
+
+
+def _warn_optional_import(name, exc):
+    reason = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+    print(f"[warning] {name} is unavailable ({reason}); multi-device mode is disabled.",
+          file=sys.stderr)
+
+
 try:
     from mpi4py import MPI
-except ImportError:
+except OPTIONAL_IMPORT_ERRORS as exc:
+    _warn_optional_import("mpi4py", exc)
     MPI = None
 
 try:
     import nccl.core as nccl
-except ImportError:
+except OPTIONAL_IMPORT_ERRORS as exc:
+    _warn_optional_import("nccl4py", exc)
     nccl = None
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))

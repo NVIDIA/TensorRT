@@ -438,6 +438,7 @@ class OnnxImporter(BaseImporter):
         import_domains: onnx.OperatorSetIdProto = None,
         producer_name: str = None,
         producer_version: str = None,
+        model_doc_string: str = None,
         functions: List[Function] = None,
         ir_version: int = None,
     ) -> Graph:
@@ -451,6 +452,7 @@ class OnnxImporter(BaseImporter):
             opset (int): The ONNX opset to use for this graph.
             producer_name (str): The name of the tool used to generate the model. Defaults to "".
             producer_version (str): The version of the generating tool. Defaults to "".
+            model_doc_string (str): The doc_string of the model that this graph belongs to. Defaults to "".
             functions (List[Function]): The list of custom functions which are available to use in the model.
             ir_version (int): The IR version of the ONNX model.
         """
@@ -540,6 +542,7 @@ class OnnxImporter(BaseImporter):
             outputs=graph_outputs,
             name=onnx_graph.name,
             doc_string=onnx_graph.doc_string,
+            model_doc_string=model_doc_string,
             producer_name=producer_name,
             producer_version=producer_version,
             opset=opset,
@@ -586,6 +589,7 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
         import_domains=model_import_domains,
         producer_name=onnx_model.producer_name,
         producer_version=onnx_model.producer_version,
+        model_doc_string=onnx_model.doc_string,
         functions=functions,
         ir_version=onnx_model.ir_version,
     )

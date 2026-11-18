@@ -19,9 +19,7 @@
 #define TRT_SAMPLE_ENGINES_H
 
 #include "NvInfer.h"
-#if TRT_BUILD_ONNX_PARSER
 #include "NvOnnxParser.h"
-#endif
 #include "sampleEntrypoints.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
@@ -30,6 +28,8 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace sample
@@ -40,7 +40,6 @@ namespace sample
 using PostConfigCallback
     = std::function<void(nvinfer1::IBuilder&, nvinfer1::IBuilderConfig&, BuildOptions const&, SystemOptions const&)>;
 
-#if TRT_BUILD_ONNX_PARSER
 struct Parser
 {
     std::unique_ptr<nvonnxparser::IParser> onnxParser;
@@ -50,7 +49,6 @@ struct Parser
         return onnxParser != nullptr;
     }
 };
-#endif // TRT_BUILD_ONNX_PARSER
 
 //!
 //! \brief Helper struct to faciliate engine serialization and deserialization. It does not own the underlying memory.
@@ -243,30 +241,19 @@ public:
         mDynamicPlugins = dynamicPlugins;
     }
 
-#if !TRT_WINML
     //! \brief Set the DLA workspace allocation strategy used during deserialization.
     void setDLAWorkspaceAllocationStrategy(nvinfer1::DLAWorkspaceAllocationStrategy strategy)
     {
         mDLAWorkspaceAllocationStrategy = strategy;
     }
-#endif // !TRT_WINML
 
-#if TRT_WINML
-    //! \brief Request that the runtime defer GPU weight allocation during deserialization.
-    void setDeferredWeightsLoading(bool defer)
-    {
-        mDeferredWeightsLoading = defer;
-    }
-#endif // TRT_WINML
 
 private:
     bool mIsSafe{false};
     bool mVersionCompatible{false};
     int32_t mDLACore{-1};
-#if !TRT_WINML
     nvinfer1::DLAWorkspaceAllocationStrategy mDLAWorkspaceAllocationStrategy{
         nvinfer1::DLAWorkspaceAllocationStrategy::kDEFAULT};
-#endif // !TRT_WINML
     std::vector<uint8_t> mEngineBlob;
     std::unique_ptr<samplesCommon::AsyncStreamReader> mAsyncFileReader;
 
@@ -277,9 +264,6 @@ private:
     nvinfer1::TempfileControlFlags mTempfileControls{getTempfileControlDefaults()};
     std::string mLeanDLLPath{};
     std::vector<std::string> mDynamicPlugins;
-#if TRT_WINML
-    bool mDeferredWeightsLoading{false};
-#endif // TRT_WINML
 
     //! \name Owned TensorRT objects
     //! Per TensorRT object lifetime requirements as outlined in the developer guide,
@@ -352,6 +336,7 @@ struct BuildEnvironment
         std::string const& cmdline = "")
         : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
         , checkerBlob(false, false, -1, "", tempfileControls, "")
+        , companionSo(false, false, -1, "", tempfileControls, "")
         , cmdline(cmdline)
     {
     }
@@ -376,10 +361,8 @@ struct BuildEnvironment
     //! The network used by the builder.
     std::unique_ptr<nvinfer1::INetworkDefinition> network;
 
-#if TRT_BUILD_ONNX_PARSER
     //! The parser used to specify the network.
     Parser parser;
-#endif // TRT_BUILD_ONNX_PARSER
 
     //! The engine.
     LazilyDeserializedEngine engine;
@@ -387,6 +370,14 @@ struct BuildEnvironment
     //! The checker blob: generated kernel sources for the kernel checker, and the per-kernel metadata
     //! the reference checker replays.
     LazilyDeserializedEngine checkerBlob;
+
+    //! The companion library holding the safe engine's generated host code. Loading the engine needs it, so
+    //! it is saved beside the engine and handed back to the runtime at load.
+    LazilyDeserializedEngine companionSo;
+
+    //! Path to the engine's companion library on disk, std::nullopt when the engine needs none. The
+    //! runtime loads the library by path, so it has to exist as a file before inference.
+    std::optional<std::string> companionSoPath;
 
     //! The command line string.
     std::string cmdline;
@@ -444,14 +435,12 @@ nvinfer1::IHostMemory* modelToSerialized(
 bool serializeAndSave(
     ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys, std::ostream& err);
 
-#if TRT_BUILD_ONNX_PARSER
 //!
 //! \brief Refit an engine using the weights from the specified ONNX model.
 //!
 //! \return boolean Return true if the engine was successfully refit from the model.
 //!
 bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, bool multiThreading);
-#endif // TRT_BUILD_ONNX_PARSER
 
 //!
 //! \brief Refit an engine using the weights from the INetworkDefintiion and report the amount of time it took.
@@ -483,21 +472,16 @@ bool timeRefit(nvinfer1::INetworkDefinition const& network, nvinfer1::ICudaEngin
 //! \param checkerBlob The archive the build wrote beside the engine, which carries the metadata. May be
 //!        empty: an engine of nothing but static library kernels needs none, and the checker reports the
 //!        omission for any engine that does.
+//! \param companionSo The engine's companion library, which the checker ships to the target with the
+//!        engine. Empty for an engine packaged without one.
 //! \param remoteConfig The remote target connection token (from --remoteConfig).
 //! \return true when every kernel the checker examined matched its reference; false when any kernel
 //!         mismatched, or when the check could not be run at all.
 [[nodiscard]] bool referenceCheckEngine(void const* serializedEngine, int64_t const engineSize,
-    EngineBlob const& checkerBlob, std::string const& remoteConfig);
+    EngineBlob const& checkerBlob, EngineBlob const& companionSo, std::string const& remoteConfig);
 
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 
-#if TRT_WINML
-//! \brief Re-read the engine file from disk and call ICudaEngine::loadWeights() to complete a
-//! deferred deserialization. Used by trtexec when --deferWeightsLoading + --loadEngine are
-//! combined and inference is requested.
-[[nodiscard]] bool loadDeferredWeightsFromEngineFile(
-    nvinfer1::ICudaEngine& engine, std::string const& filepath, std::ostream& err);
-#endif // TRT_WINML
 
 bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err, SystemOptions const& sys,
     bool const enableConsistency);
