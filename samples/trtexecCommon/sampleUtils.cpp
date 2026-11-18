@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <cmath>
 #include <cstdlib>
 #include <cuda.h>
 #include <fstream>
@@ -150,6 +151,44 @@ std::vector<std::string> splitToStringVec(std::string const& s, char separator, 
     }
 
     return splitted;
+}
+
+std::pair<std::string, std::string> splitNameAndValue(std::string const& s)
+{
+    std::string tensorName;
+    std::string valueString;
+
+    // Support 'inputName':Path format for --loadInputs flag when dealing with Windows paths.
+    // i.e. 'inputName':c:\inputData
+    std::vector<std::string> quoteNameRange{splitToStringVec(s, '\'')};
+    // splitToStringVec returns the entire string when delimiter is not found, so it's size is always at least 1
+    if (quoteNameRange.size() != 1)
+    {
+        if (quoteNameRange.size() != 3)
+        {
+            std::string errorMsg = std::string("Found invalid number of \'s when parsing ") + s +
+                std::string(". Expected: 2, received: ") + std::to_string(quoteNameRange.size() -1) +
+                ". Please ensure that a singular comma is used within each comma-separated key-value pair for options like --inputIOFormats, --optShapes, etc.";
+            throw std::invalid_argument(errorMsg);
+        }
+        // Everything before the second "'" is the name.
+        tensorName = quoteNameRange[0] + quoteNameRange[1];
+        // Path is the last string - ignoring leading ":" so slice it with [1:]
+        valueString = quoteNameRange[2].substr(1);
+        return std::pair<std::string, std::string>(tensorName, valueString);
+    }
+
+    // Split on the last :
+    std::vector<std::string> nameRange{splitToStringVec(s, ':')};
+    // Everything before the last : is the name
+    tensorName = nameRange[0];
+    for (size_t i = 1; i < nameRange.size() - 1; i++)
+    {
+        tensorName += ":" + nameRange[i];
+    }
+    // Value is the string element after the last :
+    valueString = nameRange[nameRange.size() - 1];
+    return std::pair<std::string, std::string>(tensorName, valueString);
 }
 
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput /*= true*/)
@@ -1039,16 +1078,41 @@ std::string buildShellQuotedCmdLine(int32_t argc, char** argv)
 //! \brief Resolve file paths in argv to absolute for cache storage.
 //!
 //! File-path flags that get resolved: --onnx=, --saveEngine=, --loadInputs=,
-//! --loadRefOutputs=, --tuneBuildRouteFile=, --loadEngine=. All others are stored as-is.
+//! --loadRefOutputs=, --tuneBuildRouteFile=, and --loadEngine=.
+//! All others are stored as-is.
 //! --loadInputs and --loadRefOutputs have format "name:path,name:path" so each
 //! path component is resolved separately.
 namespace
 {
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+//! \brief Anchor the file path in each tensor-name:path entry to the current directory.
+std::string resolveMappedPaths(std::string const& value)
+{
+    std::string result;
+    bool first = true;
+    for (auto const& pair : splitToStringVec(value, ','))
+    {
+        if (!first)
+        {
+            result += ",";
+        }
+        first = false;
+        if (pair.find(':') == std::string::npos)
+        {
+            result += pair;
+            continue;
+        }
+        auto const path = splitNameAndValue(pair).second;
+        // Keep the original name and quoting; only the parsed path suffix may be resolved.
+        result += pair.substr(0, pair.size() - path.size()) + resolveAbsolutePath(path);
+    }
+    return result;
+}
+
+//! \brief Resolve existing file paths in the arguments stored in the tuning cache.
 std::vector<std::string> resolveArgvPaths(int32_t argc, char** argv)
 {
     static std::vector<std::string> const kSIMPLE_PATH_FLAGS
-        = {"--onnx=", "--saveEngine=", "--tuneBuildRouteFile=", "--loadEngine=", "--loadCheckerBlob="};
+        = {"--onnx=", "--saveEngine=", "--tuneBuildRouteFile=", "--loadEngine="};
     static std::vector<std::string> const kMAPPED_PATH_FLAGS = {"--loadInputs=", "--loadRefOutputs="};
 
     std::vector<std::string> result;
@@ -1077,27 +1141,7 @@ std::vector<std::string> resolveArgvPaths(int32_t argc, char** argv)
         {
             if (arg.starts_with(prefix))
             {
-                // Split on ',' to get individual name:path pairs
-                auto pairs = splitToStringVec(arg.substr(prefix.size()), ',');
-                std::string resolvedValue;
-                for (uint64_t p = 0; p < pairs.size(); ++p)
-                {
-                    if (p > 0)
-                    {
-                        resolvedValue += ",";
-                    }
-                    // Split each pair on ':' to separate name from path
-                    auto nameAndPath = splitToStringVec(pairs[p], ':', 1);
-                    if (nameAndPath.size() == 2)
-                    {
-                        resolvedValue += nameAndPath[0] + ":" + resolveAbsolutePath(nameAndPath[1]);
-                    }
-                    else
-                    {
-                        resolvedValue += pairs[p]; // Malformed pair, keep as-is
-                    }
-                }
-                result.push_back(prefix + resolvedValue);
+                result.push_back(prefix + resolveMappedPaths(arg.substr(prefix.size())));
                 resolved = true;
                 break;
             }
@@ -1113,7 +1157,7 @@ std::vector<std::string> resolveArgvPaths(int32_t argc, char** argv)
 }
 } // anonymous namespace
 
-void writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
+bool writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
     std::string const& tunerVersion, std::string const& defaultBuildRoute)
 {
     // Use ordered_json to preserve insertion order matching best_config.json.example:
@@ -1195,14 +1239,16 @@ void writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& 
     if (!file)
     {
         sample::gLogError << "Cannot open tuning cache file for writing header: " << cacheFilePath << std::endl;
-        return;
+        return false;
     }
-    file << header.dump() << std::endl;
+    file << header.dump() << '\n';
+    file.close();
+    return !file.fail();
 }
 
-void writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
+bool writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
     bool crashed, std::string const& errorMessage, std::unordered_map<std::string, double> const& accuracyLossValues,
-    double gpuTimeMs)
+    double gpuTimeMs, std::string const& enginePath)
 {
     // Use ordered_json to preserve insertion order matching best_config.json.example:
     // iter, build_route, crash, error_message, accuracy_loss, gpu_time
@@ -1228,15 +1274,21 @@ void writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, 
         result[tuningCache::kAccuracyLoss] = accMap;
     }
     result[tuningCache::kGpuTime] = crashed ? nlohmann::ordered_json(nullptr) : nlohmann::ordered_json(gpuTimeMs);
+    if (!enginePath.empty())
+    {
+        result["engine_path"] = resolveAbsolutePath(enginePath);
+    }
 
     std::ofstream file(cacheFilePath, std::ios::app);
     if (!file)
     {
         sample::gLogError << "Cannot open tuning cache file to append iteration " << iter << ": " << cacheFilePath
                           << std::endl;
-        return;
+        return false;
     }
-    file << result.dump() << std::endl;
+    file << result.dump() << '\n';
+    file.close();
+    return !file.fail();
 }
 
 std::vector<std::string> reconstructArgvFromCacheHeader(
@@ -1347,44 +1399,38 @@ std::optional<TuningCacheHeader> readTuningCacheHeader(std::string const& cacheF
             return std::nullopt;
         }
 
-        // Count remaining non-empty lines as completed iterations.
-        header.completedIterations = 0;
-        std::string line;
-        while (std::getline(file, line))
+        // A cache can be very large. Summarize it without regenerating routes or retaining history.
+        while (auto const result = readCachedIterationResult(file))
         {
-            if (!line.empty())
+            ++header.completedIterations;
+            if (result->succeeded())
             {
-                ++header.completedIterations;
+                ++header.successCount;
+                if (!header.bestResult || result->gpuTimeMs < header.bestResult->gpuTimeMs)
+                {
+                    header.bestResult = *result;
+                }
             }
         }
 
         return header;
     }
-    catch (nlohmann::json::exception const& e)
+    catch (std::exception const& e)
     {
-        sample::gLogError << "Failed to parse tuning cache header: " << e.what() << std::endl;
+        sample::gLogError << "Failed to read tuning cache: " << e.what() << std::endl;
         return std::nullopt;
     }
 }
 
-std::vector<CachedIterationResult> readCachedIterationResults(std::string const& cacheFilePath, int64_t maxIterations)
+bool CachedIterationResult::succeeded() const
 {
-    std::vector<CachedIterationResult> results;
-    std::ifstream file(cacheFilePath);
-    if (!file.is_open())
-    {
-        return results;
-    }
+    return !crashed && errorMessage.empty() && std::isfinite(gpuTimeMs) && gpuTimeMs > 0.0;
+}
 
+std::optional<CachedIterationResult> readCachedIterationResult(std::istream& file)
+{
     std::string line;
-    // Skip header line.
-    if (!std::getline(file, line))
-    {
-        return results;
-    }
-
-    // Read iteration lines, extracting crash and gpu_time fields.
-    while (std::getline(file, line) && static_cast<int64_t>(results.size()) < maxIterations)
+    while (std::getline(file, line))
     {
         if (line.empty())
         {
@@ -1394,20 +1440,31 @@ std::vector<CachedIterationResult> readCachedIterationResults(std::string const&
         {
             auto j = nlohmann::json::parse(line);
             CachedIterationResult r;
-            r.crashed = j.value(tuningCache::kCrash, true);
+            if (!j.at(tuningCache::kIter).is_number_unsigned())
+            {
+                throw std::runtime_error("Invalid tuning cache iteration number");
+            }
+            r.iteration = j.at(tuningCache::kIter).get<uint64_t>();
+            r.buildRoute = j.at(tuningCache::kBuildRoute).get<std::string>();
+            r.errorMessage = j.at(tuningCache::kErrorMessage).get<std::string>();
+            r.enginePath = j.value("engine_path", std::string{});
+            r.crashed = j.at(tuningCache::kCrash).get<bool>();
             r.gpuTimeMs = j.contains(tuningCache::kGpuTime) && j[tuningCache::kGpuTime].is_number()
                 ? j[tuningCache::kGpuTime].get<double>()
                 : 0.0;
-            results.push_back(r);
+            return r;
         }
-        catch (nlohmann::json::exception const&)
+        catch (nlohmann::json::exception const& e)
         {
-            // Malformed line — treat as crashed.
-            results.push_back({true, 0.0});
+            throw std::runtime_error(std::string{"Invalid tuning cache row: "} + e.what());
         }
     }
 
-    return results;
+    if (file.bad() || !file.eof())
+    {
+        throw std::runtime_error("Cannot read tuning cache");
+    }
+    return std::nullopt;
 }
 
 } // namespace sample

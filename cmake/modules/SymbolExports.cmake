@@ -91,3 +91,53 @@ function(apply_export_map)
         endif()
     endforeach()
 endfunction()
+
+# Reports the version of lld this build links with, or an empty string when it does not use lld.
+#
+# \param outVar Name of the variable to receive the version.
+function(get_lld_version outVar)
+    set(version "")
+
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_USING_LINKER_${CMAKE_LINKER_TYPE}} -Wl,--version
+        OUTPUT_VARIABLE versionOutput
+        ERROR_QUIET
+    )
+    if(versionOutput MATCHES "LLD ([0-9]+(\\.[0-9]+)*)")
+        set(version "${CMAKE_MATCH_1}")
+    endif()
+
+    set(${outVar} "${version}" PARENT_SCOPE)
+endfunction()
+
+# Links one or more targets (specified by TARGETS) with BFD, for targets that rely on --retain-symbols-file.
+#
+# lld accepts --retain-symbols-file, but doesn't filter .symtab (https://github.com/llvm/llvm-project/pull/209063).
+# So using this flag to shrink the symbol table must link with BFD unless lld is new enough. Remove this once every
+# container we use for building ships with lld 23 or newer.
+#
+# \param TARGETS The targets to link with BFD. Must not be empty.
+function(force_bfd_for_retained_symbols)
+    cmake_parse_arguments(ARG "" "" "TARGETS" ${ARGN})
+
+    if(NOT ARG_TARGETS)
+        message(FATAL_ERROR "force_bfd_for_retained_symbols: TARGETS argument must not be empty.")
+    endif()
+
+    # --retain-symbols-file is not supported by MSVC
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        return()
+    endif()
+
+    # Only force BFD when the build is actually using lld. An empty version means the linker is
+    # already BFD.
+    get_lld_version(lldVersion)
+    if(NOT lldVersion)
+        return()
+    endif()
+    if(lldVersion VERSION_GREATER_EQUAL 23)
+        return()
+    endif()
+
+    set_target_properties(${ARG_TARGETS} PROPERTIES LINKER_TYPE BFD)
+endfunction()

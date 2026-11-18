@@ -222,16 +222,13 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPlugin::clone() const noexcept
 bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept
 {
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 4);
+    PLUGIN_ASSERT(0 <= pos && pos < nbInputs + nbOutputs);
+
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
         return false;
-    }
-
-    PLUGIN_ASSERT(nbInputs == 2);
-    PLUGIN_ASSERT(nbOutputs == 4);
-    if (nbInputs == 2)
-    {
-        PLUGIN_ASSERT(0 <= pos && pos <= 5);
     }
 
     // num_detections and detection_classes output: int32_t

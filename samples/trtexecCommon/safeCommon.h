@@ -23,6 +23,7 @@
 #include "NvInferSafeRuntime.h"
 #include "cuda_runtime.h"
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -37,6 +38,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -256,7 +258,6 @@ inline void readPGMFile(std::string const& fileName, uint8_t* buffer, int32_t in
 
 namespace samplesSafeCommon
 {
-#if !TRT_WINML
 //! Represents the compute capability of a device.
 //! This pertains to virtual architectures represented by the intermediate PTX format.
 //! This is distinct from the SM version.
@@ -292,7 +293,6 @@ inline bool isSmSafe()
     return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
         || smVersion == 0x0A00 || smVersion == 0x0B00;
 }
-#endif
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
 {
@@ -569,40 +569,6 @@ inline bool parseBool(std::string const& arg, std::string const& name, std::opti
     return arg == "--" + name || (singleChar && arg == std::string{'-', *singleChar});
 }
 
-inline bool hasCpuOnlyInternalOption(std::string const& internalOptions)
-{
-    std::istringstream optionStream{internalOptions};
-    for (std::string option; optionStream >> option;)
-    {
-        if (option == "--cpu_only" || option.rfind("--cpu_only=", 0) == 0)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-inline bool applyCpuOnlyMode()
-{
-#if !defined(_WIN32)
-    // The use of TRT_INTERNAL_OPTIONS is special to TensorRT 11.0 and will disappear in later releases.
-    char const* internalOptions = std::getenv("TRT_INTERNAL_OPTIONS");
-    std::string internalOptionsStr{internalOptions != nullptr ? internalOptions : ""};
-    if (hasCpuOnlyInternalOption(internalOptionsStr))
-    {
-        return true;
-    }
-
-    internalOptionsStr += " --cpu_only=1";
-    if (setenv("TRT_INTERNAL_OPTIONS", internalOptionsStr.c_str(), 1) != 0)
-    {
-        SAFE_LOG << "Failed to set TRT_INTERNAL_OPTIONS for CPU-only mode: " << std::strerror(errno) << std::endl;
-        return false;
-    }
-#endif
-    return true;
-}
-
 //! \brief Allocate \p graph's auxiliary CUDA streams and register them via setAuxStreams.
 //!
 //! The returned scope guard owns the streams; when the last reference is dropped, each
@@ -629,6 +595,34 @@ inline bool applyCpuOnlyMode()
                     }
                 }
             }};
+}
+
+[[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
+{
+    std::string_view const kALLOWED{"._-,"};
+    constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
+    constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
+
+    auto processChar = [&kALLOWED](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
+    };
+
+    std::string res;
+    if (s.length() <= kMAX_FILENAME_LENGTH)
+    {
+        res.reserve(s.size());
+        std::transform(s.begin(), s.end(), std::back_inserter(res), processChar);
+        return res;
+    }
+
+    res.reserve(kMAX_FILENAME_LENGTH);
+    size_t const halfLength = (kMAX_FILENAME_LENGTH - kELLIPSIS_LENGTH) / 2;
+
+    std::transform(s.begin(), s.begin() + halfLength, std::back_inserter(res), processChar);
+    res += "...";
+    std::transform(s.end() - halfLength, s.end(), std::back_inserter(res), processChar);
+
+    return res;
 }
 
 } // namespace samplesSafeCommon

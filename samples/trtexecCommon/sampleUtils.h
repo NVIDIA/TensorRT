@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_UTILS_H
 #define TRT_SAMPLE_UTILS_H
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -26,6 +27,7 @@
 #include <random>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <cuda.h>
@@ -34,6 +36,7 @@
 
 #include "NvInfer.h"
 
+#include "bigInt.h"
 #include "common.h"
 #include "logger.h"
 #include "logging.h"
@@ -81,13 +84,20 @@ void loadFromFile(std::string const& fileName, char* dst, size_t size);
 
 std::vector<std::string> splitToStringVec(std::string const& option, char separator, int64_t maxSplit = -1);
 
+//! \brief Split a named option using the command-line parser's quoting rules.
+//! Unquoted entries split at the last colon, allowing colons in the name. Single-quoted names
+//! use the colon after the closing quote, allowing colons in both the name and value.
+//! For example, 'Input:0':data:0.bin becomes the name Input:0 and value data:0.bin.
+//! \param s Nonempty option entry, without its flag or any comma-separated neighboring entries.
+//! \return Name with quotes removed and the unconverted value; entries without a colon use s for both.
+//! \throws std::invalid_argument if the entry contains an invalid number of single quotes.
+[[nodiscard]] std::pair<std::string, std::string> splitNameAndValue(std::string const& s);
+
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput = true);
 
-#if !TRT_WINML
 int32_t getCudaDriverVersion();
 
 int32_t getCudaRuntimeVersion();
-#endif
 
 void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights);
 void sparsify(nvinfer1::Weights const& weights, int32_t k, int32_t rs, std::vector<int8_t>& sparseWeights);
@@ -115,18 +125,14 @@ bool matchStringWithOneWildcard(std::string const& pattern, std::string const& t
 //! map.find(target). If the exact match does not exist, it returns the first plausible match, taking up to one wildcard
 //! into account. If there is no plausible match, then it returns map.end().
 template <typename T>
-typename std::unordered_map<std::string, T>::const_iterator findPlausible(
+[[nodiscard]] typename std::unordered_map<std::string, T>::const_iterator findPlausible(
     std::unordered_map<std::string, T> const& map, std::string const& target)
 {
-    auto res = map.find(target);
-    if (res == map.end())
+    if (auto const res = map.find(target); res != map.end())
     {
-        res = std::find_if(
-            map.begin(), map.end(), [&](typename std::unordered_map<std::string, T>::value_type const& item) {
-                return matchStringWithOneWildcard(item.first, target);
-            });
+        return res;
     }
-    return res;
+    return std::ranges::find_if(map, [&](auto const& item) { return matchStringWithOneWildcard(item.first, target); });
 }
 
 // ==== Common argument parsing utilities ====
@@ -287,26 +293,60 @@ std::string buildShellQuotedCmdLine(int32_t argc, char** argv);
 //! Empty input or realpath() failure returns the input unchanged.
 std::string resolveAbsolutePath(std::string const& path);
 
-//! \brief Write the tuning cache file header (line 1, JSON object).
-void writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
+//! \brief Write the tuning cache file header (line 1, JSON object); return false on I/O failure.
+bool writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
     std::string const& tunerVersion, std::string const& defaultBuildRoute);
 
 //! \brief Append one iteration line to the cache file. Fields: iter, build_route, crash,
-//! error_message, accuracy_loss, gpu_time. Crashed iterations have null accuracy/gpu.
-void writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
+//! error_message, accuracy_loss, gpu_time, and optional engine_path.
+//! Crashed iterations have null accuracy/gpu. Return false on I/O failure.
+bool writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
     bool crashed, std::string const& errorMessage, std::unordered_map<std::string, double> const& accuracyLossValues,
-    double gpuTimeMs);
+    double gpuTimeMs, std::string const& enginePath = {});
 
-//! \struct TuningCacheHeader
-//! \brief Parsed contents of the cache header, returned by readTuningCacheHeader().
-struct TuningCacheHeader
+//! \struct CachedIterationResult
+//! \brief One decoded measurement used for resume summaries and mixed-search knob selection.
+//! Callers consume and discard each record rather than accumulating the cache. The saved iteration
+//! number and route are read as data; continuation uses record count as its next execution index.
+struct CachedIterationResult
 {
-    std::vector<std::string> argv;  //!< Original command line with file paths absolute.
-    std::string tuningExpr;         //!< Expanded --tuneBuildRoutes expression.
-    int64_t completedIterations{0}; //!< Number of iteration lines after the header.
+    bool crashed{true};
+    double gpuTimeMs{0.0};
+    uint64_t iteration{0};
+    std::string buildRoute;
+    std::string errorMessage;
+    std::string enginePath;
+
+    //! \brief Whether this row represents a successful, usable performance measurement.
+    //! Requires no crash, an empty error message, and finite positive GPU time. Accuracy failures
+    //! are recorded with an error message and therefore cannot become the winner or seed selection.
+    bool succeeded() const;
 };
 
-//! \brief Read and parse the cache file's header line + count completed iteration lines.
+//! \brief Cache arguments and a bounded summary of its completed measurements.
+//! argv and tuningExpr come from the header line. Counts and bestResult are calculated while
+//! streaming subsequent records; these are in-memory fields, not additions to the JSON format.
+struct TuningCacheHeader
+{
+    std::vector<std::string> argv;                   //!< Original command line with file paths absolute.
+    std::string tuningExpr;                          //!< Expanded --tuneBuildRoutes expression.
+    BigInt completedIterations{0};                   //!< All parsed trial records, including failed trials.
+    BigInt successCount{0};                          //!< Records for which succeeded() is true.
+    std::optional<CachedIterationResult> bestResult; //!< Fastest successful row; absent if none succeeded.
+};
+
+//! \brief Read the header and summarize completed measurements in one streaming pass.
+//!
+//! Count records rather than interpreting their saved iteration numbers. Retain the successful
+//! record with the lowest mean GPU time; equal times keep the earlier winner. This restores both
+//! execution position and the previous winner without processing completed trials in the run loop.
+//! Saved routes and indices are not checked against a regenerated search.
+//!
+//! Caches can be very large. Read one record at a time, keeping only counts and the winning record;
+//! memory depends on record size, not the number of completed iterations.
+//! \param cacheFilePath Existing JSON-lines cache to read without modifying it.
+//! \return Header and summary, or nullopt if the header/records cannot be decoded or read.
+//! A header-only cache has zero counts and no bestResult; an all-failed cache also has no bestResult.
 std::optional<TuningCacheHeader> readTuningCacheHeader(std::string const& cacheFilePath);
 
 //! \brief Rebuild argv for a --continue resume. argv[0] is replaced with currentExePath;
@@ -315,16 +355,14 @@ std::optional<TuningCacheHeader> readTuningCacheHeader(std::string const& cacheF
 std::vector<std::string> reconstructArgvFromCacheHeader(
     TuningCacheHeader const& header, std::string const& currentExePath, std::string const& cacheFilePath);
 
-//! \struct CachedIterationResult
-//! \brief Minimal per-iteration fields from the cache, used to reconstruct mixed-mode positive knobs.
-struct CachedIterationResult
-{
-    bool crashed{true};
-    double gpuTimeMs{0.0};
-};
-
-//! \brief Read up to maxIterations iteration lines from the cache and extract (crashed, gpu_time).
-std::vector<CachedIterationResult> readCachedIterationResults(std::string const& cacheFilePath, int64_t maxIterations);
+//! \brief Read the next nonempty iteration line from a stream positioned after the header.
+//! \param[in,out] file Stream positioned before an iteration record; advances past only that record,
+//! skipping empty lines. The caller is responsible for reading the header first.
+//! \return One decoded record, or nullopt on clean EOF. Failed trials are returned as records too.
+//! \throws std::runtime_error on invalid JSON, invalid required fields, or a stream read failure.
+//! An error must not be mistaken for a shorter completed prefix and resumed over.
+//! Caches can be very large: consume each result before reading the next instead of retaining history.
+[[nodiscard]] std::optional<CachedIterationResult> readCachedIterationResult(std::istream& file);
 
 namespace tuningCache
 {

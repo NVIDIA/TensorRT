@@ -417,6 +417,7 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
     model = onnx.helper.make_model(onnx_graph, **kwargs)
     model.producer_name = graph.producer_name
     model.producer_version = graph.producer_version
+    model.doc_string = graph.model_doc_string
     if graph.ir_version is not None:
         model.ir_version = graph.ir_version
     return model

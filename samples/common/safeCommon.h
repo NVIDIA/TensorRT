@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -579,6 +580,31 @@ inline bool hasCpuOnlyInternalOption(std::string const& internalOptions)
         }
     }
     return false;
+}
+
+//! \brief Resolve the companion library to load beside a safe engine.
+//!
+//! The library is offered only when it is there, so an engine built without one still loads. Presence
+//! is the only question asked of it: whether the file is loadable is dlopen's to answer, and it names
+//! the file when it is not. An engine that needs a library and does not get one is caught by the
+//! runtime, which reads the requirement out of the engine rather than from the caller.
+//!
+//! \param enginePath Path the engine was loaded from.
+//!
+//! \return An absolute path to hand to createTRTGraph(), or std::nullopt when no companion library
+//!         sits beside the engine.
+//!
+//! \throws std::filesystem::filesystem_error when the path cannot be made absolute, since the safe
+//!         runtime rejects a relative one and failing here names the path rather than leaving graph
+//!         creation to complain. A missing file is not an error and reports absent.
+[[nodiscard]] inline std::optional<std::string> resolveCompanionSoPath(std::string const& enginePath)
+{
+    std::filesystem::path const candidate{enginePath + ".so"};
+    if (!std::filesystem::is_regular_file(candidate))
+    {
+        return std::nullopt;
+    }
+    return std::filesystem::absolute(candidate).lexically_normal().string();
 }
 
 inline bool applyCpuOnlyMode()

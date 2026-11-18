@@ -23,6 +23,10 @@
 namespace sample
 {
 
+//! \brief Load the default full TensorRT runtime and print its version.
+//! \return Exit code (zero if the runtime version was reported, nonzero otherwise).
+[[nodiscard]] int32_t reportRuntimeVersion();
+
 //! \brief Reusable trtexec implementation, separated from main() so that
 //! custom command-line tools can be built on top of trtexec's engine-building
 //! and inference workflow.
@@ -31,11 +35,20 @@ namespace sample
 [[nodiscard]] int trtexecMain(int argc, char** argv, PostConfigCallback const& postConfigHook = nullptr);
 
 //! \brief Tuning-loop driver invoked when --tuneBuildRoutes / --tuneBuildRouteFile / --continue
-//! is present in argv. Enumerates build routes per the tuning expression and search algorithm,
-//! and for each iteration fork+execs trtexec with `--setBuildRoute=<route> --tuningResultFile=<json>`
+//! is present in argv. Computes one build route at a time through the selected search strategy,
+//! and for each new iteration fork+execs trtexec with `--setBuildRoute=<route> --tuningResultFile=<json>`
 //! injected. Each child runs trtexecMain() unmodified, so any iteration is reproducible by hand
 //! using its --setBuildRoute argument.
-//! \return Exit code (0 if at least one iteration succeeded, non-zero otherwise).
+//!
+//! With --continue, stream the cache once to restore its record count and best measurement before
+//! entering the loop at the first unfinished index. Previously completed routes are not regenerated
+//! or compared with cached records. Mixed strategies read the initial measurement prefix separately
+//! when a combination is requested. Neither operation retains the full cache or expanded search.
+//! --dryRun lists routes for a supported search without launching children or recording measurements.
+//!
+//! \return Zero for a successful dry run, or for tuning with a successful measurement and any
+//! requested winning engine available. Return nonzero on argument, cache, persistence, or recovery
+//! failure, or when tuning has no successful measurement. Windows and disabled-feature builds fail.
 [[nodiscard]] int32_t runTuningLoop(int32_t argc, char** argv);
 
 } // namespace sample

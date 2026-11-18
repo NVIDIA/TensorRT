@@ -19,7 +19,7 @@
 
 #include <iomanip>
 
-#if !defined(_WIN32) && !TRT_WINML
+#if !defined(_WIN32)
 #include <dlfcn.h>
 #endif
 
@@ -48,10 +48,11 @@ using NvmlGetCcStateFn = NvmlReturnT (*)(NvmlConfComputeSystemState*);
 
 bool queryConfidentialCompute()
 {
-#if defined(_WIN32) || TRT_WINML
+#if defined(_WIN32)
     return false;
 #else
-    void* handle = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    // RTLD_NODELETE used for proper cleanup of NVML resources.
+    void* handle = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL | RTLD_NODELETE);
     if (handle == nullptr)
     {
         return false;
@@ -171,7 +172,6 @@ void setCudaDevice(int32_t device, std::ostream& os)
     // clang-format on
 }
 
-#if !TRT_WINML
 int32_t getCudaDriverVersion()
 {
     int32_t version{-1};
@@ -185,6 +185,5 @@ int32_t getCudaRuntimeVersion()
     CHECK(cudaRuntimeGetVersion(&version));
     return version;
 }
-#endif
 
 } // namespace sample

@@ -118,6 +118,9 @@ def update_expected_output(expected):
         expected = expected.replace("CUBLAS, ", "")
         expected = expected.replace("CUDNN, ", "")
 
+    if config.USE_TENSORRT_RTX and hasattr(trt.BuilderFlag, "CPU_ONLY"):
+        expected = expected.replace("TF32]", "TF32, CPU_ONLY]")
+
     return expected
 
 

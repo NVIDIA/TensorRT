@@ -3,14 +3,36 @@
 Dates are in YYYY-MM-DD format.
 
 
-## vNext
+## v0.53.9 (2026-11-16)
 ### Fixed
 - Fixed `inspect sparsity` and the `surgeon` subtools that check 2:4 sparsity misreading BF16
   initializers. A sparse tensor could be reported as non-sparse or fail with an `IndexError`, and a
-  dense tensor stored in `int32_data` (such as all `2.0`) could be reported as sparse.
+  dense tensor stored in `int32_data` (such as all `2.0`) could be reported as sparse. BF16 `-0.0`
+  values now also count as zero, as they already did for FP32 and FP16.
+
+
+## v0.53.8 (2026-11-09)
+### Changed
+- Reverted the change from v0.53.7 that made engine host code opt-in. `EngineFromBytes` and
+  `EngineFromPath` once again enable `engine_host_code_allowed` on the runtime unconditionally, and
+  the `--engine-host-code-allowed` command line option has been removed.
+
+
+## v0.53.7 (2026-11-05)
+### Fixed
 - Fixed a bug where loading JSON data, such as with `--load-inputs` or `inspect data`, failed with
   `ValueError: The truth value of an array with more than one element is ambiguous` when a tensor
   was named after a type Polygraphy serializes, such as `Tensor` or `ndarray`.
+- Tools that check or prune 2:4 sparsity, such as `inspect sparsity` and `surgeon prune`, now report
+  a clear error instead of crashing when a weight in a corrupted ONNX model stores more or fewer
+  values than its shape implies.
+
+### Changed
+- `EngineFromBytes` and `EngineFromPath` no longer enable `engine_host_code_allowed` on the runtime
+  unconditionally. An engine that carries host executable code, i.e. an embedded lean runtime or
+  serialized plugin libraries, is now refused unless `engine_host_code_allowed=True` is passed, or
+  `--engine-host-code-allowed` is given on the command line. Engines built by the same command are
+  still loaded as before. This closes a code-execution path through untrusted engine files.
 
 
 ## v0.53.6 (2026-09-22)

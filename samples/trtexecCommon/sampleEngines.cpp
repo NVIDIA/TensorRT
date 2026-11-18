@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
 #include <cudaTypedefs.h>
 #endif
 #include <fstream>
@@ -34,12 +34,11 @@
 #include <vector>
 
 #include "NvInfer.h"
-#if TRT_BUILD_ONNX_PARSER
 #include "NvOnnxParser.h"
-#endif
 
 #include "ErrorRecorder.h"
 #include "common.h"
+#include "companionSo.h"
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
@@ -92,7 +91,7 @@ public:
     }
 };
 
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
 bool checkCudaDriver(CUresult result, char const* operation, std::ostream& err)
 {
     if (result == CUDA_SUCCESS)
@@ -171,7 +170,7 @@ struct GreenContextDriverApi
 
 struct GreenContextManager::Impl
 {
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     struct Context
     {
         explicit Context(GreenContextDriverApi const& api)
@@ -371,7 +370,7 @@ bool GreenContextManager::initialize(BuildOptions const& build, int32_t device, 
         return true;
     }
 
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     if (build.cpuOnly)
     {
         err << "CUDA green contexts cannot be used with --cpuOnly." << std::endl;
@@ -453,7 +452,7 @@ bool GreenContextManager::initialize(BuildOptions const& build, int32_t device, 
 
 cudaStream_t GreenContextManager::globalBuildStream() const noexcept
 {
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     return mImpl != nullptr && mImpl->globalContext != nullptr ? mImpl->globalContext->buildStream : nullptr;
 #else
     return nullptr;
@@ -462,7 +461,7 @@ cudaStream_t GreenContextManager::globalBuildStream() const noexcept
 
 cudaStream_t GreenContextManager::profileBuildStream(size_t profileIndex) const noexcept
 {
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     if (mImpl == nullptr || profileIndex >= mImpl->profileContexts.size()
         || mImpl->profileContexts[profileIndex] == nullptr)
     {
@@ -477,7 +476,7 @@ cudaStream_t GreenContextManager::profileBuildStream(size_t profileIndex) const 
 
 bool GreenContextManager::prepareInferenceStreams(size_t profileIndex, int32_t streamCount, std::ostream& err)
 {
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     if (mImpl == nullptr || streamCount < 0)
     {
         err << "Invalid CUDA green context inference stream count." << std::endl;
@@ -514,7 +513,7 @@ bool GreenContextManager::prepareInferenceStreams(size_t profileIndex, int32_t s
 
 cudaStream_t GreenContextManager::inferenceStream(size_t streamIndex) const noexcept
 {
-#if CUDA_VERSION >= 13000 && !TRT_WINML && !IS_QNX_SAFE && !HOS_RUNTIME
+#if CUDA_VERSION >= 13000 && !IS_QNX_SAFE
     if (mImpl == nullptr || mImpl->inferenceContext == nullptr
         || streamIndex >= mImpl->inferenceContext->inferenceStreams.size())
     {
@@ -544,7 +543,6 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         {
             mRuntime.reset(createRuntime());
         }
-#if !TRT_WINML
         else
         {
             mParentRuntime.reset(createRuntime());
@@ -552,9 +550,7 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 
             mRuntime.reset(mParentRuntime->loadRuntime(mLeanDLLPath.c_str()));
         }
-#endif /* !TRT_WINML */
         ASSERT(mRuntime != nullptr);
-#if !TRT_WINML
         if (mVersionCompatible)
         {
             // Application needs to opt into allowing deserialization of engines with embedded lean runtime.
@@ -567,9 +563,7 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         }
 
         mRuntime->setTempfileControlFlags(mTempfileControls);
-#endif /* !TRT_WINML */
         SMP_RETVAL_IF_FALSE(mRuntime != nullptr, "runtime creation failed", nullptr, sample::gLogError);
-#if !TRT_WINML
         if (mDLACore != -1)
         {
             mRuntime->setDLACore(mDLACore);
@@ -579,21 +573,12 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
             SMP_RETVAL_IF_FALSE(mRuntime->setDLAWorkspaceAllocationStrategy(mDLAWorkspaceAllocationStrategy),
                 "Failed to set the DLA workspace allocation strategy.", nullptr, sample::gLogError);
         }
-#endif /* !TRT_WINML */
         mRuntime->setErrorRecorder(&gRecorder);
-#if !TRT_WINML
         for (auto const& pluginPath : mDynamicPlugins)
         {
             mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
-#endif
 
-#if TRT_WINML
-        if (mDeferredWeightsLoading)
-        {
-            mRuntime->setDeferredWeightsLoading(true);
-        }
-#endif // TRT_WINML
 
         if (getAsyncFileReader().isOpen())
         {
@@ -629,7 +614,6 @@ bool LazilyDeserializedEngine::checkDLASafe()
     return true;
 }
 
-#if TRT_BUILD_ONNX_PARSER
 //!
 //! \brief Generate a network definition for a given model
 //!
@@ -662,7 +646,6 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         using namespace nvonnxparser;
         parser.onnxParser.reset(createONNXParser(network));
         ASSERT(parser.onnxParser != nullptr);
-#if !TRT_WINML
         // kNATIVE_INSTANCENORM is ON by default in the parser and must be cleared to use the plugin implementation.
         if (build.pluginInstanceNorm)
         {
@@ -685,14 +668,12 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         {
             parser.onnxParser->setFlag(OnnxParserFlag::kENABLE_PLUGIN_OVERRIDE);
         }
-#endif /* !TRT_WINML */
         if (!parser.onnxParser->parseFromFile(
                 model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
             err << "Failed to parse onnx file" << std::endl;
             parser.onnxParser.reset();
         }
-#if !TRT_WINML
         if (vcPluginLibrariesUsed && parser.onnxParser.get())
         {
             int64_t nbPluginLibs;
@@ -712,7 +693,6 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
                                     << std::endl;
             }
         }
-#endif
         break;
     }
     case ModelFormat::kANY: break;
@@ -724,195 +704,10 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
     sample::gLogInfo << "Finished parsing network model. Parse time: " << parseTime << std::endl;
     return parser;
 }
-#endif // TRT_BUILD_ONNX_PARSER
 
 namespace
 {
 
-#if !TRT_WINML
-#if ENABLE_FEATURE_WEAK_TYPING
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.0F, float outRange = 4.0F)
-{
-    for (int32_t l = 0; l < network.getNbLayers(); l++)
-    {
-        auto* layer = network.getLayer(l);
-        for (int32_t i = 0; i < layer->getNbInputs(); i++)
-        {
-            ITensor* input{layer->getInput(i)};
-            if (input && !input->dynamicRangeIsSet())
-            {
-                auto dynRange = (layer->getType() == LayerType::kCONCATENATION) ? outRange : inRange;
-                if (!input->setDynamicRange(-dynRange, dynRange))
-                {
-                    return false;
-                }
-            }
-        }
-        for (int32_t o = 0; o < layer->getNbOutputs(); o++)
-        {
-            ITensor* output{layer->getOutput(o)};
-            if (output && !output->dynamicRangeIsSet())
-            {
-                if (layer->getType() == LayerType::kPOOLING)
-                {
-                    if (!output->setDynamicRange(-inRange, inRange))
-                    {
-                        return false;
-                    }
-                }
-                else if (!output->setDynamicRange(-outRange, outRange))
-                {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-bool isNonActivationType(nvinfer1::DataType const type)
-{
-    return type == nvinfer1::DataType::kINT32 || type == nvinfer1::DataType::kINT64 || type == nvinfer1::DataType::kBOOL
-        || type == nvinfer1::DataType::kUINT8;
-}
-
-void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& layerPrecisions)
-{
-    bool hasLayerPrecisionSkipped{false};
-    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
-    {
-        auto* layer = network.getLayer(layerIdx);
-        auto const layerName = layer->getName();
-        auto exactMatch = layerPrecisions.find(layerName);
-        auto plausibleMatch = findPlausible(layerPrecisions, layerName);
-        if (exactMatch != layerPrecisions.end())
-        {
-            sample::gLogInfo << "Set layer " << layerName << " to precision " << exactMatch->second << std::endl;
-            layer->setPrecision(exactMatch->second);
-        }
-        else if (plausibleMatch != layerPrecisions.end())
-        {
-            if (isNonActivationType(layer->getPrecision()))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName
-                                    << " because the default layer precision is of non-activation type." << std::endl;
-                continue;
-            }
-            if (layer->getType() == nvinfer1::LayerType::kCONSTANT
-                && (isNonActivationType(static_cast<IConstantLayer*>(layer)->getWeights().type)))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName
-                                    << " because this constant layer has weights of non-activation type." << std::endl;
-                continue;
-            }
-            if (layer->getNbInputs() >= 1 && layer->getInput(0)->isShapeTensor())
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName
-                                    << " because this layer operates on a shape tensor." << std::endl;
-                continue;
-            }
-            if (layer->getNbInputs() >= 1 && isNonActivationType(layer->getInput(0)->getType())
-                && layer->getNbOutputs() >= 1 && isNonActivationType(layer->getOutput(0)->getType()))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName
-                                    << " because this layer has input and output of non-activation type." << std::endl;
-                continue;
-            }
-            sample::gLogInfo << "Set layer " << layerName << " to precision " << plausibleMatch->second << std::endl;
-            layer->setPrecision(plausibleMatch->second);
-        }
-    }
-
-    if (hasLayerPrecisionSkipped)
-    {
-        sample::gLogInfo << "Skipped setting precisions for some layers. Check verbose logs for more details."
-                         << std::endl;
-    }
-}
-
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& layerOutputTypes)
-{
-    bool const hasGlobalOutputType{layerOutputTypes.contains("*")};
-    auto const globalOutputType = hasGlobalOutputType ? layerOutputTypes.at("*").at(0) : nvinfer1::DataType::kFLOAT;
-    bool hasLayerOutputTypeSkipped{false};
-    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
-    {
-        auto* layer = network.getLayer(layerIdx);
-        auto const layerName = layer->getName();
-        auto const nbOutputs = layer->getNbOutputs();
-        auto exactMatch = layerOutputTypes.find(layerName);
-        auto plausibleMatch = findPlausible(layerOutputTypes, layerName);
-        if (exactMatch != layerOutputTypes.end())
-        {
-            auto const& outputTypes = exactMatch->second;
-            bool const isBroadcast = (outputTypes.size() == 1);
-            if (!isBroadcast && static_cast<int32_t>(outputTypes.size()) != nbOutputs)
-            {
-                sample::gLogError << "Layer " << layerName << " has " << nbOutputs << " outputs but "
-                                  << outputTypes.size() << " output types are given in --layerOutputTypes flag."
-                                  << std::endl;
-                throw std::invalid_argument("Invalid --layerOutputTypes flag.");
-            }
-            for (int32_t outputIdx = 0; outputIdx < nbOutputs; ++outputIdx)
-            {
-                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
-                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
-                                 << std::endl;
-                layer->setOutputType(outputIdx, outputType);
-            }
-        }
-        else if (plausibleMatch != layerOutputTypes.end())
-        {
-            auto const& outputTypes = plausibleMatch->second;
-            bool const isBroadcast = (outputTypes.size() == 1);
-
-            if (layer->getPrecision() == nvinfer1::DataType::kINT32
-                || layer->getPrecision() == nvinfer1::DataType::kBOOL)
-            {
-                hasLayerOutputTypeSkipped = true;
-                sample::gLogVerbose << "Skipped setting output types for layer " << layerName
-                                    << " because the default layer precision is INT32 or Bool." << std::endl;
-                continue;
-            }
-            if (layer->getType() == nvinfer1::LayerType::kCONSTANT
-                && static_cast<IConstantLayer*>(layer)->getWeights().type == nvinfer1::DataType::kINT32)
-            {
-                hasLayerOutputTypeSkipped = true;
-                sample::gLogVerbose << "Skipped setting output types for layer " << layerName
-                                    << " because this constant layer has INT32 weights." << std::endl;
-                continue;
-            }
-            for (int32_t outputIdx = 0; outputIdx < nbOutputs; ++outputIdx)
-            {
-                if (layer->getOutput(0)->isShapeTensor())
-                {
-                    hasLayerOutputTypeSkipped = true;
-                    sample::gLogVerbose << "Skipped setting output type for output " << outputIdx << " of layer "
-                                        << layerName << " because it is a shape tensor." << std::endl;
-                    continue;
-                }
-
-                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
-                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
-                                 << std::endl;
-                layer->setOutputType(outputIdx, globalOutputType);
-            }
-        }
-    }
-
-    if (hasLayerOutputTypeSkipped)
-    {
-        sample::gLogInfo << "Skipped setting output types for some layers. Check verbose logs for more details."
-                         << std::endl;
-    }
-}
-#endif // ENABLE_FEATURE_WEAK_TYPING
 
 void setLayerDeviceTypes(
     INetworkDefinition const& network, IBuilderConfig& config, LayerDeviceTypes const& layerDeviceTypes)
@@ -976,7 +771,6 @@ void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors
         }
     }
 }
-#endif /* !TRT_WINML */
 void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 {
     auto const roundToBytes = [](double const size, bool fromMB = true) {
@@ -1022,9 +816,9 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
 {
     auto const setFlag = [&](PreviewFeature feat) {
         int32_t featVal = static_cast<int32_t>(feat);
-        if (build.previewFeatures.find(featVal) != build.previewFeatures.end())
+        if (auto const it = build.previewFeatures.find(featVal); it != build.previewFeatures.end())
         {
-            config.setPreviewFeature(feat, build.previewFeatures.at(featVal));
+            config.setPreviewFeature(feat, it->second);
         }
     };
     setFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
@@ -1076,6 +870,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 {
     auto const profiles = createOptimizationProfiles(build, builder, greenContexts);
 
+    if (build.cpuOnly)
+    {
+        sample::gLogInfo << "Setting CPU-only mode" << std::endl;
+        config.setFlag(BuilderFlag::kCPU_ONLY);
+    }
     bool hasDynamicShapes{false};
 
     bool broadcastInputFormats = broadcastIOFormats(build.inputFormats, network.getNbInputs());
@@ -1111,31 +910,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.inputFormats.empty())
         {
             int32_t inputFormatIndex = broadcastInputFormats ? 0 : i;
-#if ENABLE_FEATURE_WEAK_TYPING
-            auto const& requestedType = build.inputFormats[inputFormatIndex].type;
-            if (requestedType.has_value())
-            {
-                if (build.stronglyTyped)
-                {
-                    auto const inferredType = input->getType();
-                    bool const typeMatches = *requestedType == inferredType;
-                    if (!typeMatches)
-                    {
-                        std::ostringstream msg;
-                        msg << "Input tensor \"" << input->getName() << "\": Requested input type " << *requestedType
-                            << " via --inputIOFormats does not match the inferred type " << inferredType
-                            << " for a strongly typed network. Failing build.";
-                        SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
-                    }
-                }
-                input->setType(*requestedType);
-            }
-            else
-            {
-                SMP_RETVAL_IF_FALSE(build.stronglyTyped,
-                    "Format-only --inputIOFormats (without type) requires --stronglyTyped.", false, err);
-            }
-#endif // ENABLE_FEATURE_WEAK_TYPING
             input->setAllowedFormats(build.inputFormats[inputFormatIndex].formats);
         }
 
@@ -1167,8 +941,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                         }
                         else
                         {
-                            staticDims.resize(dims.d[0]);
-                            std::fill(staticDims.begin(), staticDims.end(), kDEFAULT_DIMENSION);
+                            staticDims.assign(dims.d[0], kDEFAULT_DIMENSION);
                         }
                     }
                     else
@@ -1180,7 +953,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                     sample::gLogWarning << "Dynamic dimensions required for input: " << tensorName
                                         << ", but no shapes were provided. Automatically overriding shape to: "
                                         << staticDims << std::endl;
-                    std::fill(shapes.begin(), shapes.end(), staticDims);
+                    std::ranges::fill(shapes, staticDims);
                 }
                 else
                 {
@@ -1272,31 +1045,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.outputFormats.empty())
         {
             int32_t outputFormatIndex = broadcastOutputFormats ? 0 : i;
-#if ENABLE_FEATURE_WEAK_TYPING
-            auto const& requestedType = build.outputFormats[outputFormatIndex].type;
-            if (requestedType.has_value())
-            {
-                if (build.stronglyTyped)
-                {
-                    auto const inferredType = output->getType();
-                    bool const typeMatches = *requestedType == inferredType;
-                    if (!typeMatches)
-                    {
-                        std::ostringstream msg;
-                        msg << "Output tensor \"" << output->getName() << "\": Requested output type " << *requestedType
-                            << " via --outputIOFormats does not match the inferred type " << inferredType
-                            << " for a strongly typed network. Failing build.";
-                        SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
-                    }
-                }
-                output->setType(*requestedType);
-            }
-            else
-            {
-                SMP_RETVAL_IF_FALSE(build.stronglyTyped,
-                    "Format-only --outputIOFormats (without type) requires --stronglyTyped.", false, err);
-            }
-#endif // ENABLE_FEATURE_WEAK_TYPING
             output->setAllowedFormats(build.outputFormats[outputFormatIndex].formats);
         }
     }
@@ -1346,7 +1094,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kSTRIP_PLAN);
     }
 
-#if !TRT_WINML
     if (build.versionCompatible)
     {
         config.setFlag(BuilderFlag::kVERSION_COMPATIBLE);
@@ -1366,7 +1113,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kEXCLUDE_LEAN_RUNTIME);
     }
 
-#endif /* !TRT_WINML */
     if (build.sparsity != SparsityFlag::kDISABLE)
     {
         config.setFlag(BuilderFlag::kSPARSE_WEIGHTS);
@@ -1386,88 +1132,19 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE);
     }
 
+    if (build.independentWeightLayouts)
+    {
+        config.setFlag(BuilderFlag::kINDEPENDENT_WEIGHT_LAYOUTS);
+    }
+
     config.setProfilingVerbosity(build.profilingVerbosity);
     config.setAvgTimingIterations(build.avgTiming);
-#if !TRT_WINML
-#if ENABLE_FEATURE_WEAK_TYPING
-    if (build.fp16)
-    {
-        config.setFlag(BuilderFlag::kFP16);
-    }
-    if (build.int8)
-    {
-        config.setFlag(BuilderFlag::kINT8);
-    }
-    if (build.bf16)
-    {
-        config.setFlag(BuilderFlag::kBF16);
-    }
-
-    SMP_RETVAL_IF_FALSE(!(build.int8 && build.fp8), "FP8 and INT8 precisions have been specified", false, err);
-
-    if (build.fp8)
-    {
-        config.setFlag(BuilderFlag::kFP8);
-    }
-
-    if (build.int4)
-    {
-        config.setFlag(BuilderFlag::kINT4);
-    }
-
-    if (build.int8 && !build.fp16)
-    {
-        sample::gLogInfo
-            << "FP32 and INT8 precisions have been specified - more performance might be enabled by additionally "
-               "specifying --fp16 or --best"
-            << std::endl;
-    }
-    auto isInt8 = [](IOFormat const& format) { return format.type.has_value() && *format.type == DataType::kINT8; };
-    auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
-        + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
-
-    auto hasQDQLayers = [](INetworkDefinition& networkDef) {
-        auto const nbLayers = networkDef.getNbLayers();
-        for (int32_t i = 0; i < nbLayers; i++)
-        {
-            auto const& layer = networkDef.getLayer(i);
-            if (layer->getType() == LayerType::kQUANTIZE || layer->getType() == LayerType::kDEQUANTIZE)
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    if (!hasQDQLayers(network) && (build.int8 || int8IO))
-    {
-        SMP_RETVAL_IF_FALSE(setTensorDynamicRange(network), "Error in set tensor dynamic range.", false, err);
-    }
-#endif // ENABLE_FEATURE_WEAK_TYPING
 
     if (build.directIO)
     {
         config.setFlag(BuilderFlag::kDIRECT_IO);
     }
 
-#if ENABLE_FEATURE_WEAK_TYPING
-    switch (build.precisionConstraints)
-    {
-    case PrecisionConstraints::kNONE: break;
-    case PrecisionConstraints::kOBEY: config.setFlag(BuilderFlag::kOBEY_PRECISION_CONSTRAINTS); break;
-    case PrecisionConstraints::kPREFER: config.setFlag(BuilderFlag::kPREFER_PRECISION_CONSTRAINTS); break;
-    }
-
-    if (!build.layerPrecisions.empty() && build.precisionConstraints != PrecisionConstraints::kNONE)
-    {
-        setLayerPrecisions(network, build.layerPrecisions);
-    }
-
-    if (!build.layerOutputTypes.empty() && build.precisionConstraints != PrecisionConstraints::kNONE)
-    {
-        setLayerOutputTypes(network, build.layerOutputTypes);
-    }
-#endif // ENABLE_FEATURE_WEAK_TYPING
 
     if (!build.layerDeviceTypes.empty())
     {
@@ -1500,18 +1177,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         {
             config.setDefaultDeviceType(DeviceType::kDLA);
             config.setDLACore(sys.DLACore);
-#if ENABLE_FEATURE_WEAK_TYPING
-            // kPREFER_PRECISION_CONSTRAINTS and kFP16 conflict with kSTRONGLY_TYPED; skip them
-            // when the user has requested a strongly typed network. See Builder::createNetworkBuildConfig.
-            if (!build.stronglyTyped)
-            {
-                config.setFlag(BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
-                if (!build.int8)
-                {
-                    config.setFlag(BuilderFlag::kFP16);
-                }
-            }
-#endif // ENABLE_FEATURE_WEAK_TYPING
             if (build.buildDLAStandalone)
             {
                 config.setEngineCapability(EngineCapability::kDLA_STANDALONE);
@@ -1532,7 +1197,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             return false;
         }
     }
-#endif // !TRT_WINML
     if (build.enabledTactics || build.disabledTactics)
     {
         TacticSources tacticSources = config.getTacticSources();
@@ -1542,17 +1206,9 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     }
 
     config.setHardwareCompatibilityLevel(build.hardwareCompatibilityLevel);
+    SMP_RETVAL_IF_FALSE(config.getHardwareCompatibilityLevel() == build.hardwareCompatibilityLevel,
+        "Failed to set requested hardware compatibility level", false, err);
 
-#if TRT_WINML
-    if (!build.computeCapabilities.empty())
-    {
-        config.setNbComputeCapabilities(build.computeCapabilities.size());
-        for (size_t i = 0; i < build.computeCapabilities.size(); ++i)
-        {
-            config.setComputeCapability(build.computeCapabilities[i], static_cast<int32_t>(i));
-        }
-    }
-#endif // TRT_WINML
 
     config.setRuntimePlatform(build.runtimePlatform);
 
@@ -1571,38 +1227,53 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         return false;
     }
 
-#if !TRT_WINML
     if (!build.remoteConfig.empty())
     {
         SMP_RETVAL_IF_FALSE(config.setRemoteAutoTuningConfig(build.remoteConfig.c_str()),
             "Failed to set remote target config", false, err);
     }
-#endif // !TRT_WINML
 
     return true;
 }
 
 } // namespace
 
-//! \brief Build a serialized engine in memory (as opposed to streaming to a file).
-bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
+//! \brief Build a serialized safe engine in memory, together with the artifacts that belong to it.
+//!
+//! A safe engine may need a companion library, and only this entry point returns the two together. The
+//! others reject EngineCapability::kSAFETY once companion libraries are required, so safe builds go
+//! through here whether or not one is produced.
+bool buildSerializedSafeEngine(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
     INetworkDefinition& network, IBuilderConfig& config, BuildEnvironment& env, std::ostream& err)
 {
-    std::unique_ptr<IHostMemory> serializedEngine;
-#if !TRT_WINML
-    if (build.safe && build.save && build.dumpCheckerBlob)
+    auto const artifacts = std::unique_ptr<ISafeSerializedNetworkArtifacts>{
+        builder.buildSerializedSafeNetwork(network, config, build.dumpCheckerBlob)};
+    SMP_RETVAL_IF_FALSE(artifacts != nullptr, "Engine could not be created from network", false, err);
+
+    // Every getter hands back memory owned by the artifacts, so each one is copied before they die.
+    auto const copyOut = [](IHostMemory const* src) {
+        auto const* const bytes = static_cast<uint8_t const*>(src->data());
+        return std::vector<uint8_t>(bytes, bytes + src->size());
+    };
+
+    auto serializedEngine = copyOut(artifacts->getSerializedNetwork());
+    SMP_RETVAL_IF_FALSE(!serializedEngine.empty(), "Engine could not be created from network", false, err);
+
+    if (auto const* const companionSo = artifacts->getCompanionSo())
     {
-        IHostMemory* checkerBlobPtr{nullptr};
-        serializedEngine
-            = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config, checkerBlobPtr)};
-        auto checkerBlob = std::unique_ptr<IHostMemory>{checkerBlobPtr};
-        if (checkerBlob != nullptr)
+        sample::gLogInfo << "Created companion library with size: " << (companionSo->size() / 1.0_MiB) << " MiB"
+                         << std::endl;
+        env.companionSo.setBlob(copyOut(companionSo));
+    }
+
+    if (build.dumpCheckerBlob)
+    {
+        if (auto const* const checkerBlob = artifacts->getCheckerBlob())
         {
-            auto const checkerBlobSize = checkerBlob->size();
-            env.checkerBlob.setBlobOrEmpty(std::move(checkerBlob));
-            if (checkerBlobSize > 0)
+            env.checkerBlob.setBlob(copyOut(checkerBlob));
+            if (checkerBlob->size() > 0)
             {
-                sample::gLogInfo << "Created checker blob with size: " << (checkerBlobSize / 1.0_MiB) << " MiB"
+                sample::gLogInfo << "Created checker blob with size: " << (checkerBlob->size() / 1.0_MiB) << " MiB"
                                  << std::endl;
             }
             else
@@ -1610,20 +1281,15 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
                 sample::gLogInfo << "Created empty checker blob." << std::endl;
             }
         }
-        else if (serializedEngine != nullptr)
+        else
         {
             sample::gLogWarning << "No checker blob was produced: the engine has no checkable kernels." << std::endl;
         }
     }
-    else
-#endif
-    {
-        serializedEngine = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config)};
-    }
-    SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
-    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
 
-    if (build.safe && build.consistency)
+    sample::gLogInfo << "Created engine with size: " << (serializedEngine.size() / 1.0_MiB) << " MiB" << std::endl;
+
+    if (build.consistency)
     {
         std::vector<std::string> pluginBuildLibPaths;
 #if ENABLE_UNIFIED_BUILDER
@@ -1632,11 +1298,26 @@ bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, 
             [](auto const& sp) { return sp.libraryName; });
 #endif
         if (!checkSafeEngine(
-                serializedEngine->data(), static_cast<int64_t>(serializedEngine->size()), pluginBuildLibPaths))
+                serializedEngine.data(), static_cast<int64_t>(serializedEngine.size()), pluginBuildLibPaths))
         {
             return false;
         }
     }
+
+    env.engine.setBlob(std::move(serializedEngine));
+    return true;
+}
+
+//! \brief Build a serialized engine in memory (as opposed to streaming to a file).
+//!
+//! Safe engines go to buildSerializedSafeEngine() instead, which is the only entry point that can
+//! return the companion library alongside the engine.
+bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
+    INetworkDefinition& network, IBuilderConfig& config, BuildEnvironment& env, std::ostream& err)
+{
+    auto serializedEngine = std::unique_ptr<IHostMemory>{builder.buildSerializedNetwork(network, config)};
+    SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
+    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
     env.engine.setBlob(std::move(serializedEngine));
     return true;
 }
@@ -1670,7 +1351,6 @@ bool networkToSerializedEngine(BuildOptions const& build, SystemOptions const& s
         : nullptr;
 
     // CUDA stream used for profiling by the builder.
-#if !TRT_WINML
     auto const greenProfileStream = env.greenContexts.globalBuildStream();
     auto profileStream = build.cpuOnly || greenProfileStream != nullptr
         ? std::unique_ptr<cudaStream_t, decltype(samplesCommon::StreamDeleter)>{nullptr, samplesCommon::StreamDeleter}
@@ -1681,7 +1361,6 @@ bool networkToSerializedEngine(BuildOptions const& build, SystemOptions const& s
             greenProfileStream != nullptr || profileStream != nullptr, "Cuda stream creation failed", false, err);
         config.setProfileStream(greenProfileStream != nullptr ? greenProfileStream : *profileStream);
     }
-#endif
     auto const tBegin = std::chrono::high_resolution_clock::now();
 
     if (!(build.safe || build.buildDLAStandalone) && build.save)
@@ -1698,6 +1377,13 @@ bool networkToSerializedEngine(BuildOptions const& build, SystemOptions const& s
         reader.close();
         sample::gLogInfo << "Created engine with size: " << (engineSize / 1.0_MiB) << " MiB" << std::endl;
         env.engine.setBlob(std::move(streamEngine));
+    }
+    else if (build.safe)
+    {
+        if (!buildSerializedSafeEngine(build, sys, builder, network, config, env, err))
+        {
+            return false;
+        }
     }
     else if (!buildSerializedEngine(build, sys, builder, network, config, env, err))
     {
@@ -1716,7 +1402,6 @@ bool networkToSerializedEngine(BuildOptions const& build, SystemOptions const& s
     return true;
 }
 
-#if TRT_BUILD_ONNX_PARSER
 
 //!
 //! \brief Parse a given model, create a network and an engine.
@@ -1728,7 +1413,6 @@ bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, Syste
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
     env.builderConfig.reset(env.builder->createBuilderConfig());
     SMP_RETVAL_IF_FALSE(env.builderConfig != nullptr, "Builder config creation failed", false, err);
-#if ENABLE_FEATURE_GLOBAL_PERF_TUNER
     // Apply --setBuildRoute to pin the engine build to a specific knob configuration.
     // This is the public reproducibility surface for tuning iterations.
     // Gated by ENABLE_FEATURE_GLOBAL_PERF_TUNER because the underlying
@@ -1739,27 +1423,13 @@ bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, Syste
         SMP_RETVAL_IF_FALSE(env.builderConfig->setBuildRoute(build.buildRoute.c_str()),
             "IBuilderConfig::setBuildRoute failed for: " + build.buildRoute, false, err);
     }
-#else
-    if (!build.buildRoute.empty())
-    {
-        err << "--setBuildRoute requires a build with ENABLE_FEATURE_GLOBAL_PERF_TUNER." << std::endl;
-        return false;
-    }
-#endif // ENABLE_FEATURE_GLOBAL_PERF_TUNER
     env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags =
-#if ENABLE_FEATURE_WEAK_TYPING
-        build.stronglyTyped ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
-                            : 0U;
-#else
         1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
-#endif // ENABLE_FEATURE_WEAK_TYPING
-#if !TRT_WINML
     for (auto const& pluginPath : sys.dynamicPlugins)
     {
         env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
     }
-#endif
     env.network.reset(env.builder->createNetworkV2(networkFlags));
 
     std::vector<std::string> vcPluginLibrariesUsed;
@@ -1768,7 +1438,6 @@ bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, Syste
         build.versionCompatible ? &vcPluginLibrariesUsed : nullptr, *env.builderConfig);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
 
-#if !TRT_WINML
     if (build.versionCompatible && !sys.ignoreParsedPluginLibs && !vcPluginLibrariesUsed.empty())
     {
         sample::gLogInfo << "The following plugin libraries were identified by the parser as required for a "
@@ -1783,11 +1452,10 @@ bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, Syste
             sample::gLogInfo << "These libraries will be added to --setPluginsToSerialize since --excludeLeanRuntime "
                                 "was not specified."
                              << std::endl;
-            std::copy(vcPluginLibrariesUsed.begin(), vcPluginLibrariesUsed.end(),
-                std::back_inserter(sys.setPluginsToSerialize));
+            std::ranges::copy(vcPluginLibrariesUsed, std::back_inserter(sys.setPluginsToSerialize));
         }
         sample::gLogInfo << "These libraries will be added to --dynamicPlugins for use at inference time." << std::endl;
-        std::copy(vcPluginLibrariesUsed.begin(), vcPluginLibrariesUsed.end(), std::back_inserter(sys.dynamicPlugins));
+        std::ranges::copy(vcPluginLibrariesUsed, std::back_inserter(sys.dynamicPlugins));
 
         // Implicitly-added plugins from ONNX parser should be loaded into plugin registry as well.
         for (auto const& pluginPath : vcPluginLibrariesUsed)
@@ -1797,13 +1465,11 @@ bool modelToBuildEnv(ModelOptions const& model, BuildOptions const& build, Syste
 
         sample::gLogInfo << "Use --ignoreParsedPluginLibs to disable this behavior." << std::endl;
     }
-#endif /* !TRT_WINML */
 
     SMP_RETVAL_IF_FALSE(
         networkToSerializedEngine(build, sys, env, err, postConfigHook), "Building engine failed", false, err);
     return true;
 }
-#endif // TRT_BUILD_ONNX_PARSER
 
 namespace
 {
@@ -1861,35 +1527,6 @@ bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnviro
     return true;
 }
 
-#if TRT_WINML
-//! \brief Re-read the engine file from disk and call ICudaEngine::loadWeights() to complete a
-//! deferred deserialization. The same file path that was passed to --loadEngine is used; the
-//! buffer is freed when this function returns.
-bool loadDeferredWeightsFromEngineFile(nvinfer1::ICudaEngine& engine, std::string const& filepath, std::ostream& err)
-{
-    std::ifstream engineFile(filepath, std::ios::binary);
-    SMP_RETVAL_IF_FALSE(
-        engineFile.good(), "", false, err << "Error opening engine file for deferred weight load: " << filepath);
-    engineFile.seekg(0, std::ifstream::end);
-    // tellg() returns -1 on stream failure; cast-to-size_t would otherwise produce a huge allocation.
-    std::streamoff const fsizeRaw = engineFile.tellg();
-    SMP_RETVAL_IF_FALSE(
-        fsizeRaw > 0, "", false, err << "Error determining engine file size for deferred weight load: " << filepath);
-    int64_t const fsize = static_cast<int64_t>(fsizeRaw);
-    engineFile.seekg(0, std::ifstream::beg);
-    std::vector<uint8_t> blob(static_cast<size_t>(fsize));
-    engineFile.read(reinterpret_cast<char*>(blob.data()), fsize);
-    SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error reading engine file: " << filepath);
-
-    auto const tBegin = std::chrono::high_resolution_clock::now();
-    bool const ok = engine.loadWeights(blob.data(), fsize);
-    auto const tEnd = std::chrono::high_resolution_clock::now();
-    float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
-    SMP_RETVAL_IF_FALSE(ok, "", false, err << "ICudaEngine::loadWeights() returned false.");
-    sample::gLogInfo << "Deferred weights loaded in " << loadTime << " sec." << std::endl;
-    return true;
-}
-#endif // TRT_WINML
 
 bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err,
     SystemOptions const& sys, bool const enableConsistency)
@@ -1961,6 +1598,40 @@ bool loadCheckerBlobToBuildEnv(BuildOptions const& build, BuildEnvironment& env,
     return true;
 }
 
+namespace
+{
+//! \brief Load the companion library at \p env's companion path into \p env.
+//!
+//! The Reference Checker ships the companion library to the target with the engine.
+//!
+//! \param env The environment to load into. Unchanged when it has no companion path or already holds the bytes.
+//! \param err Stream for diagnostics.
+//! \return false if the companion library could not be read.
+[[nodiscard]] bool loadCompanionSoToBuildEnv(BuildEnvironment& env, std::ostream& err)
+{
+    if (!env.companionSoPath || env.companionSo.hasBlob())
+    {
+        return true;
+    }
+    std::string const& filepath = *env.companionSoPath;
+
+    std::ifstream file(filepath, std::ios::binary);
+    SMP_RETVAL_IF_FALSE(file.good(), "", false, err << "Error opening companion library file: " << filepath);
+    file.seekg(0, std::ifstream::end);
+    int64_t const fsize = file.tellg();
+    file.seekg(0, std::ifstream::beg);
+    SMP_RETVAL_IF_FALSE(fsize > 0, "", false, err << "Companion library file is empty: " << filepath);
+
+    std::vector<uint8_t> blob(fsize);
+    file.read(reinterpret_cast<char*>(blob.data()), fsize);
+    SMP_RETVAL_IF_FALSE(file.good(), "", false, err << "Error loading companion library file: " << filepath);
+    sample::gLogInfo << "Loaded companion library with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
+
+    env.companionSo.setBlob(std::move(blob));
+    return true;
+}
+} // namespace
+
 bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
 {
     constexpr int64_t kPLAN_SIZE{28};
@@ -2008,13 +1679,10 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
         return;
     }
 
-    auto const& layerWeightsRolePair = getLayerWeightsRolePair(*refitter);
-    auto const& layerNames = layerWeightsRolePair.first;
-    auto const& weightsRoles = layerWeightsRolePair.second;
-    auto const nbAll = layerWeightsRolePair.first.size();
-    for (size_t i = 0; i < nbAll; ++i)
+    auto const& [layerNames, weightsRoles] = getLayerWeightsRolePair(*refitter);
+    for (size_t i = 0; i < layerNames.size(); ++i)
     {
-        sample::gLogInfo << layerNames[i] << " " << weightsRoles[i] << std::endl;
+        sample::gLogInfo << layerNames[i] << " " << weightsRoles.at(i) << std::endl;
     }
 }
 
@@ -2065,6 +1733,14 @@ bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, Sys
         if (build.safe)
         {
             createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, sys, build.safe && build.consistency);
+            env.companionSoPath = toolsCompanionSo::resolveCompanionSoPath(build.engine, build.loadEngineSo);
+            if (env.companionSoPath)
+            {
+                std::ifstream companionSoFile(*env.companionSoPath, std::ios::binary);
+                SMP_RETVAL_IF_FALSE(companionSoFile.good(),
+                    ("Companion library not found: " + *env.companionSoPath).c_str(), false, err);
+                sample::gLogInfo << "Using companion library " << *env.companionSoPath << std::endl;
+            }
         }
         else
         {
@@ -2074,22 +1750,13 @@ bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, Sys
             }
             else
             {
-#if HOS_RUNTIME
-                createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, sys, false);
-#else
                 createEngineSuccess = loadStreamingEngineToBuildEnv(build.engine, env, err);
-#endif // HOS_RUNTIME
             }
         }
     }
     else
     {
-#if TRT_BUILD_ONNX_PARSER
         createEngineSuccess = modelToBuildEnv(model, build, sys, env, err, postConfigHook);
-#else
-        err << "TRT ONNX Parser is disabled. Cannot create engine from model." << std::endl;
-        return false;
-#endif // TRT_BUILD_ONNX_PARSER
     }
 
     SMP_RETVAL_IF_FALSE(createEngineSuccess, "Failed to create engine from model or file.", false, err);
@@ -2100,23 +1767,21 @@ bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, Sys
         return true;
     }
 
-#if !TRT_WINML
     if (build.safe && build.reference)
     {
         // Checking is a step after building, never part of one: --reference requires --loadEngine, so the
         // engine here is always one that was saved.
-        if (!loadCheckerBlobToBuildEnv(build, env, err))
+        if (!loadCheckerBlobToBuildEnv(build, env, err) || !loadCompanionSoToBuildEnv(env, err))
         {
             return false;
         }
         auto const& engineBlob = env.engine.getBlob();
         if (!referenceCheckEngine(engineBlob.data, static_cast<int64_t>(engineBlob.size),
-                env.checkerBlob.getBlobOrEmpty(), build.remoteConfig))
+                env.checkerBlob.getBlobOrEmpty(), env.companionSo.getBlobOrEmpty(), build.remoteConfig))
         {
             return false;
         }
     }
-#endif // !TRT_WINML
 
     if (build.save)
     {
@@ -2164,6 +1829,25 @@ bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, Sys
                 sample::gLogWarning << "Checker blob was not produced; skipping dump to " << checkerBlobFileName
                                     << std::endl;
             }
+        }
+        // The runtime loads the companion library by path, so it goes to disk beside the engine and the
+        // path is remembered for inference.
+        if (build.safe && !env.companionSo.hasBlob() && !build.saveEngineSo.empty())
+        {
+            sample::gLogWarning << "Ignoring --saveEngineSo: the build produced no companion library." << std::endl;
+        }
+        if (build.safe && env.companionSo.hasBlob())
+        {
+            auto const companionSoFileName = build.saveEngineSo.empty() ? build.engine + ".so" : build.saveEngineSo;
+            auto const companionSoBlob = env.companionSo.getBlobOrEmpty();
+            std::ofstream companionSoFile(companionSoFileName, std::ios::binary);
+            companionSoFile.write(static_cast<char const*>(companionSoBlob.data), companionSoBlob.size);
+            SMP_RETVAL_IF_FALSE(!companionSoFile.fail(), "Saving companion library to file failed.", false, err);
+            companionSoFile.close();
+            // The runtime resolves the path itself, so store the absolute form the load path also
+            // stores rather than whatever the command line happened to spell.
+            env.companionSoPath = toolsCompanionSo::resolveCompanionSoPath(build.engine, companionSoFileName);
+            sample::gLogInfo << "Saved companion library to " << companionSoFileName << std::endl;
         }
     }
 
@@ -2229,10 +1913,6 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kDEQUANTIZE:
     case LayerType::kDIST_COLLECTIVE:
     case LayerType::kDYNAMIC_QUANTIZE:
-#if ENABLE_FEATURE_RAGGED_TENSOR
-    case LayerType::kSPLIT_TO_RAGGED:
-    case LayerType::kCONCAT_FROM_RAGGED:
-#endif /*ENABLE_FEATURE_RAGGED_TENSOR*/
     case LayerType::kEINSUM:
     case LayerType::kELEMENTWISE:
     case LayerType::kFILL:
@@ -2277,7 +1957,6 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     return {};
 }
 
-#if TRT_BUILD_ONNX_PARSER
 bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, bool multiThreading)
 {
     sample::gLogInfo << "Refitting engine from ONNX model " << onnxModelFile << std::endl;
@@ -2303,7 +1982,6 @@ bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, boo
     sample::gLogInfo << "Engine successfully refitted from ONNX model " << onnxModelFile << std::endl;
     return true;
 }
-#endif // TRT_BUILD_ONNX_PARSER
 
 bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine, bool multiThreading)
 {
@@ -2318,19 +1996,16 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
         sample::gLogError << "Failed to set max threads to refitter." << std::endl;
         return false;
     }
-    auto const& layerWeightsRolePair = getLayerWeightsRolePair(*refitter);
+    auto const& [layerNames, weightsRoles] = getLayerWeightsRolePair(*refitter);
     // We use std::string instead of char const* since we can have copies of layer names.
     std::set<std::pair<std::string, WeightsRole>> layerRoleSet;
-
-    auto const& layerNames = layerWeightsRolePair.first;
-    auto const& weightsRoles = layerWeightsRolePair.second;
 
     std::transform(layerNames.begin(), layerNames.end(), weightsRoles.begin(),
         std::inserter(layerRoleSet, layerRoleSet.begin()),
         [](std::string const& layerName, WeightsRole const role) { return std::make_pair(layerName, role); });
 
     auto const isRefittable = [&layerRoleSet](char const* layerName, WeightsRole const role) {
-        return layerRoleSet.find(std::make_pair(layerName, role)) != layerRoleSet.end();
+        return layerRoleSet.contains(std::make_pair(layerName, role));
     };
 
     auto const setWeights = [&] {
@@ -2354,9 +2029,7 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
     };
 
     auto const reportMissingWeights = [&] {
-        auto const& missingPair = getMissingLayerWeightsRolePair(*refitter);
-        auto const& layerNames = missingPair.first;
-        auto const& weightsRoles = missingPair.second;
+        auto const& [layerNames, weightsRoles] = getMissingLayerWeightsRolePair(*refitter);
         for (size_t i = 0; i < layerNames.size(); ++i)
         {
             sample::gLogError << "Missing (" << layerNames[i] << ", " << weightsRoles[i] << ") for refitting."
@@ -2413,17 +2086,12 @@ struct DllDeleter
 //! in which case dlopen with `RTLD_LAZY | RTLD_NODELETE` flags.
 [[nodiscard]] auto doDlopen(char const* dllName, int32_t nonSanitizerFlags)
 {
-#if HOS_RUNTIME
-    // Not available in HOS runtime.
-    return nullptr;
-#else
     auto flags = nonSanitizerFlags;
 #if SANITIZER_BUILD
     // Sanitizer builds override the flags:
     flags = RTLD_LAZY | RTLD_NODELETE;
 #endif // SANITIZER_BUILD
     return std::unique_ptr<void, DllDeleter>{dlopen(dllName, flags)};
-#endif // HOS_RUNTIME
 }
 
 [[nodiscard]] auto initSafeRuntime()
@@ -2459,7 +2127,7 @@ static constexpr auto kREFERENCE_CHECKER_LIBRARY = nullptr;
 //!
 //! \param recorder Error recorder the checker reports through.
 //! \param serializedEngine Serialized engine to validate. Must not be null.
-//! \param engineSize Size of \p serializedEngine in bytes. Must be positive and representable as size_t.
+//! \param engineSize Size of \p serializedEngine in bytes. Must be positive.
 //! \param pluginBuildLibs Plugin libraries the engine was built against, loaded by the checker.
 //!
 //! \return The checker, or nullptr if the arguments are invalid or the checker library is unavailable.
@@ -2467,13 +2135,20 @@ std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsiste
     nvinfer2::safe::ISafeRecorder& recorder, void const* serializedEngine, int64_t const engineSize,
     std::vector<std::string> const& pluginBuildLibs) noexcept
 {
-    // The checker takes a size_t, which is narrower than int64_t on 32-bit targets. Round-tripping the cast
-    // rejects sizes that would truncate, which would otherwise validate only part of the engine.
-    if (serializedEngine == nullptr || engineSize <= 0
-        || static_cast<int64_t>(static_cast<size_t>(engineSize)) != engineSize)
+    if (serializedEngine == nullptr || engineSize <= 0)
     {
         return nullptr;
     }
+#if !defined(NV_INFER_PLUGIN_CHECKER_POINTER_COUNT_API)
+    // The legacy checker takes a size_t, which is narrower than int64_t on 32-bit targets. Round-tripping the cast
+    // rejects sizes that would truncate, which would otherwise validate only part of the engine.
+    if (static_cast<int64_t>(static_cast<size_t>(engineSize)) != engineSize)
+    {
+        sample::gLogWarning << "Skipping consistency checker: engine size " << engineSize
+                            << " is not representable as size_t on this target." << std::endl;
+        return nullptr;
+    }
+#endif
 
 #if !defined(_WIN32)
     if (hasSafeRuntime())
@@ -2484,8 +2159,14 @@ std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsiste
         if (auto const createFn
             = reinterpret_cast<CreateCheckerFn>(dlsym(kCONSISTENCY_CHECKER_LIBRARY.get(), "createConsistencyChecker")))
         {
-            if (nvinfer2::safe::consistency::IConsistencyChecker * checker{nullptr}; nvinfer2::safe::ErrorCode::kSUCCESS
-                == createFn(checker, recorder, serializedEngine, static_cast<size_t>(engineSize), pluginBuildLibs))
+            nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
+            std::vector<char const*> pluginBuildLibPaths;
+            pluginBuildLibPaths.reserve(pluginBuildLibs.size());
+            std::transform(pluginBuildLibs.begin(), pluginBuildLibs.end(), std::back_inserter(pluginBuildLibPaths),
+                [](std::string const& library) { return library.c_str(); });
+            auto const result = createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibPaths.data(),
+                static_cast<int64_t>(pluginBuildLibPaths.size()));
+            if (result == nvinfer2::safe::ErrorCode::kSUCCESS)
             {
                 return std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>{checker};
             }
@@ -2500,7 +2181,7 @@ std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsiste
 
 std::unique_ptr<nvinfer2::safe::reference::IReferenceChecker> createReferenceChecker(
     sample::SampleSafeRecorder& recorder, void const* serializedEngine, int64_t const engineSize,
-    EngineBlob const& checkerBlob, std::string const& remoteConfig) noexcept
+    EngineBlob const& checkerBlob, EngineBlob const& companionSo, std::string const& remoteConfig) noexcept
 {
     if (serializedEngine == nullptr || engineSize <= 0)
     {
@@ -2511,15 +2192,13 @@ std::unique_ptr<nvinfer2::safe::reference::IReferenceChecker> createReferenceChe
     if (hasSafeRuntime())
     {
         constexpr char symbolName[] = "createReferenceChecker";
-        using CreateCheckerFn = ErrorCode (*)(nvinfer2::safe::reference::IReferenceChecker*& checker,
-            sample::SampleSafeRecorder& recorder, void const* data, int64_t size, void const* checkerBlob,
-            int64_t checkerBlobSize, char const* remoteConfig);
+        using CreateCheckerFn = decltype(&nvinfer2::safe::reference::createReferenceChecker);
         if (auto const createFn
             = reinterpret_cast<CreateCheckerFn>(dlsym(kREFERENCE_CHECKER_LIBRARY.get(), symbolName)))
         {
             if (nvinfer2::safe::reference::IReferenceChecker * checker{nullptr}; ErrorCode::kSUCCESS
                 == createFn(checker, recorder, serializedEngine, engineSize, checkerBlob.data, checkerBlob.size,
-                    remoteConfig.c_str()))
+                    remoteConfig.c_str(), companionSo.data, companionSo.size))
             {
                 return std::unique_ptr<nvinfer2::safe::reference::IReferenceChecker>{checker};
             }
@@ -2577,7 +2256,7 @@ bool checkSafeEngine(
 }
 
 bool referenceCheckEngine(void const* serializedEngine, int64_t const engineSize, EngineBlob const& checkerBlob,
-    std::string const& remoteConfig)
+    EngineBlob const& companionSo, std::string const& remoteConfig)
 {
 #if !ENABLE_UNIFIED_BUILDER
     return false;
@@ -2596,7 +2275,7 @@ bool referenceCheckEngine(void const* serializedEngine, int64_t const engineSize
 
     sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
     std::unique_ptr<nvinfer2::safe::reference::IReferenceChecker> checker
-        = createReferenceChecker(recorder, serializedEngine, engineSize, checkerBlob, remoteConfig);
+        = createReferenceChecker(recorder, serializedEngine, engineSize, checkerBlob, companionSo, remoteConfig);
     if (checker == nullptr)
     {
         sample::gLogError << "Failed to create the Reference Checker." << std::endl;

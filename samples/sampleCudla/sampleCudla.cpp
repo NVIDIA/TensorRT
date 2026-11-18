@@ -422,6 +422,22 @@ int main(int argc, char** argv)
     sample::gLogger.reportTestStart(sampleTest);
 
 #if ENABLE_DLA
+    {
+        auto probe = std::unique_ptr<nvinfer1::IBuilder>(
+            nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+        if (!probe)
+        {
+            sample::gLogError << "Failed to create TensorRT builder for DLA probe." << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+        }
+        if (probe->getNbDLACores() == 0)
+        {
+            sample::gLogWarning << "No DLA cores detected on this platform; waiving sample_cudla." << std::endl;
+            sample::gLogger.reportTestEnd(sampleTest, sample::Logger::TestResult::kWAIVED);
+            return EXIT_SUCCESS;
+        }
+    }
+
     std::unique_ptr<nvinfer1::IHostMemory> mLoadable{nullptr}; //!< The DLA loadable.
     nvinfer1::Dims mInputDims;                                 //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims;                                //!< The dimensions of the output to the network.

@@ -254,8 +254,6 @@ inline void caughtError(std::exception const& e)
 //! Expands to the first argument from a variadic list.
 #define TRT_PLUGIN_DETAIL_FIRST(a, ...) a
 
-#if __cplusplus >= 202002L
-
 //! Expands to the second argument if present; otherwise the first argument.
 #define TRT_PLUGIN_DETAIL_SECOND_OR_FIRST(first, ...) TRT_PLUGIN_DETAIL_FIRST(__VA_ARGS__ __VA_OPT__(, ) first)
 
@@ -274,22 +272,6 @@ inline void caughtError(std::exception const& e)
             "PLUGIN_VALIDATE accepts at most one optional message argument");                                          \
         PLUGIN_VALIDATE_MSG(condition, TRT_PLUGIN_DETAIL_SECOND_OR_FIRST(#condition __VA_OPT__(, ) __VA_ARGS__));      \
     } while (0)
-
-#else // __cplusplus >= 202002L
-
-// C++17 fallback for the RTX embedded-plugins target, which is held at C++17 as a WAR for the
-// CUDA 13.4 cudafe++ ICE with C++20 (nvbugs/6203314). Uses arity dispatch to pick the right macro
-// form; the "<= 1 message arg" static_assert is only enforced in the C++20 path.
-// On MSVC, nested macros don't expand correctly without some help, so use TRT_PLUGIN_DETAIL_EXPAND.
-#define TRT_PLUGIN_DETAIL_EXPAND(x) x
-#define TRT_PLUGIN_DETAIL_GET_VALIDATE(_1, _2, NAME, ...) NAME
-#define PLUGIN_VALIDATE(...)                                                                                           \
-    TRT_PLUGIN_DETAIL_EXPAND(                                                                                          \
-        TRT_PLUGIN_DETAIL_GET_VALIDATE(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__))
-
-#define PLUGIN_VALIDATE_DEFAULT(condition) PLUGIN_VALIDATE_MSG(condition, #condition)
-
-#endif // __cplusplus >= 202002L
 
 //! Compile-time guard: rejects conditions that decay to \c char \c const*.
 //! The bug this catches is \c PLUGIN_VALIDATE("some message") (or with \c .c_str()), where the

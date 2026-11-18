@@ -81,7 +81,6 @@ TEST(ArgsToArgumentsMap, ArgPositionRecorded)
     EXPECT_EQ(args.find("--fp16")->second.second, 2);
 }
 
-#if !TRT_WINML
 TEST(SystemOptions, DLAWorkspaceAllocationStrategyDefaultsToDefault)
 {
     SystemOptions const options;
@@ -228,7 +227,6 @@ TEST(BuildOptionsParse, LoadCheckerBlobRequiresReference)
     EXPECT_THROW(static_cast<void>(parseBuildOptions(av)), std::invalid_argument);
 }
 
-#if !HOS_WIN_BUILDER
 //! A remote target is only meaningful for a safe build, which is the same build the reference checker
 //! needs, so the two flags cannot be separated.
 TEST(BuildOptionsParse, RemoteConfigRequiresSafe)
@@ -236,7 +234,6 @@ TEST(BuildOptionsParse, RemoteConfigRequiresSafe)
     TestArgVec av{"--reference", "--remoteConfig=ssh://host:22"};
     EXPECT_THROW(static_cast<void>(parseBuildOptions(av)), std::invalid_argument);
 }
-#endif // !HOS_WIN_BUILDER
 
 //! --reference is off unless asked for, so a safe build that does not want it pays nothing.
 TEST(BuildOptionsParse, ReferenceDefaultsOff)
@@ -244,4 +241,57 @@ TEST(BuildOptionsParse, ReferenceDefaultsOff)
     TestArgVec av{"--safe"};
     EXPECT_FALSE(parseBuildOptions(av).reference);
 }
-#endif // !TRT_WINML
+
+TEST(BuildOptionsParse, IndependentWeightLayouts)
+{
+    TestArgVec av{"--independentWeightLayouts"};
+    EXPECT_TRUE(parseBuildOptions(av).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsDefaultsOff)
+{
+    TestArgVec av{};
+    EXPECT_FALSE(parseBuildOptions(av).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsSafetyDefaultsOn)
+{
+    TestArgVec av{"--safe"};
+    EXPECT_TRUE(parseBuildOptions(av).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsSafetyExplicitOn)
+{
+    TestArgVec av{"--safe", "--independentWeightLayouts"};
+    EXPECT_TRUE(parseBuildOptions(av).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsExplicitValues)
+{
+    TestArgVec enabled{"--independentWeightLayouts=1"};
+    EXPECT_TRUE(parseBuildOptions(enabled).independentWeightLayouts);
+    TestArgVec disabled{"--independentWeightLayouts=0"};
+    EXPECT_FALSE(parseBuildOptions(disabled).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsOverridesSafetyDefault)
+{
+    TestArgVec enabled{"--safe", "--independentWeightLayouts=1"};
+    EXPECT_TRUE(parseBuildOptions(enabled).independentWeightLayouts);
+    TestArgVec disabled{"--safe", "--independentWeightLayouts=0"};
+    EXPECT_FALSE(parseBuildOptions(disabled).independentWeightLayouts);
+    TestArgVec reversed{"--independentWeightLayouts=0", "--safe"};
+    EXPECT_FALSE(parseBuildOptions(reversed).independentWeightLayouts);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsRejectsInvalidValue)
+{
+    TestArgVec av{"--independentWeightLayouts=2"};
+    EXPECT_THROW(static_cast<void>(parseBuildOptions(av)), std::invalid_argument);
+}
+
+TEST(BuildOptionsParse, IndependentWeightLayoutsRepeatedUsesFirstValue)
+{
+    TestArgVec av{"--safe", "--independentWeightLayouts=0", "--independentWeightLayouts=1"};
+    EXPECT_FALSE(parseBuildOptions(av).independentWeightLayouts);
+}

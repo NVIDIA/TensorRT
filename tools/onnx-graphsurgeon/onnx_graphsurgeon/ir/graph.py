@@ -99,6 +99,7 @@ class Graph(object):
         outputs: Sequence[Tensor] = None,
         name=None,
         doc_string=None,
+        model_doc_string=None,
         opset=None,
         import_domains=None,
         producer_name: str = None,
@@ -113,6 +114,7 @@ class Graph(object):
             outputs (Sequence[Tensor]): A list of graph output Tensors.
             name (str): The name of the graph. Defaults to "onnx_graphsurgeon_graph".
             doc_string (str): A doc_string for the graph. Defaults to "".
+            model_doc_string (str): A doc_string for the model that this graph belongs to. Defaults to "".
             opset (int): The ONNX opset to use when exporting this graph.
             producer_name (str): The name of the tool used to generate the model. Defaults to "".
             producer_version (str): The version of the generating tool. Defaults to "".
@@ -126,6 +128,7 @@ class Graph(object):
         self.__name__ = self.name
 
         self.doc_string = misc.default_value(doc_string, "")
+        self.model_doc_string = misc.default_value(model_doc_string, "")
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
         self.producer_name = misc.default_value(producer_name, "")
         self.producer_version = misc.default_value(producer_version, "")
@@ -1535,6 +1538,7 @@ class Graph(object):
             outputs=new_graph_outputs,
             name=copy.copy(self.name),
             doc_string=copy.copy(self.doc_string),
+            model_doc_string=copy.copy(self.model_doc_string),
             opset=copy.copy(self.opset),
             import_domains=self.import_domains,
             functions=copy.copy(self.functions),

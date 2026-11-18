@@ -33,3 +33,21 @@ set(CMAKE_CXX_COMPILER_FORCED TRUE)
 if(NOT DEFINED CUDAToolkit_ROOT)
     set(CUDAToolkit_ROOT /usr/local/cuda CACHE STRING "CUDA ROOT dir")
 endif()
+
+# Use the selected toolkit for native CUDA builds unless a compiler was supplied.
+if(NOT CMAKE_CUDA_COMPILER AND "$ENV{CUDACXX}" STREQUAL "")
+    set(CMAKE_CUDA_COMPILER "${CUDAToolkit_ROOT}/bin/nvcc")
+endif()
+
+# CUDA 13.5 selects its platform through include/. nvcc needs the same target
+# before project() detects the compiler. Keep caller flags and avoid duplicates
+# when CMake reloads the toolchain for its compiler checks.
+file(REAL_PATH "${CUDAToolkit_ROOT}/include" _trt_cuda_include)
+get_filename_component(_trt_cuda_target "${_trt_cuda_include}" DIRECTORY)
+get_filename_component(_trt_cuda_target "${_trt_cuda_target}" NAME)
+if(NOT DEFINED CMAKE_CUDA_FLAGS)
+    set(CMAKE_CUDA_FLAGS "$ENV{CUDAFLAGS} ${CMAKE_CUDA_FLAGS_INIT}")
+endif()
+if(NOT CMAKE_CUDA_FLAGS MATCHES "(^|[ \t])(--target-directory|-target-dir)(=|[ \t])")
+    string(APPEND CMAKE_CUDA_FLAGS " --target-directory=${_trt_cuda_target}")
+endif()

@@ -171,6 +171,31 @@ class Decoder(BaseCustomImpl):
 
     polygraphy_registered = {}
 
+    @staticmethod
+    def _decode(func, dct, type_name):
+        # Registered decoders index into `dct` for the fields they expect. On malformed JSON (a
+        # missing or wrong-typed field) that raises a raw KeyError/TypeError/etc. from inside
+        # json.loads(object_pairs_hook=...), so it escapes from_json()/load() before check_decoded
+        # runs. Those methods document PolygraphyException for undecodable JSON, so translate any
+        # such decode-time error to the documented exception.
+        from polygraphy.exception import (
+            PolygraphyException,
+            PolygraphyInternalException,
+        )
+
+        try:
+            return func(dct)
+        except (PolygraphyException, PolygraphyInternalException):
+            # PolygraphyException is the documented failure. PolygraphyInternalException flags a bug
+            # in Polygraphy itself and is intentionally outside the PolygraphyException hierarchy, so
+            # it must not be masked as malformed input. Let both propagate unchanged.
+            raise
+        except Exception as err:
+            G_LOGGER.critical(
+                f"Could not decode serialized type: {type_name}. The provided JSON may be "
+                f"corrupted or malformed.\nNote: Error was: {type(err).__name__}: {err}"
+            )
+
     def __call__(self, pairs):
         # The encoder will insert special key-value pairs into dictionaries encoded from
         # custom types. If we find one, then we know to decode using the corresponding custom
@@ -186,7 +211,7 @@ class Decoder(BaseCustomImpl):
                 and isinstance(dct[type_str], str)
                 and dct[type_str] == constants.LEGACY_TYPE_MARKER
             ):  # Found a custom type!
-                return func(dct)
+                return self._decode(func, dct, type_str)
 
         type_name = dct.get(constants.TYPE_MARKER)
         if type_name is not None:
@@ -198,7 +223,7 @@ class Decoder(BaseCustomImpl):
                 G_LOGGER.critical(
                     f"Could not decode serialized type: {user_type_name}. This could be because a required module is missing. "
                 )
-            return self.polygraphy_registered[type_name](dct)
+            return self._decode(self.polygraphy_registered[type_name], dct, type_name)
 
         return dct
 

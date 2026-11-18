@@ -95,7 +95,7 @@ def download(data_dir, yaml_path, retries, overwrite=False):
         session.mount("https://", HTTPAdapter(max_retries=retries))
         try:
             r = session.get(url, stream=True, timeout=60)
-            
+
             if r.status_code == 200:
                 logger.info("Connecting to %s is successful.", url)
 
@@ -112,7 +112,7 @@ def download(data_dir, yaml_path, retries, overwrite=False):
             else:
                 logger.info("Failed to connect to %s with status code: %s.", url, r.status_code)
                 return False
-        
+
         except requests.exceptions.ConnectionError as e:
             logger.debug("Connection failed after retries:", e)
         except requests.exceptions.Timeout as e:
@@ -150,7 +150,7 @@ def _parseArgs():
     parser.add_argument(
         "-d",
         "--data",
-        help="Specify the data directory, data will be downloaded to there. $TRT_DATA_DIR will be overwritten by this argument.",
+        help="Specify the data directory, data will be downloaded to there. $TRT_DATADIR will be overwritten by this argument.",
     )
     parser.add_argument(
         "-f",
@@ -180,9 +180,9 @@ def _parseArgs():
         default=10,
     )
     args, _ = parser.parse_known_args()
-    data = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
+    data = os.environ.get("TRT_DATADIR", None) if args.data is None else args.data
     if data is None:
-        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATADIR.")
 
     return data, args
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     main()
 
 
-TRT_DATA_DIR = None
+TRT_DATADIR = None
 
 
 def getFilePath(path):
@@ -239,20 +239,20 @@ def getFilePath(path):
 
     It only works when the sample doesn't have any other command line argument.
     """
-    global TRT_DATA_DIR
-    if not TRT_DATA_DIR:
+    global TRT_DATADIR
+    if not TRT_DATADIR:
         parser = argparse.ArgumentParser(description="Helper of data file download tool")
         parser.add_argument(
             "-d",
             "--data",
-            help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.",
+            help="Specify the data directory where it is saved in. $TRT_DATADIR will be overwritten by this argument.",
         )
         args, _ = parser.parse_known_args()
-        TRT_DATA_DIR = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
-    if TRT_DATA_DIR is None:
-        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
+        TRT_DATADIR = os.environ.get("TRT_DATADIR", None) if args.data is None else args.data
+    if TRT_DATADIR is None:
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATADIR.")
 
-    fullpath = os.path.join(TRT_DATA_DIR, path)
+    fullpath = os.path.join(TRT_DATADIR, path)
     if not os.path.exists(fullpath):
         raise ValueError("Data file %s doesn't exist!" % fullpath)
 

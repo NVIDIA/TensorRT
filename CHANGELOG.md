@@ -1,14 +1,32 @@
 # TensorRT OSS Release Changelog
 
+## 11.5 GA - 2026-11-18
+- General
+  - Updated default CUDA version to 13.5.
+
+- Parsers
+  - Added support for ONNX opset 25 and updated the supported ONNX release to 1.22.0.
+  - Updated the CMake build to locate CUDA with `find_package(CUDAToolkit)`; use `-DCUDAToolkit_ROOT` to point at a non-default CUDA install instead of `-DCUDA_TOOLKIT_ROOT_DIR`.
+  - Added support for Squeeze when `axis` input is omitted.
+
+- Plugins
+  - Removed the C++17 fallback for the `PLUGIN_VALIDATE` macros - plugin sources now require C++20.
+
+- Samples
+  - Added `--independentWeightLayouts` option to `trtexec`.
+  - Added `--saveEngineSo` and `--loadEngineSo` options to `trtexec` for safety engines (requires `--safe`).
+  - Updated the safety samples to use the CPU-only builder flag.
+
+- Tools
+  - Bumped Polygraphy version to v0.53.9.
+  - Added `model_doc_string` to onnx-graphsurgeon `Graph` to forward the ONNX `ModelProto` `doc_string` on export.
+
 ## 11.4 GA - 2026-10-09
 - Parsers
   - Added `IRefitterObserver` class and `IParser::setRefitObserver` to better handle refittable weights when parsing.
 
 - Plugins
   - Added various C++20 updates to plugin source code.
-
-- Samples
-  - Moved samples/common files only relevant to trtexec to samples/trtexecCommon.
 
 
 ## 11.3 GA - 2026-09-22

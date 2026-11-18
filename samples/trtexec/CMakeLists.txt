@@ -44,7 +44,6 @@ installLibraries(
     TARGETS trtexec
     OPTIONAL
     COMPONENT external
-    EXPORT TensorRT
 )
 
 # When statically linked, trtexec requires the plugins library.

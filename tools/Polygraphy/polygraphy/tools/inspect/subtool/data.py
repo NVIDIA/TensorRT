@@ -85,9 +85,28 @@ class Data(Tool):
             linewidth=sys.maxsize if args.line_width == -1 else args.line_width,
         )
 
+        def invalid_data(reason):
+            G_LOGGER.critical(
+                f"Could not interpret the contents of: {args.path} as Polygraphy data.\n"
+                f"Note: {reason}\n"
+                f"Expected either run results, accuracy results, or a mapping (or sequence of mappings) "
+                f"of tensor name to array, as saved by '--save-inputs'/'--save-outputs' from 'polygraphy run'."
+            )
+
         def meta_from_iter_result(iter_result):
+            # JSON that Polygraphy did not write can deserialize to anything, so validate the
+            # structure here instead of faulting on a missing attribute further down the display path.
+            if not hasattr(iter_result, "items"):
+                invalid_data(
+                    f"Found an entry of type '{type(iter_result).__name__}' where a mapping of tensor name to array was expected."
+                )
+
             meta = TensorMetadata()
             for name, arr in iter_result.items():
+                if not util.array.is_numpy(arr) and not util.array.is_torch(arr):
+                    invalid_data(
+                        f"The value for tensor: '{name}' is of type '{type(arr).__name__}', but expected an array."
+                    )
                 meta.add(name, dtype=arr.dtype, shape=arr.shape)
             return meta
 

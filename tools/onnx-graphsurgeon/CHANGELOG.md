@@ -5,10 +5,19 @@ Dates are in YYYY-MM-DD format.
 
 ## vNext
 
+### Added
+- Added `model_doc_string` field to `Graph` to forward the `doc_string` of the ONNX `ModelProto` during export.
+
 ### Fixed
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.
+- Fixed an unbounded memory allocation when accessing the `values` of a sparse `Constant` whose `SparseTensorProto`
+  declares a very large dense shape. Densifying such a tensor now raises `OnnxGraphSurgeonResourceError` instead of
+  attempting to allocate the full dense array.
+- Report an `OnnxGraphSurgeonException` instead of a `ValueError` when importing a sparse `Constant` whose
+  `SparseTensorProto` declares a negative dense dimension.
+
 
 ## v0.6.2 (2026-05-21)
 

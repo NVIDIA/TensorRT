@@ -195,7 +195,7 @@ std::string BigInt::toString() const
         tmp = q;
     }
 
-    std::reverse(result.begin(), result.end());
+    std::ranges::reverse(result);
     return result;
 }
 

@@ -17,11 +17,11 @@ downloader.py -d /path/to/data/dir -f /path/to/download.yml
 The data directory i.e. `/path/to/data/dir` is a centralized directory
 to store data of all samples. So you can use same one for all samples.
 It can be provided by either `-d /path/to/data/dir` or the environment variable
-`$TRT_DATA_DIR`, where the `-d` has higher priority.
+`$TRT_DATADIR`, where the `-d` has higher priority.
 
-Remember to use `-d` or `$TRT_DATA_DIR` when running sample scripts
+Remember to use `-d` or `$TRT_DATADIR` when running sample scripts
 that rely on downloaded data. Scripts will abort if no downloaded data
-is found in data directory. (`$TRT_DATA_DIR` will be much simplier.)
+is found in data directory. (`$TRT_DATADIR` will be much simplier.)
 An error will be thrown if the data is not properly setup.
 
 The `download.yml` file is owned by the sample which describes the sample
@@ -35,19 +35,19 @@ the sample code, and obtain the path to the data file by passing the `path`
 as specified in the associated `download.yml` file of the sample.
 
 ```py
-TRT_DATA_DIR = None
+TRT_DATADIR = None
 
 def getFilePath(path):
-    global TRT_DATA_DIR
-    if not TRT_DATA_DIR:
+    global TRT_DATADIR
+    if not TRT_DATADIR:
         parser = argparse.ArgumentParser(description="Convert PackNet to ONNX")
-        parser.add_argument('-d', '--data', help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
+        parser.add_argument('-d', '--data', help="Specify the data directory where it is saved in. $TRT_DATADIR will be overwritten by this argument.")
         args, _ = parser.parse_known_args()
-        TRT_DATA_DIR = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
-    if TRT_DATA_DIR is None:
-        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
+        TRT_DATADIR = os.environ.get('TRT_DATADIR', None) if args.data is None else args.data
+    if TRT_DATADIR is None:
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATADIR.")
 
-    fullpath = os.path.join(TRT_DATA_DIR, path)
+    fullpath = os.path.join(TRT_DATADIR, path)
     if not os.path.exists(fullpath):
         raise ValueError("Data file %s doesn't exist!" % fullpath)
 

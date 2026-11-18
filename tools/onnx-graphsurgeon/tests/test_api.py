@@ -37,3 +37,12 @@ class TestApi(object):
             onnx_model = gs.export_onnx(self.imported_graph)
             assert onnx_model
             assert import_onnx(onnx_model) == self.imported_graph
+
+    def test_model_doc_string_round_trip(self):
+        onnx_model = identity_model().load()
+        onnx_model.doc_string = "model doc string"
+        graph = gs.import_onnx(onnx_model)
+        assert graph.model_doc_string == "model doc string"
+
+        exported_model = gs.export_onnx(graph)
+        assert exported_model.doc_string == "model doc string"

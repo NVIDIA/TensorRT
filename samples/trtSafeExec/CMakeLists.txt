@@ -36,5 +36,4 @@ installLibraries(
     TARGETS trtexec_safe
     OPTIONAL
     COMPONENT external
-    EXPORT TensorRT
 )

@@ -247,6 +247,22 @@ public:
     virtual DataType type() const noexcept = 0;
 };
 
+//! \brief Implementation of ISafeSerializedNetworkArtifacts.
+//!
+//! No getter transfers ownership. Each returns memory owned by this object, which the caller must not free
+//! and must not use after this object is destroyed.
+class VSafeSerializedNetworkArtifacts : public VRoot
+{
+public:
+    //! \return The serialized safety engine data artifact. Never nullptr for a successful build.
+    TRT_NODISCARD virtual nvinfer1::IHostMemory const* getSerializedNetwork() const noexcept = 0;
+
+    //! \return The companion .so for the serialized safety network. Never nullptr.
+    TRT_NODISCARD virtual nvinfer1::IHostMemory const* getCompanionSo() const noexcept = 0;
+
+    //! \return The checker blob, or nullptr where none was requested or none was produced.
+    TRT_NODISCARD virtual nvinfer1::IHostMemory const* getCheckerBlob() const noexcept = 0;
+};
 
 class VDimensionExpr : public VRoot
 {
@@ -1388,6 +1404,20 @@ public:
         INetworkDefinition& network, IBuilderConfig& config, IStreamWriter& writer) noexcept = 0;
     virtual nvinfer1::IHostMemory* buildSerializedNetworkWithKernelText(
         INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept
+        = 0;
+    //! \brief Implementation of IBuilder::buildSerializedSafeNetwork().
+    //!
+    //! Declared at the end of the vtable: new entries must not shift the slots above.
+    //!
+    //! \param network Network definition.
+    //! \param config Builder configuration. The engine capability must be EngineCapability::kSAFETY.
+    //! \param emitCheckerBlob Whether to emit the checker blob (generated kernel sources and
+    //!        reference-check metadata).
+    //!
+    //! \return The build artifacts, or nullptr if the build fails. The caller owns the returned object and
+    //!         must destroy it with operator delete.
+    TRT_NODISCARD virtual nvinfer1::ISafeSerializedNetworkArtifacts* buildSerializedSafeNetwork(
+        INetworkDefinition& network, IBuilderConfig& config, bool emitCheckerBlob) noexcept
         = 0;
 };
 

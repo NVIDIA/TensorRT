@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -130,10 +130,10 @@ constexpr const char* descr = R"trtdoc(
     :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
 )trtdoc";
 
-constexpr const char* get_output_data_type = R"trtdoc(
+constexpr char const* get_output_data_type = R"trtdoc(
 
     Return the DataType of the plugin output at the requested index.
-    The default behavior should be to return the type of the first input, or `DataType::kFLOAT` if the layer has no inputs.
+    The default behavior should be to return the type of the first input, or `DataType.FLOAT` if the layer has no inputs.
     The returned data type must have a format that is supported by the plugin.
 
     :arg index: Index of the output for which data type is requested.
@@ -246,10 +246,10 @@ constexpr const char* get_output_dimensions = R"trtdoc(
     :returns: Expression for the output dimensions at the given `output_index`.
 )trtdoc";
 
-constexpr const char* get_output_data_type = R"trtdoc(
+constexpr char const* get_output_data_type = R"trtdoc(
 
     Return the `DataType` of the plugin output at the requested index.
-    The default behavior should be to return the type of the first input, or `DataType::kFLOAT` if the layer has no inputs.
+    The default behavior should be to return the type of the first input, or `DataType.FLOAT` if the layer has no inputs.
     The returned data type must have a format that is supported by the plugin.
 
     :arg index: Index of the output for which the data type is requested.
@@ -676,8 +676,8 @@ constexpr const char* descr = R"trtdoc(
     Interface for plugins to define custom resources that could be shared through the plugin registry
 )trtdoc";
 
-constexpr const char* release = R"trtdoc(
-    This will only be called for IPluginResource objects that were produced from IPluginResource::clone().
+constexpr char const* release = R"trtdoc(
+    This will only be called for IPluginResource objects that were produced from IPluginResource.clone().
 
     The IPluginResource object on which release() is called must still be in a clone-able state
     after release() returns.
@@ -728,13 +728,13 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IDimensionExprDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An `IDimensionExpr` represents an integer expression constructed from constants, input dimensions, and binary operations.
 
-    These expressions are can be used in overrides of `IPluginV2DynamicExt::get_output_dimensions()` to define output dimensions in terms of input dimensions.
+    These expressions can be used in overrides of :meth:`IPluginV2DynamicExt.get_output_dimensions` or :meth:`IPluginV3OneBuild.get_output_shapes` to define output dimensions in terms of input dimensions.
 )trtdoc";
 
-constexpr const char* is_constant = R"trtdoc(
+constexpr char const* is_constant = R"trtdoc(
     Return true if expression is a build-time constant.
 )trtdoc";
 
@@ -752,15 +752,15 @@ constexpr const char* is_size_tensor = R"trtdoc(
 
 namespace IExprBuilderDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Object for constructing `IDimensionExpr`.
 
-    There is no public way to construct an `IExprBuilder`. It appears as an argument to method `IPluginV2DynamicExt::get_output_dimensions()`. Overrides of that method can use that `IExprBuilder` argument to construct expressions that define output dimensions in terms of input dimensions.
+    There is no public way to construct an `IExprBuilder`. It appears as an argument to :meth:`IPluginV2DynamicExt.get_output_dimensions` and :meth:`IPluginV3OneBuild.get_output_shapes`. Overrides of those methods can use that `IExprBuilder` argument to construct expressions that define output dimensions in terms of input dimensions.
 
-    Clients should assume that any values constructed by the `IExprBuilder` are destroyed after `IPluginV2DynamicExt::get_output_dimensions()` returns.
+    Clients should assume that any values constructed by the `IExprBuilder` are destroyed after :meth:`IPluginV2DynamicExt.get_output_dimensions` or :meth:`IPluginV3OneBuild.get_output_shapes` returns.
 )trtdoc";
 
-constexpr const char* constant = R"trtdoc(
+constexpr char const* constant = R"trtdoc(
     Return a IDimensionExpr for the given value.
 )trtdoc";
 

@@ -564,7 +564,7 @@ constexpr char const* descr = R"trtdoc(
     A gather layer in an :class:`INetworkDefinition` .
 
     :ivar axis: :class:`int` The non-batch dimension axis to gather on. The axis must be less than the number of non-batch dimensions in the data input.
-    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. For `GatherMode.DEFAULT`, it can be 0 or 1. For `GatherMode::kND`, it can be between 0 and one less than rank(data). For `GatherMode::kELEMENT`, it must be 0.
+    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. For `GatherMode.DEFAULT`, it can be 0 or 1. For `GatherMode.ND`, it can be between 0 and one less than rank(data). For `GatherMode.ELEMENT`, it must be 0.
     :ivar mode: :class:`GatherMode` The gather mode.
 )trtdoc";
 } // namespace IGatherLayerDoc
@@ -1663,15 +1663,15 @@ constexpr char const* descr = R"trtdoc(
     This layer performs dynamic block quantization of its input tensor and outputs the quantized data and the computed block scale-factors.
     The size of the blocked axis must be divisible by the block size.
 
-    The first input (index 0) is the tensor to be quantized. Its data type must be one of DataType::kFLOAT,
-    DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
+    The first input (index 0) is the tensor to be quantized. Its data type must be one of DataType.FLOAT,
+    DataType.HALF, or DataType.BF16. Currently only 2D and 3D inputs are supported.
 
     The second input (index 1) is the double quantization scale factor. It is a scalar scale factor used to quantize the computed block scales-factors.
 
     :ivar axis: :class:`int` The axis that is sliced into blocks. The axis must be the last dimension or the second to last dimension.
     :ivar block_size: :class:`int` The number of elements that are quantized using a shared scale factor. Supports block sizes of 16 with NVFP4 quantization and 32 with MXFP8 quantization.
-    :ivar output_type: :class:`DataType` The data type of the quantized output tensor, must be either DataType::kFP4 (NVFP4 quantization) or DataType::kFP8 (MXFP8 quantization).
-    :ivar scale_type: :class:`DataType` The data type of the scale factor used for quantizing the input data, must be DataType::kFP8 (NVFP4 quantization) or DataType::kE8M0 (MXFP8 quantization).
+    :ivar output_type: :class:`DataType` The data type of the quantized output tensor, must be either DataType.FP4 (NVFP4 quantization) or DataType.FP8 (MXFP8 quantization).
+    :ivar scale_type: :class:`DataType` The data type of the scale factor used for quantizing the input data, must be DataType.FP8 (NVFP4 quantization) or DataType.E8M0 (MXFP8 quantization).
 )trtdoc";
 } // namespace IDynamicQuantizeLayerDoc
 
@@ -2036,7 +2036,7 @@ constexpr char const* descr = R"trtdoc(
     An attention in a :class:`INetworkDefinition` .
 
     :ivar mask: :class:`ITensor` The mask tensor for attention. Cannot be set together with causal attention.
-    :ivar norm_op: :class:`AttentionNormalizationOp` The normalization operation for the attention layer. Default to AttentionNormalizationOp::kSOFTMAX.
+    :ivar norm_op: :class:`AttentionNormalizationOp` The normalization operation for the attention layer. Default to AttentionNormalizationOp.SOFTMAX.
     :ivar decomposable: :class:`bool` Specifies whether decomposition into primitive ops is allowed when no attention fusion is supported. Default to False.
     :ivar causal: :class:`bool` (Deprecated) Specifies whether the attention will run a causal inference. Cannot be used together with mask. Superseded by causal_kind.
     :ivar causal_kind: :class:`CausalMaskKind` The causal mask alignment orientation for the attention. Cannot be used together with mask. Default to CausalMaskKind.NONE.
@@ -3029,13 +3029,25 @@ constexpr char const* add_normalization_v2 = R"trtdoc(
 )trtdoc";
 
 constexpr char const* add_squeeze = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 11.4. Superseded by add_squeeze_v2.
+
+    Adds a Squeeze layer to the network.
+    See :class:`ISqueezeLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg axes: The tensor containing axes to remove. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+
+    :returns: the new Squeeze layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_squeeze_v2 = R"trtdoc(
     Adds a Squeeze layer with an optional axes input to the network.
     See :class:`ISqueezeLayer` for more information.
 
-    With axes, removes the specified unit dimensions. Without axes, removes every dimension of the
+    With axes, behaves like :func:`add_squeeze`. Without axes, removes every dimension of the
     input whose size is statically 1 in the network definition. Each dynamic dimension is
     retained and must not be 1 at runtime, because removing it would change the output rank,
-    which is fixed at definition time. Zero-sized dimensions are retained, so empty tensors are supported.
+    which is fixed at definition time.
 
     :arg input: The input tensor to the layer.
     :arg axes: The tensor containing axes to remove, or :class:`None` to remove all unit

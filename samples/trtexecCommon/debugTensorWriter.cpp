@@ -23,11 +23,15 @@
 #if CUDA_VERSION >= 11060
 #include <cuda_fp8.h>
 #endif
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
 #include <cuda_fp4.h>
 #endif
 #include <cuda_runtime_api.h>
 #include <numeric>
+#include <string_view>
+
+using namespace std::string_view_literals;
+
 namespace sample
 {
 
@@ -74,7 +78,7 @@ private:
     StorageType mRep{};
 };
 
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
 using Fp4 = __nv_fp4_e2m1;
 
 class Fp4x2
@@ -107,7 +111,7 @@ template <typename T>
 class DataIterator
 {
 public:
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
     using value_type
         = std::conditional_t<std::is_same_v<T, Int4x2>, Int4, std::conditional_t<std::is_same_v<T, Fp4x2>, Fp4, T>>;
 #else
@@ -129,7 +133,7 @@ public:
             Int4x2 packed(mData[mIndex / 2]);
             return packed.element(mIndex % 2);
         }
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
         else if constexpr (std::is_same_v<T, Fp4x2>)
         {
             // For Fp4x2, each byte contains two 4-bit floating point numbers
@@ -207,7 +211,7 @@ static constexpr bool isFloatingPoint
 #if CUDA_VERSION >= 11060
     || std::is_same_v<T, __nv_fp8_e4m3>
 #endif
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
     || std::is_same_v<T, Fp4> || std::is_same_v<T, Fp4x2>
 #endif
     ;
@@ -494,7 +498,7 @@ std::string writeStringFile(void const* addr_host, nvinfer1::DataType type, nvin
         writeTensorString(static_cast<uint8_t const*>(addr_host), shape, tensorName, fileName);
         break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
         writeTensorString(static_cast<Fp4x2 const*>(addr_host), shape, tensorName, fileName);
         break;
 #else
@@ -569,7 +573,7 @@ DebugTensorWriter::DebugTensorWriter(std::unordered_map<std::string, std::string
     , mCmdline(cmdline)
 {
     // Create a summary file if "summary" format is requested
-    if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "summary") != mDebugTensorFormats.end())
+    if (std::ranges::find(mDebugTensorFormats, "summary"sv) != mDebugTensorFormats.end())
     {
         mSummaryFileName = "tensor_summary.json";
         mSummaryFile.open(mSummaryFileName, std::ios::out);
@@ -653,7 +657,7 @@ void DebugTensorWriter::writeSummary(std::string_view name, nvinfer1::Dims const
     case nvinfer1::DataType::kINT64: processTensorSummary<int64_t>(addr_host, volume, mSummaryFile); break;
     case nvinfer1::DataType::kUINT8: processTensorSummary<uint8_t>(addr_host, volume, mSummaryFile); break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
         processTensorSummary<Fp4x2>(addr_host, volume, mSummaryFile);
 #else
         sample::gLogWarning << "Unsupported data type kFP4 for tensor '" << name
@@ -803,7 +807,7 @@ std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t v
     case nvinfer1::DataType::kINT64: dtype = "<i8"; break;
     case nvinfer1::DataType::kUINT8: dtype = "|u1"; break;
     case nvinfer1::DataType::kFP4:
-#if CUDA_VERSION >= 12070 && !HOS_RUNTIME
+#if CUDA_VERSION >= 12070
         floatBuffer = convertBufferTo<float>(static_cast<Fp4x2 const*>(addr_host), volume);
         convertToFloat(floatBuffer);
 #else
@@ -884,7 +888,7 @@ bool DebugTensorWriter::processDebugTensor(void const* addr, nvinfer1::TensorLoc
     ss << std::setw(4) << std::setfill('0') << mTensorIndex << "_";
     std::string prefix = ss.str();
 
-    if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "raw") != mDebugTensorFormats.end())
+    if (std::ranges::find(mDebugTensorFormats, "raw"sv) != mDebugTensorFormats.end())
     {
         rawFileName = genFilenameSafeString(prefix + name + ".raw");
         sample::gLogVerbose << "Writing debug tensor '" << name << "' to raw file '" << rawFileName << "'" << std::endl;
@@ -894,18 +898,17 @@ bool DebugTensorWriter::processDebugTensor(void const* addr, nvinfer1::TensorLoc
         f.close();
     }
 
-    if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "numpy") != mDebugTensorFormats.end())
+    if (std::ranges::find(mDebugTensorFormats, "numpy"sv) != mDebugTensorFormats.end())
     {
         numpyFileName = writeNumpy(type, addrHost, volume, shape, name, prefix);
     }
 
-    if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "string") != mDebugTensorFormats.end())
+    if (std::ranges::find(mDebugTensorFormats, "string"sv) != mDebugTensorFormats.end())
     {
         stringFileName = writeStringFile(addrHost, type, shape, name, prefix);
     }
 
-    if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "summary") != mDebugTensorFormats.end()
-        && mSummaryFile.is_open())
+    if (std::ranges::find(mDebugTensorFormats, "summary"sv) != mDebugTensorFormats.end() && mSummaryFile.is_open())
     {
         writeSummary(name, shape, type, volume, addrHost, assignedFileName, numpyFileName, stringFileName, rawFileName);
         mSummaryFile.flush();

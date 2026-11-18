@@ -87,6 +87,14 @@ class TestBF16SparsityCheck:
 
     @STORAGE
     @LAYOUTS
+    def test_negative_zero_counts_as_zero(self, dims, axis, use_int32_data):
+        values = make_2_4_sparse(dims, axis)
+        values[values == 0] = -0.0
+        tensor = make_bf16_tensor(values, dims, use_int32_data)
+        assert process_tensor(PruneInfo("w", axis), tensor, check=True) is True
+
+    @STORAGE
+    @LAYOUTS
     def test_one_zero_per_group_is_not_sparse(self, dims, axis, use_int32_data):
         values = make_2_4_sparse(dims, axis)
         # Restore one of the two zeros in the last group only.

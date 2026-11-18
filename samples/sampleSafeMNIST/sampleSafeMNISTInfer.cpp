@@ -20,7 +20,7 @@
 //!
 //! It uses the prebuilt TensorRT engine to run inference on an input image of a digit.
 //! It can be run with the following command line:
-//! Command: ./sample_mnist_safe_infer
+//! Command: ./sample_mnist_safe_infer [-h or --help] [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
 
 #include "NvInferSafeRuntime.h"
 #include "safeCommon.h"
@@ -46,10 +46,21 @@ namespace
 {
 
 //!
-//! \brief Locate path to file by its filename. Will walk back MAX_DEPTH dirs from CWD to check for such a file path.
+//! \brief Locate path to file by its filename. Checks the user-provided data directories first, then walks back
+//! MAX_DEPTH dirs from CWD to check for such a file path in the default data directories.
 //!
-std::string locateFile(std::string const& fileName, nvinfer2::safe::ISafeRecorder& recorder)
+std::string locateFile(
+    std::string const& fileName, std::vector<std::string> const& dataDirs, nvinfer2::safe::ISafeRecorder& recorder)
 {
+    for (auto const& dir : dataDirs)
+    {
+        std::string const file{dir + fileName};
+        if (std::ifstream{file}.is_open())
+        {
+            return file;
+        }
+    }
+
     constexpr uint32_t MAX_DEPTH{10U};
     std::array<std::string const, 2> const dirPatterns
         = {std::string{"data/samples/mnist/"}, std::string{"data/mnist/"}};
@@ -78,7 +89,7 @@ std::string locateFile(std::string const& fileName, nvinfer2::safe::ISafeRecorde
 
     if (foundFile.empty())
     {
-        safeLogError(recorder, "Could not find " + fileName + " in data/samples/mnist/ or data/mnist.");
+        safeLogError(recorder, "Could not find " + fileName + " in the --datadir directories, data/samples/mnist/ or data/mnist.");
         safeLogError(recorder, "&&&& FAILED");
         exit(EXIT_FAILURE);
     }
@@ -89,7 +100,8 @@ std::string locateFile(std::string const& fileName, nvinfer2::safe::ISafeRecorde
 //!
 //! \brief Reads the input data, preprocesses, and stores the result in a managed buffer.
 //!
-bool processInput(void* input, int32_t const inputFileIdx, nvinfer2::safe::ISafeRecorder& recorder)
+bool processInput(void* input, int32_t const inputFileIdx, std::vector<std::string> const& dataDirs,
+    nvinfer2::safe::ISafeRecorder& recorder)
 {
     std::stringstream ss;
     constexpr int32_t kINPUT_H{28};
@@ -97,7 +109,7 @@ bool processInput(void* input, int32_t const inputFileIdx, nvinfer2::safe::ISafe
 
     // Read the digit file according to the inputFileIdx.
     std::vector<uint8_t> fileData(kINPUT_H * kINPUT_W);
-    readPGMFile(locateFile(std::to_string(inputFileIdx) + ".pgm", recorder), fileData.data(), kINPUT_H, kINPUT_W);
+    readPGMFile(locateFile(std::to_string(inputFileIdx) + ".pgm", dataDirs, recorder), fileData.data(), kINPUT_H, kINPUT_W);
 
     // Print ASCII representation of digit.
     ss << "Input:\n";
@@ -203,7 +215,8 @@ struct CudaMemory
 //!
 //! \brief Do inference
 //!
-void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvinfer2::safe::ISafeRecorder* recorder)
+void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvinfer2::safe::ISafeRecorder* recorder,
+    std::vector<std::string> const& dataDirs)
 {
     // Initialize to success; will be set to 0 on any error.
     ret_status = 1;
@@ -244,7 +257,7 @@ void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvi
         if (desc.ioMode == TensorIOMode::kINPUT)
         {
             // Read the input data into the managed buffers.
-            processInput(hostBuf, digit, *recorder);
+            processInput(hostBuf, digit, dataDirs, *recorder);
 
             // Asynchronously copy data from host input buffers to device input buffers.
             CUDA_CHECK(cudaMemcpyAsync(deviceBuf, hostBuf, desc.sizeInBytes, cudaMemcpyHostToDevice, stream));
@@ -311,6 +324,7 @@ void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvi
 struct SampleSafeMNISTInferArgs
 {
     std::string engineFileName{"safe_mnist.engine"};
+    std::vector<std::string> dataDirs;
     int32_t threads{1};
     bool help{false};
 };
@@ -337,8 +351,9 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
 
     // Configure executor(s)
     std::vector<nvinfer2::safe::ITRTGraph*> graphs(nbThreads);
-    SAFE_API_CALL(nvinfer2::safe::createTRTGraphWithSo(
-                      graphs[0], gieModelStream.data(), engineFileSize, nullptr, *recorders[0], true),
+    auto const companionSoPath = samplesSafeCommon::resolveCompanionSoPath(args.engineFileName);
+    SAFE_API_CALL(nvinfer2::safe::createTRTGraph(graphs[0], gieModelStream.data(), engineFileSize,
+                      companionSoPath ? companionSoPath->c_str() : nullptr, *recorders[0], true),
         *recorders[0]);
 
     for (int32_t i = 1; i < nbThreads; ++i)
@@ -350,7 +365,8 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
     std::vector<std::thread> threads(nbThreads);
     for (int32_t i = 0; i < nbThreads; ++i)
     {
-        threads[i] = std::thread{doInferenceThread, graphs[i], std::ref(ret_status[i]), recorders[i].get()};
+        threads[i] = std::thread{
+            doInferenceThread, graphs[i], std::ref(ret_status[i]), recorders[i].get(), std::cref(args.dataDirs)};
     }
 
     for (int32_t i = 0; i < nbThreads; ++i)
@@ -383,6 +399,15 @@ bool parseSampleSafeMNISTInferArgs(SampleSafeMNISTInferArgs& args, int32_t argc,
         {
             args.engineFileName = *value;
         }
+        else if (auto const value = parseString(arg, "datadir", 'd'))
+        {
+            if (value->empty())
+            {
+                SAFE_LOG << "Data directory path cannot be empty\n";
+                return false;
+            }
+            args.dataDirs.push_back(value->back() == '/' ? *value : *value + '/');
+        }
         else if (auto const value = parseString(arg, "threads"))
         {
             args.threads = std::stoi(*value);
@@ -414,6 +439,10 @@ void printHelpInfo()
     std::cout << R"(Usage: sample_mnist_safe_infer [options]
 Options:
   --help, -h          Print this message and exit.
+  --datadir=DIR, -d=DIR
+                      Search for the input images in DIR.  This option can be passed multiple times
+                      to add multiple search directories.  If omitted, default data dirs are:
+                      data/samples/mnist/, data/mnist/
   --loadEngine=FILE   Load serialized engine from FILE (default = )"
               << defArgs.engineFileName << R"().
   --threads=N         Run inference in N threads concurrently (default = )"
@@ -448,7 +477,20 @@ int32_t main(int32_t argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    TestResult result = doInference(args) ? TestResult::kPASSED : TestResult::kFAILED;
+    TestResult result = TestResult::kPASSED;
+    try
+    {
+        if (!doInference(args))
+        {
+            result = TestResult::kFAILED;
+        }
+    }
+    catch (std::runtime_error& e)
+    {
+        SAFE_LOG << e.what() << std::endl;
+        result = TestResult::kFAILED;
+    }
+
     reportTestResult("TensorRT.sample_mnist_safe_infer", result, argc, argv);
 
     return EXIT_SUCCESS;

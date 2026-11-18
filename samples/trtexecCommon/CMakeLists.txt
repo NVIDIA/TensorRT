@@ -27,12 +27,14 @@ add_library(trtexec_common STATIC
     buffers.h
     common.cpp
     common.h
+    companionSo.h
     debugTensorWriter.cpp
     debugTensorWriter.h
     ErrorRecorder.h
     globalTimerKernel.cu
     globalTimerKernel.h
     half.h
+    idleWait.h
     logger.cpp
     logger.h
     logging.h
@@ -53,6 +55,7 @@ add_library(trtexec_common STATIC
     sampleUtils.h
     safeCommon.h
     safeCudaAllocator.h
+    safeMemoryTracker.h
     safeErrorRecorder.h
     streamReader.h
 )
@@ -64,7 +67,10 @@ if (${TRT_BUILD_TESTING})
     add_executable(trtexec_common_test
         bfloat16.test.cpp
         half.test.cpp
+        idleWait.test.cpp
+        safeMemoryTracker.test.cpp
         sampleOptions.test.cpp
+        sampleTuning.test.cpp
         sampleUtils.test.cpp
     )
 
@@ -72,6 +78,12 @@ if (${TRT_BUILD_TESTING})
         gtest_main
         trtexec_common
     )
+
+    if(${CMAKE_SYSTEM_NAME} STREQUAL "QNX")
+        # idleWait.test.cpp interposes TimerTimeout() to exercise kernel-call failures that cannot be
+        # induced safely on a shared board; the real call stays reachable as __real_TimerTimeout().
+        target_link_options(trtexec_common_test PRIVATE "LINKER:--wrap=TimerTimeout")
+    endif()
 
     gtest_discover_tests(trtexec_common_test DISCOVERY_MODE ${TRT_GTEST_DISCOVERY_MODE})
 
@@ -92,9 +104,19 @@ target_link_libraries(trtexec_common PUBLIC
     trt_shared
     trt_global_definitions
     Threads::Threads
-    $<COMPILE_ONLY:TRT_SAMPLES::tensorrt> # Each sample individually must determine its linkage to TRT.
-    TRT_SAMPLES::onnxparser
 )
+
+if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
+    target_link_libraries(trtexec_common PUBLIC
+        $<COMPILE_ONLY:tensorrt_static>
+        nvonnxparser_static
+    )
+else()
+    target_link_libraries(trtexec_common PUBLIC
+        $<COMPILE_ONLY:tensorrt>
+        nvonnxparser
+    )
+endif()
 
 if(TARGET TRT::cudart)
     target_link_libraries(trtexec_common PUBLIC TRT::cudart)
@@ -108,9 +130,9 @@ endif()
 
 target_link_libraries(trtexec_common PUBLIC $<COMPILE_ONLY:CUDA::cupti>)
 
-# For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
+# A statically linked build upgrades the link to always pull TRT in rather than leaving it to each tool.
 if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
     target_link_libraries(trtexec_common PUBLIC
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,TRT_SAMPLES::tensorrt> # Has to be whole archive so we keep the builder resources correctly.
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,tensorrt_static> # Has to be whole archive so we keep the builder resources correctly.
     )
 endif()

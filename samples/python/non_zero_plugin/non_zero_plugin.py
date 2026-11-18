@@ -188,7 +188,7 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             args = [d_in, d_out_0, d_out_1, np.array(R, dtype=np.uint32), np.array(C, dtype=np.uint32)]
             kernelArgs = np.array([arg.ctypes.data for arg in args], dtype=np.uint64)
 
-            stream_ptr = np.array([stream], dtype=np.uint64)
+            stream_ptr = int(stream)
 
             if inp_dtype == np.float32:
                 kernelHelper = KernelHelper(non_zero_float_kernel, int(self.cuDevice))

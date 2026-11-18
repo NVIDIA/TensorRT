@@ -236,12 +236,13 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
     is_raw_data = len(tensor.int32_data) == 0
     data = bytearray(tensor.raw_data) if is_raw_data else tensor.int32_data
 
+    # Masks off the sign bit so that -0.0 counts as zero, like it does for other types.
     def is_zero(idx):
         if is_raw_data:
-            # raw_data is a byte array with two bytes per BF16 value.
-            return data[idx * 2] == 0 and data[idx * 2 + 1] == 0
+            # raw_data is a little-endian byte array with two bytes per BF16 value.
+            return data[idx * 2] == 0 and data[idx * 2 + 1] & 0x7F == 0
         # int32_data stores one BF16 value per entry, in the low 16 bits.
-        return data[idx] & 0xFFFF == 0
+        return data[idx] & 0x7FFF == 0
 
     ostride = pdim * pstride
     for o in range(outer):
@@ -278,7 +279,39 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
         return tensor
 
 
+def check_data_size(tensor):
+    # A corrupted model may store more or fewer values than the shape of a tensor implies.
+    # Reading such a tensor would fail with an obscure error or index out of bounds, so report it up front.
+    if tensor.data_location == onnx.TensorProto.EXTERNAL:
+        return
+
+    # BF16 data is read by `process_bf16_tensor`, which prefers `int32_data`.
+    # Other types are read by ONNX, which prefers `raw_data` whenever it is set.
+    if tensor.data_type == onnx.TensorProto.BFLOAT16:
+        use_raw_data = len(tensor.int32_data) == 0
+    else:
+        use_raw_data = tensor.HasField("raw_data")
+
+    volume = util.volume(tensor.dims)
+    if use_raw_data:
+        field, unit = "raw_data", "bytes"
+        expected = volume * DataType.from_dtype(tensor.data_type, "onnx").itemsize
+    elif tensor.data_type == onnx.TensorProto.FLOAT:
+        field, unit, expected = "float_data", "values", volume
+    else:
+        field, unit, expected = "int32_data", "values", volume
+
+    actual = len(getattr(tensor, field))
+    if actual != expected:
+        G_LOGGER.critical(
+            f"Weight tensor: {tensor.name} with shape: {list(tensor.dims)} should have {expected} {unit} in its `{field}` field, "
+            f"but has {actual}.\nNote: The model may be corrupted, or its weights may have been stripped."
+        )
+
+
 def process_tensor(pinfo, tensor, check):
+    check_data_size(tensor)
+
     axis = pinfo.axis
     dims = tensor.dims
     pdim = tensor.dims[axis]

@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.4.1
+ARG CUDA_VERSION=13.5.0
 ARG OS_VERSION=24.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION=11.4.0.106
+ENV TRT_VERSION=11.5.0.63
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Setup user account and edit default account
@@ -91,17 +91,17 @@ RUN cd /tmp && \
     rm -rf /tmp/googletest
 
 # Install CUDA cross compile toolchain
-RUN wget https://developer.download.nvidia.com/compute/cuda/13.4.1/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-4-local_13.4.1-1_all.deb && \
-    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-4-local_13.4.1-1_all.deb && \
-    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-4-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
+RUN wget https://developer.download.nvidia.com/compute/cuda/13.5.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-5-local_13.5.0-1_all.deb && \
+    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-5-local_13.5.0-1_all.deb && \
+    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-5-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
     apt-get update && \
-    apt-get -y install cuda-cross-sbsa-13-4
+    apt-get -y install cuda-cross-sbsa-13-5
 
 # Install TensorRT
 ARG CUDA_VERSION
 COPY docker/downloadTRT.sh /tmp/downloadTRT.sh
 RUN case "${CUDA_VERSION}" in \
-        13.*) TRT_CUDA_VERSION=13.4 ;; \
+        13.*) TRT_CUDA_VERSION=13.5 ;; \
         12.*) TRT_CUDA_VERSION=12.9 ;; \
         *) echo "Unsupported CUDA_VERSION: ${CUDA_VERSION}" && exit 1 ;; \
     esac && \

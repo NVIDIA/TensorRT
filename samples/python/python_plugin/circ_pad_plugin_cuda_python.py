@@ -119,7 +119,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
                 if f.name == "pads":
                     self.pads = f.data
                 elif f.name == "N":
-                    self.N = int(f.data)
+                    self.N = int(f.data[0])
 
     def initialize(self):
         self.cuDevice = cuda_get_device(0)
@@ -210,7 +210,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         args = [da, d_all_pads, d_orig_dims, dc, d_Y_shape, Y_len]
         kernelArgs = np.array([arg.ctypes.data for arg in args], dtype=np.uint64)
 
-        stream_ptr = np.array([stream], dtype=np.uint64)
+        stream_ptr = int(stream)
 
         if inp_dtype == np.float32:
             kernelHelper = KernelHelper(circ_pad_float_kernel, int(self.cuDevice))

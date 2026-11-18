@@ -90,18 +90,6 @@ static auto const opt_profile_get_shape_input
 namespace
 {
 
-//! Return an optimization profile's CUDA stream as a Python-compatible handle.
-size_t optProfileGetProfileStream(IOptimizationProfile const& self)
-{
-    return reinterpret_cast<size_t>(self.getProfileStream());
-}
-
-//! Set an optimization profile's CUDA stream from a Python stream handle.
-void optProfileSetProfileStream(IOptimizationProfile& self, size_t streamHandle)
-{
-    self.setProfileStream(reinterpret_cast<cudaStream_t>(streamHandle));
-}
-
 } // namespace
 
 // For IExecutionContext
@@ -128,11 +116,6 @@ std::vector<char const*> infer_shapes(IExecutionContext& self)
     return names;
 }
 
-bool execute_async_v3(IExecutionContext& self, size_t streamHandle)
-{
-    return self.enqueueV3(reinterpret_cast<cudaStream_t>(streamHandle));
-}
-
 bool set_tensor_address(IExecutionContext& self, char const* tensor_name, size_t memory)
 {
     return self.setTensorAddress(tensor_name, reinterpret_cast<void*>(memory));
@@ -143,19 +126,10 @@ size_t get_tensor_address(IExecutionContext& self, char const* tensor_name)
     return reinterpret_cast<size_t>(self.getTensorAddress(tensor_name));
 }
 
-bool set_input_consumed_event(IExecutionContext& self, size_t inputConsumed)
+// By value: setAuxStreams takes a mutable pointer, and pybind11 builds the vector from the Python list anyway.
+void set_aux_streams(IExecutionContext& self, std::vector<cudaStream_t> streams)
 {
-    return self.setInputConsumedEvent(reinterpret_cast<cudaEvent_t>(inputConsumed));
-}
-
-size_t get_input_consumed_event(IExecutionContext& self)
-{
-    return reinterpret_cast<size_t>(self.getInputConsumedEvent());
-}
-
-void set_aux_streams(IExecutionContext& self, std::vector<size_t> streamHandle)
-{
-    self.setAuxStreams(reinterpret_cast<cudaStream_t*>(streamHandle.data()), static_cast<int32_t>(streamHandle.size()));
+    self.setAuxStreams(streams.data(), static_cast<int32_t>(streams.size()));
 }
 
 template <typename PyIterable>
@@ -193,10 +167,6 @@ static auto const runtime_set_dla_workspace_allocation_strategy
           PY_ASSERT_RUNTIME_ERROR(
               self.setDLAWorkspaceAllocationStrategy(strategy), "Failed to set the DLA workspace allocation strategy.");
       };
-
-static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
-    return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
-};
 
 
 
@@ -248,35 +218,8 @@ std::vector<std::vector<int64_t>> get_tensor_profile_values(
     return shapes;
 }
 
-// For IGpuAllocator
-void* allocate_async(
-    IGpuAllocator& self, uint64_t const size, uint64_t const alignment, AllocatorFlags const flags, size_t streamHandle)
-{
-    return self.allocateAsync(size, alignment, flags, reinterpret_cast<cudaStream_t>(streamHandle));
-}
-
-bool deallocate_async(IGpuAllocator& self, void* const memory, size_t streamHandle)
-{
-    return self.deallocateAsync(memory, reinterpret_cast<cudaStream_t>(streamHandle));
-}
-
-// For IOutputAllocator
-void* reallocate_output_async(IOutputAllocator& self, char const* tensorName, void* currentMemory, uint64_t size,
-    uint64_t alignment, size_t streamHandle)
-{
-    return self.reallocateOutputAsync(
-        tensorName, currentMemory, size, alignment, reinterpret_cast<cudaStream_t>(streamHandle));
-}
-
 #if EXPORT_ALL_BINDINGS
 // For IBuilderConfig
-static auto const netconfig_get_profile_stream
-    = [](IBuilderConfig& self) -> size_t { return reinterpret_cast<size_t>(self.getProfileStream()); };
-
-static auto const netconfig_set_profile_stream = [](IBuilderConfig& self, size_t streamHandle) {
-    self.setProfileStream(reinterpret_cast<cudaStream_t>(streamHandle));
-};
-
 static auto const netconfig_create_timing_cache = [](IBuilderConfig& self, py::buffer& serializedTimingCache) {
     py::buffer_info info = serializedTimingCache.request();
 
@@ -307,7 +250,7 @@ static auto const set_plugins_to_serialize = [](IBuilderConfig& self, std::vecto
     {
         cStrings.push_back(path.c_str());
     }
-    self.setPluginsToSerialize(reinterpret_cast<char const* const*>(cStrings.data()), cStrings.size());
+    self.setPluginsToSerialize(cStrings.data(), cStrings.size());
 };
 
 static auto const get_remote_auto_tuning_config
@@ -326,14 +269,15 @@ static auto const get_all_build_routes = [](IBuilderConfig& self) { return std::
 #endif // EXPORT_ALL_BINDINGS
 
 // For IRefitter
-static auto const refitter_get_missing = [](IRefitter& self) {
+static auto const refitter_get_missing
+    = [](IRefitter& self) -> std::pair<std::vector<char const*>, std::vector<WeightsRole>> {
     // First get the number of missing weights.
     int32_t const size{self.getMissing(0, nullptr, nullptr)};
     // Now that we know how many weights are missing, we can create the buffers appropriately.
-    std::vector<const char*> layerNames(size);
+    std::vector<char const*> layerNames(size);
     std::vector<WeightsRole> roles(size);
     self.getMissing(size, layerNames.data(), roles.data());
-    return std::pair<std::vector<const char*>, std::vector<WeightsRole>>{layerNames, roles};
+    return {std::move(layerNames), std::move(roles)};
 };
 
 static auto const refitter_get_missing_weights = [](IRefitter& self) {
@@ -345,12 +289,13 @@ static auto const refitter_get_missing_weights = [](IRefitter& self) {
     return names;
 };
 
-static auto const refitter_get_all = [](IRefitter& self) {
+static auto const refitter_get_all
+    = [](IRefitter& self) -> std::pair<std::vector<char const*>, std::vector<WeightsRole>> {
     int32_t const size{self.getAll(0, nullptr, nullptr)};
     std::vector<char const*> layerNames(size);
     std::vector<WeightsRole> roles(size);
     self.getAll(size, layerNames.data(), roles.data());
-    return std::pair<std::vector<const char*>, std::vector<WeightsRole>>{layerNames, roles};
+    return {std::move(layerNames), std::move(roles)};
 };
 
 static auto const refitter_get_all_weights = [](IRefitter& self) {
@@ -359,18 +304,6 @@ static auto const refitter_get_all_weights = [](IRefitter& self) {
     self.getAllWeights(size, names.data());
     return names;
 };
-
-static auto const refitter_refit_cuda_engine_async = [](IRefitter& self, size_t streamHandle) {
-    return self.refitCudaEngineAsync(reinterpret_cast<cudaStream_t>(streamHandle));
-};
-
-static auto const context_set_optimization_profile_async
-    = [](IExecutionContext& self, int32_t const profileIndex, size_t streamHandle) {
-          PY_ASSERT_RUNTIME_ERROR(
-              self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)),
-              "Error in set optimization profile async.");
-          return true;
-      };
 
 void context_set_device_memory(IExecutionContext& self, size_t memory)
 {
@@ -388,14 +321,6 @@ void serialization_config_set_flags(ISerializationConfig& self, uint32_t flags)
     {
         utils::throwPyError(PyExc_RuntimeError, "Provided serialization flags is incorrect");
     }
-}
-
-// For IDebugListener, this function is intended to be override by client.
-// The bindings here will never be called and is for documentation purpose only.
-void docProcessDebugTensor(IDebugListener& self, void const* addr, TensorLocation location, DataType type,
-    Dims const& shape, char const* name, size_t stream)
-{
-    return;
 }
 
 uint64_t getTacticHash(TimingCacheValue const& value)
@@ -484,46 +409,42 @@ std::vector<TimingCacheKey> queryTimingCacheKeys(ITimingCache const& cache)
 
 } // namespace lambdas
 
-namespace PyGpuAllocatorHelper
+// Python names of the interface methods whose trampolines forward through utils::invokeOverride, shared with the
+// bindings below. IGpuAsyncAllocator redeclares the async methods, so its pointers are distinct keys.
+namespace utils
 {
-template <typename TAllocator, typename... Args>
-void* allocHelper(TAllocator* allocator, char const* pyFuncName, bool showWarning, Args&&... args) noexcept
-{
-    try
-    {
-        py::gil_scoped_acquire gil{};
-        py::function pyAllocFunc = utils::getOverride(static_cast<TAllocator*>(allocator), pyFuncName, showWarning);
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAllocator::allocate> = "allocate";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAllocator::reallocate> = "reallocate";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAllocator::deallocate> = "deallocate";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAllocator::allocateAsync> = "allocate_async";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAllocator::deallocateAsync> = "deallocate_async";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAsyncAllocator::allocateAsync> = "allocate_async";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IGpuAsyncAllocator::deallocateAsync> = "deallocate_async";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IOutputAllocator::reallocateOutput> = "reallocate_output";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IOutputAllocator::reallocateOutputAsync> = "reallocate_output_async";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IStreamReaderV2::read> = "read";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IStreamReaderV2::seek> = "seek";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IStreamWriter::write> = "write";
+template <>
+inline constexpr char const* kPYTHON_NAME<&IDebugListener::processDebugTensor> = "process_debug_tensor";
+} // namespace utils
 
-        if (!pyAllocFunc)
-        {
-            return nullptr;
-        }
-
-        py::object ptr = pyAllocFunc(std::forward<Args>(args)...);
-        try
-        {
-            return reinterpret_cast<void*>(ptr.cast<size_t>());
-        }
-        catch (py::cast_error const& e)
-        {
-            std::cerr << "[ERROR] Return value of allocate() could not be interpreted as an int" << std::endl;
-        }
-    }
-    catch (std::exception const& e)
-    {
-        std::cerr << "[ERROR] Exception caught in allocate(): " << e.what() << std::endl;
-    }
-    catch (...)
-    {
-        std::cerr << "[ERROR] Exception caught in allocate()" << std::endl;
-        return nullptr;
-    }
-
-    return nullptr;
-}
-
-} // namespace PyGpuAllocatorHelper
-
+// Each trampoline method forwards to its Python override through utils::invokeOverride, which checks the
+// arguments against the interface method at compile time. Pass the parameters as received; the helper
+// converts pointers and streams for Python. Where the Python signature differs from the C++ one, the trampoline
+// spells it out as a function type and invokeOverride checks the arguments against that instead.
 class PyGpuAllocator : public IGpuAllocator
 {
 public:
@@ -531,39 +452,17 @@ public:
 
     void* allocate(uint64_t size, uint64_t alignment, AllocatorFlags flags) noexcept override
     {
-        return PyGpuAllocatorHelper::allocHelper<IGpuAllocator>(this, "allocate", true, size, alignment, flags);
+        return utils::invokeOverride<&IGpuAllocator::allocate>(this, size, alignment, flags).value_or(nullptr);
     }
 
     void* reallocate(void* baseAddr, uint64_t alignment, uint64_t newSize) noexcept override
     {
-        return PyGpuAllocatorHelper::allocHelper<IGpuAllocator>(
-            this, "reallocate", true, reinterpret_cast<size_t>(baseAddr), alignment, newSize);
+        return utils::invokeOverride<&IGpuAllocator::reallocate>(this, baseAddr, alignment, newSize).value_or(nullptr);
     }
 
     bool deallocate(void* memory) noexcept override
     {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pyDeallocate = utils::getOverride(static_cast<IGpuAllocator*>(this), "deallocate");
-            if (!pyDeallocate)
-            {
-                return false;
-            }
-
-            py::object status{};
-            status = pyDeallocate(reinterpret_cast<size_t>(memory));
-            return status.cast<bool>();
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in deallocate(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in deallocate()" << std::endl;
-        }
-        return false;
+        return utils::invokeOverride<&IGpuAllocator::deallocate>(this, memory).value_or(false);
     }
 
 }; // PyGpuAllocator
@@ -577,43 +476,18 @@ public:
 
     void* allocateAsync(uint64_t size, uint64_t alignment, AllocatorFlags flags, cudaStream_t stream) noexcept override
     {
-        intptr_t cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
-        return PyGpuAllocatorHelper::allocHelper<IGpuAsyncAllocator>(
-            this, "allocate_async", true, size, alignment, flags, cudaStreamPtr);
+        return utils::invokeOverride<&IGpuAsyncAllocator::allocateAsync>(this, size, alignment, flags, stream)
+            .value_or(nullptr);
     }
 
     void* reallocate(void* baseAddr, uint64_t alignment, uint64_t newSize) noexcept override
     {
-        return PyGpuAllocatorHelper::allocHelper<IGpuAsyncAllocator>(
-            this, "reallocate", true, reinterpret_cast<size_t>(baseAddr), alignment, newSize);
+        return utils::invokeOverride<&IGpuAllocator::reallocate>(this, baseAddr, alignment, newSize).value_or(nullptr);
     }
 
     bool deallocateAsync(void* memory, cudaStream_t stream) noexcept override
     {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pyDeallocateAsync
-                = utils::getOverride(static_cast<IGpuAsyncAllocator*>(this), "deallocate_async");
-            if (!pyDeallocateAsync)
-            {
-                return false;
-            }
-
-            py::object status{};
-            intptr_t cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
-            status = pyDeallocateAsync(reinterpret_cast<size_t>(memory), cudaStreamPtr);
-            return status.cast<bool>();
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in deallocate(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in deallocate()" << std::endl;
-        }
-        return false;
+        return utils::invokeOverride<&IGpuAsyncAllocator::deallocateAsync>(this, memory, stream).value_or(false);
     }
 
 }; // PyGpuAsyncAllocator
@@ -625,80 +499,22 @@ public:
     void* reallocateOutput(
         char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
     {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IOutputAllocator*>(this), "reallocate_output");
-
-            if (!pyFunc)
-            {
-                return nullptr;
-            }
-
-            py::object ptr = pyFunc(tensorName, reinterpret_cast<size_t>(currentMemory), size, alignment);
-            try
-            {
-                return reinterpret_cast<void*>(ptr.cast<size_t>());
-            }
-            catch (py::cast_error const& e)
-            {
-                std::cerr << "[ERROR] Return value of reallocateOutput() could not be interpreted as an int"
-                          << std::endl;
-            }
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in reallocateOutput(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in reallocateOutput()" << std::endl;
-            return nullptr;
-        }
-
-        return nullptr;
+        return utils::invokeOverride<&IOutputAllocator::reallocateOutput>(
+            this, tensorName, currentMemory, size, alignment)
+            .value_or(nullptr);
     }
 
     void* reallocateOutputAsync(char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment,
         cudaStream_t stream) noexcept override
     {
-        try
+        // A legacy implementation may provide only the synchronous method.
+        if (!utils::hasOverride<&IOutputAllocator::reallocateOutputAsync>(this))
         {
-            py::gil_scoped_acquire gil{};
-            py::function pyFunc
-                = utils::getOverride(static_cast<IOutputAllocator*>(this), "reallocate_output_async", false);
-
-            if (!pyFunc)
-            {
-                //! For legacy implementation, the user might not have implemented this method, so we go for the default
-                //! method.
-                return reallocateOutput(tensorName, currentMemory, size, alignment);
-            }
-
-            intptr_t cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
-            py::object ptr
-                = pyFunc(tensorName, reinterpret_cast<size_t>(currentMemory), size, alignment, cudaStreamPtr);
-            try
-            {
-                return reinterpret_cast<void*>(ptr.cast<size_t>());
-            }
-            catch (py::cast_error const& e)
-            {
-                std::cerr << "[ERROR] Return value of reallocateOutputAsync() could not be interpreted as an int"
-                          << std::endl;
-            }
+            return reallocateOutput(tensorName, currentMemory, size, alignment);
         }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in reallocateOutputAsync(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in reallocateOutputAsync()" << std::endl;
-            return nullptr;
-        }
-
-        return nullptr;
+        return utils::invokeOverride<&IOutputAllocator::reallocateOutputAsync>(
+            this, tensorName, currentMemory, size, alignment, stream)
+            .value_or(nullptr);
     }
 
     void notifyShape(char const* tensorName, Dims const& dims) noexcept override
@@ -762,12 +578,6 @@ public:
                     "[ERROR] Read is skipped due to failed to get necessary API entry in cuda driver.");
                 return 0;
             }
-            py::function pyReadFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "read");
-            if (!pyReadFunc)
-            {
-                utils::throwPyError(PyExc_RuntimeError, "[ERROR] Failed to find override read function in python.");
-                return 0;
-            }
 
             // Check destination memory location.
             uint32_t attributes{};
@@ -783,16 +593,21 @@ public:
             }
             bool const useH2DCopy = attributes == CU_MEMORYTYPE_DEVICE;
             auto copyDestination = static_cast<std::byte*>(destination);
-            auto cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
 
             // In C++ we can use GDS to reduce host memory usage. For Python, we handle this in the bindings by copying
-            // data chunk by chunk.
+            // data chunk by chunk: the Python read() receives a byte count and returns a buffer.
+            using ReadChunk = py::buffer(IStreamReaderV2&, int64_t nbBytes, cudaStream_t stream);
             int64_t totalBytesRead{};
             while (totalBytesRead < nbBytes)
             {
-                int64_t bytesToRead = nbBytes - totalBytesRead;
-                py::buffer data = pyReadFunc(bytesToRead, cudaStreamPtr);
-                py::buffer_info info = data.request();
+                int64_t const bytesToRead = nbBytes - totalBytesRead;
+                std::optional<py::buffer> const data = utils::invokeOverride<ReadChunk>(
+                    this, utils::kPYTHON_NAME<&IStreamReaderV2::read>, true, bytesToRead, stream);
+                if (!data.has_value())
+                {
+                    return 0;
+                }
+                py::buffer_info const info = data->request();
                 // User might chunk the memory into pieces to save peak host memory usage.
                 int64_t bytesRead = std::min(info.size * info.itemsize, bytesToRead);
                 if (bytesRead == 0)
@@ -829,27 +644,7 @@ public:
 
     bool seek(int64_t offset, SeekPosition where) noexcept override
     {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pySeekFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "seek");
-            if (!pySeekFunc)
-            {
-                std::cerr << "[ERROR] Failed to find override seek function in python." << std::endl;
-                return 0;
-            }
-            py::bool_ ret = pySeekFunc(offset, where);
-            return ret;
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in seek(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in seek()" << std::endl;
-        }
-        return false;
+        return utils::invokeOverride<&IStreamReaderV2::seek>(this, offset, where).value_or(false);
     }
 
 private:
@@ -863,36 +658,19 @@ class PyStreamWriter : public IStreamWriter
 public:
     int64_t write(void const* data, int64_t size) noexcept override
     {
+        // The Python write() receives the data as bytes rather than as an address and a size.
+        using WriteBytes = int64_t(IStreamWriter&, py::bytes data);
         try
         {
             py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IStreamWriter*>(this), "write");
-
-            if (!pyFunc)
-            {
-                return 0;
-            }
-
-            auto const pyBytes = py::bytes(static_cast<char const*>(data), size);
-            py::object bytesWritten = pyFunc(pyBytes);
-
-            if (!py::isinstance<py::int_>(bytesWritten))
-            {
-                std::cerr << "[ERROR] StreamWriter shall returns the written bytes count in integer." << std::endl;
-                return 0;
-            }
-
-            return bytesWritten.cast<int64_t>();
+            py::bytes const pyBytes(static_cast<char const*>(data), size);
+            return utils::invokeOverride<WriteBytes>(this, utils::kPYTHON_NAME<&IStreamWriter::write>, true, pyBytes)
+                .value_or(0);
         }
         catch (std::exception const& e)
         {
             std::cerr << "[ERROR] Exception caught in write(): " << e.what() << std::endl;
         }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in write()" << std::endl;
-        }
-
         return 0;
     }
 };
@@ -903,54 +681,305 @@ public:
     bool processDebugTensor(void const* addr, TensorLocation location, DataType type, Dims const& shape,
         char const* name, cudaStream_t stream) override
     {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IDebugListener*>(this), "process_debug_tensor");
-
-            if (!pyFunc)
-            {
-                return false;
-            }
-
-            pyFunc(reinterpret_cast<size_t>(addr), location, type, shape, name, reinterpret_cast<size_t>(stream));
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in processDebugTensor(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in processDebugTensor()" << std::endl;
-        }
-        return true;
+        // The runtime fails the enqueue on false, and existing listeners return None, so the override is called as
+        // a void function: reaching it is success, and its result is not consulted.
+        using Signature
+            = void(IDebugListener&, void const*, TensorLocation, DataType, Dims const&, char const*, cudaStream_t);
+        return utils::invokeOverride<Signature>(this, utils::kPYTHON_NAME<&IDebugListener::processDebugTensor>, true,
+            addr, location, type, shape, name, stream)
+            .has_value();
     }
 };
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+namespace
+{
+class PyLogger : public ILogger
+{
+public:
+    void log(Severity severity, char const* msg) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            PYBIND11_OVERLOAD_PURE_NAME(void, ILogger, "log", log, severity, msg);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in log(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in log()" << std::endl;
+        }
+    }
+};
+
+class DefaultLogger : public ILogger
+{
+public:
+    DefaultLogger(Severity minSeverity = Severity::kWARNING)
+        : mMinSeverity(minSeverity)
+    {
+    }
+
+    void log(Severity severity, char const* msg) noexcept override
+    {
+        //  INFO is the largest value, so this comparison is inverted.
+        if (severity > mMinSeverity)
+        {
+            return;
+        }
+
+        // prepend timestamp
+        std::time_t timestamp = std::time(nullptr);
+        tm* tm_local = std::localtime(&timestamp);
+        std::cout << "[";
+        std::cout << std::setw(2) << std::setfill('0') << 1 + tm_local->tm_mon << "/";
+        std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_mday << "/";
+        std::cout << std::setw(4) << std::setfill('0') << 1900 + tm_local->tm_year << "-";
+        std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_hour << ":";
+        std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_min << ":";
+        std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_sec << "] ";
+        std::string loggingPrefix = "[TRT] ";
+        switch (severity)
+        {
+        case Severity::kINTERNAL_ERROR:
+        {
+            loggingPrefix += "[F] ";
+            break;
+        }
+        case Severity::kERROR:
+        {
+            loggingPrefix += "[E] ";
+            break;
+        }
+        case Severity::kWARNING:
+        {
+            loggingPrefix += "[W] ";
+            break;
+        }
+        case Severity::kINFO:
+        {
+            loggingPrefix += "[I] ";
+            break;
+        }
+        case Severity::kVERBOSE:
+        {
+            loggingPrefix += "[V] ";
+            break;
+        }
+        }
+        std::cout << loggingPrefix << msg << std::endl;
+    }
+
+    Severity mMinSeverity;
+};
+
+class PyProfiler : public IProfiler
+{
+public:
+    void reportLayerTime(char const* layerName, float ms) noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(void, IProfiler, "report_layer_time", reportLayerTime, layerName, ms);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in report_layer_time(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in report_layer_time()" << std::endl;
+        }
+    }
+};
+
+class DefaultProfiler : public IProfiler
+{
+public:
+    void reportLayerTime(char const* layerName, float ms) noexcept override
+    {
+        std::cout << layerName << ": " << ms << "ms" << std::endl;
+    }
+};
+
+class PyErrorRecorder : public IErrorRecorder
+{
+public:
+    [[nodiscard]] ErrorCode getErrorCode(int32_t errorIdx) const noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(ErrorCode, IErrorRecorder, "get_error_code", getErrorCode, errorIdx);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in get_error_code(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in get_error_code()" << std::endl;
+        }
+        return {};
+    }
+
+    [[nodiscard]] ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(ErrorDesc, IErrorRecorder, "get_error_desc", getErrorDesc, errorIdx);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in get_error_desc(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in get_error_desc()" << std::endl;
+        }
+        return {};
+    }
+
+    void clear() noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(void, IErrorRecorder, "clear", clear);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in clear(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in clear()" << std::endl;
+        }
+    }
+
+    bool reportError(ErrorCode val, ErrorDesc desc) noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "report_error", reportError, val, desc);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in report_error(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in report_error()" << std::endl;
+        }
+        return false;
+    }
+
+    [[nodiscard]] int32_t getNbErrors() const noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(int32_t, IErrorRecorder, "get_num_errors", getNbErrors);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in get_num_errors(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in get_num_errors()" << std::endl;
+        }
+        return -1;
+    }
+
+    [[nodiscard]] bool hasOverflowed() const noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "has_overflowed", hasOverflowed);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in has_overflowed(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in has_overflowed()" << std::endl;
+        }
+        return false;
+    }
+
+    RefCount incRefCount() noexcept override
+    {
+        return ++mRefCount;
+    }
+
+    RefCount decRefCount() noexcept override
+    {
+        return --mRefCount;
+    }
+
+private:
+    int32_t mRefCount{0};
+};
+
+class PyProgressMonitor : public IProgressMonitor
+{
+public:
+    void phaseStart(char const* phaseName, char const* parentPhase, int32_t nbSteps) noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(
+                void, IProgressMonitor, "phase_start", phaseStart, phaseName, parentPhase, nbSteps);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in phase_start(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in phase_start()" << std::endl;
+        }
+    }
+
+    bool stepComplete(char const* phaseName, int32_t step) noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(bool, IProgressMonitor, "step_complete", stepComplete, phaseName, step);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in step_complete(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in step_complete()" << std::endl;
+        }
+        // Use the exception as an indicator that we should cancel the build
+        return false;
+    }
+
+    void phaseFinish(char const* phaseName) noexcept override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD_PURE_NAME(void, IProgressMonitor, "phase_finish", phaseFinish, phaseName);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in phase_finish(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in phase_finish()" << std::endl;
+        }
+    }
+};
+} // namespace
+
 void bindCore(py::module& m)
 {
-    class PyLogger : public ILogger
-    {
-    public:
-        virtual void log(Severity severity, char const* msg) noexcept override
-        {
-            try
-            {
-                py::gil_scoped_acquire gil{};
-                PYBIND11_OVERLOAD_PURE_NAME(void, ILogger, "log", log, severity, msg);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in log(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in log()" << std::endl;
-            }
-        }
-    };
-
     py::class_<ILogger, PyLogger> baseLoggerBinding{m, "ILogger", ILoggerDoc::descr, py::module_local()};
 
     py::enum_<ILogger::Severity>(
@@ -965,102 +994,14 @@ void bindCore(py::module& m)
 
     baseLoggerBinding.def(py::init<>()).def("log", &ILogger::log, "severity"_a, "msg"_a, ILoggerDoc::log);
 
-    class DefaultLogger : public ILogger
-    {
-    public:
-        DefaultLogger(Severity minSeverity = Severity::kWARNING)
-            : mMinSeverity(minSeverity)
-        {
-        }
-
-        virtual void log(Severity severity, char const* msg) noexcept override
-        {
-            //  INFO is the largest value, so this comparison is inverted.
-            if (severity > mMinSeverity)
-                return;
-
-            // prepend timestamp
-            std::time_t timestamp = std::time(nullptr);
-            tm* tm_local = std::localtime(&timestamp);
-            std::cout << "[";
-            std::cout << std::setw(2) << std::setfill('0') << 1 + tm_local->tm_mon << "/";
-            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_mday << "/";
-            std::cout << std::setw(4) << std::setfill('0') << 1900 + tm_local->tm_year << "-";
-            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_hour << ":";
-            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_min << ":";
-            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_sec << "] ";
-            std::string loggingPrefix = "[TRT] ";
-            switch (severity)
-            {
-            case Severity::kINTERNAL_ERROR:
-            {
-                loggingPrefix += "[F] ";
-                break;
-            }
-            case Severity::kERROR:
-            {
-                loggingPrefix += "[E] ";
-                break;
-            }
-            case Severity::kWARNING:
-            {
-                loggingPrefix += "[W] ";
-                break;
-            }
-            case Severity::kINFO:
-            {
-                loggingPrefix += "[I] ";
-                break;
-            }
-            case Severity::kVERBOSE:
-            {
-                loggingPrefix += "[V] ";
-                break;
-            }
-            }
-            std::cout << loggingPrefix << msg << std::endl;
-        }
-
-        Severity mMinSeverity;
-    };
-
     py::class_<DefaultLogger, ILogger>(m, "Logger", LoggerDoc::descr, py::module_local())
         .def(py::init<ILogger::Severity>(), "min_severity"_a = ILogger::Severity::kWARNING)
         .def_readwrite("min_severity", &DefaultLogger::mMinSeverity)
         .def("log", &DefaultLogger::log, "severity"_a, "msg"_a, DefaultLoggerDoc::log);
 
-    class PyProfiler : public IProfiler
-    {
-    public:
-        void reportLayerTime(char const* layerName, float ms) noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(void, IProfiler, "report_layer_time", reportLayerTime, layerName, ms);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in report_layer_time(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in report_layer_time()" << std::endl;
-            }
-        }
-    };
-
     py::class_<IProfiler, PyProfiler>(m, "IProfiler", IProfilerDoc::descr, py::module_local())
         .def(py::init<>())
         .def("report_layer_time", &IProfiler::reportLayerTime, "layer_name"_a, "ms"_a, IProfilerDoc::report_layer_time);
-
-    class DefaultProfiler : public IProfiler
-    {
-    public:
-        void reportLayerTime(char const* layerName, float ms) noexcept override
-        {
-            std::cout << layerName << ": " << ms << "ms" << std::endl;
-        }
-    };
 
     py::class_<DefaultProfiler, IProfiler>(m, "Profiler", ProfilerDoc::descr, py::module_local())
         .def(py::init<>())
@@ -1077,7 +1018,8 @@ void bindCore(py::module& m)
             IOptimizationProfileDoc::get_shape_input)
         .def_property("extra_memory_target", &IOptimizationProfile::getExtraMemoryTarget,
             &IOptimizationProfile::setExtraMemoryTarget)
-        .def_property("profile_stream", lambdas::optProfileGetProfileStream, lambdas::optProfileSetProfileStream)
+        .def_property(
+            "profile_stream", &IOptimizationProfile::getProfileStream, &IOptimizationProfile::setProfileStream)
         .def("__nonzero__", &IOptimizationProfile::isValid)
         .def("__bool__", &IOptimizationProfile::isValid);
 
@@ -1096,124 +1038,6 @@ void bindCore(py::module& m)
 
     // Provide a base implementation of Error recorder.
     // Trampoline class is required as this class needs to be implemented by user.
-    class PyErrorRecorder : public IErrorRecorder
-    {
-    public:
-        virtual ErrorCode getErrorCode(int32_t errorIdx) const noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(ErrorCode, IErrorRecorder, "get_error_code", getErrorCode, errorIdx);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in get_error_code(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in get_error_code()" << std::endl;
-            }
-            return {};
-        }
-
-        virtual ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(ErrorDesc, IErrorRecorder, "get_error_desc", getErrorDesc, errorIdx);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in get_error_desc(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in get_error_desc()" << std::endl;
-            }
-            return {};
-        }
-
-        virtual void clear() noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(void, IErrorRecorder, "clear", clear);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in clear(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in clear()" << std::endl;
-            }
-        }
-
-        virtual bool reportError(ErrorCode val, ErrorDesc desc) noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "report_error", reportError, val, desc);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in report_error(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in report_error()" << std::endl;
-            }
-            return false;
-        }
-
-        virtual int32_t getNbErrors() const noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(int32_t, IErrorRecorder, "get_num_errors", getNbErrors);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in get_num_errors(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in get_num_errors()" << std::endl;
-            }
-            return -1;
-        }
-
-        virtual bool hasOverflowed() const noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "has_overflowed", hasOverflowed);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in has_overflowed(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in has_overflowed()" << std::endl;
-            }
-            return false;
-        }
-
-        virtual RefCount incRefCount() noexcept override
-        {
-            return ++mRefCount;
-        }
-
-        virtual RefCount decRefCount() noexcept override
-        {
-            return --mRefCount;
-        }
-
-    private:
-        int32_t mRefCount{0};
-    };
-
     py::class_<IErrorRecorder, PyErrorRecorder>(m, "IErrorRecorder", IErrorRecorderDoc::descr, py::module_local())
         .def(py::init<>())
         .def_property_readonly("MAX_DESC_LENGTH", []() { return IErrorRecorder::kMAX_DESC_LENGTH; })
@@ -1226,64 +1050,10 @@ void bindCore(py::module& m)
 
     // Provide a base implementation of IProgressMonitor.
     // Trampoline class is required as this class needs to be implemented by the user.
-    class PyProgressMonitor : public IProgressMonitor
-    {
-    public:
-        void phaseStart(char const* phaseName, char const* parentPhase, int32_t nbSteps) noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(
-                    void, IProgressMonitor, "phase_start", phaseStart, phaseName, parentPhase, nbSteps);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in phase_start(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in phase_start()" << std::endl;
-            }
-        }
-
-        bool stepComplete(char const* phaseName, int32_t step) noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(bool, IProgressMonitor, "step_complete", stepComplete, phaseName, step);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in step_complete(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in step_complete()" << std::endl;
-            }
-            // Use the exception as an indicator that we should cancel the build
-            return false;
-        }
-
-        void phaseFinish(char const* phaseName) noexcept override
-        {
-            try
-            {
-                PYBIND11_OVERLOAD_PURE_NAME(void, IProgressMonitor, "phase_finish", phaseFinish, phaseName);
-            }
-            catch (std::exception const& e)
-            {
-                std::cerr << "[ERROR] Exception caught in phase_finish(): " << e.what() << std::endl;
-            }
-            catch (...)
-            {
-                std::cerr << "[ERROR] Exception caught in phase_finish()" << std::endl;
-            }
-        }
-    };
-
     py::class_<IDebugListener, PyDebugListener>(m, "IDebugListener", IDebugListenerDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("process_debug_tensor", lambdas::docProcessDebugTensor, "addr"_a, "location"_a, "type"_a, "shape"_a,
+        .def(utils::kPYTHON_NAME<&IDebugListener::processDebugTensor>,
+            &utils::DocStub<&IDebugListener::processDebugTensor>::call, "addr"_a, "location"_a, "type"_a, "shape"_a,
             "name"_a, "stream"_a, IDebugListenerDoc::process_debug_tensor);
 
     py::class_<IOutputAllocator, PyOutputAllocator>(
@@ -1355,9 +1125,9 @@ void bindCore(py::module& m)
         .def("set_tensor_address", lambdas::set_tensor_address, "name"_a, "memory"_a,
             IExecutionContextDoc::set_tensor_address)
         .def("get_tensor_address", lambdas::get_tensor_address, "name"_a, IExecutionContextDoc::get_tensor_address)
-        .def("set_input_consumed_event", lambdas::set_input_consumed_event, "event"_a,
+        .def("set_input_consumed_event", &IExecutionContext::setInputConsumedEvent, "event"_a,
             IExecutionContextDoc::set_input_consumed_event)
-        .def("get_input_consumed_event", lambdas::get_input_consumed_event,
+        .def("get_input_consumed_event", &IExecutionContext::getInputConsumedEvent,
             IExecutionContextDoc::get_input_consumed_event)
         .def("set_output_allocator", &IExecutionContext::setOutputAllocator, "name"_a, "output_allocator"_a,
             IExecutionContextDoc::set_output_allocator, py::keep_alive<1, 3>{})
@@ -1369,12 +1139,20 @@ void bindCore(py::module& m)
             py::cpp_function(&IExecutionContext::setTemporaryStorageAllocator, py::keep_alive<1, 2>{}))
         .def("infer_shapes", lambdas::infer_shapes, IExecutionContextDoc::infer_shapes,
             py::call_guard<py::gil_scoped_release>{})
-        .def("execute_async_v3", lambdas::execute_async_v3, "stream_handle"_a, IExecutionContextDoc::execute_async_v3,
-            py::call_guard<py::gil_scoped_release>{})
+        .def("execute_async_v3", &IExecutionContext::enqueueV3, "stream_handle"_a,
+            IExecutionContextDoc::execute_async_v3, py::call_guard<py::gil_scoped_release>{})
         // End of enqueueV3 related APIs.
         .def_property_readonly("all_binding_shapes_specified", &IExecutionContext::allInputDimensionsSpecified)
-        .def("set_optimization_profile_async", lambdas::context_set_optimization_profile_async, "profile_index"_a,
-            "stream_handle"_a, IExecutionContextDoc::set_optimization_profile_async)
+        // Unlike the other bool-returning methods, this one raises on failure instead of returning False, so it
+        // cannot bind the C++ method directly.
+        .def(
+            "set_optimization_profile_async",
+            [](IExecutionContext& self, int32_t const profileIndex, cudaStream_t stream) {
+                PY_ASSERT_RUNTIME_ERROR(
+                    self.setOptimizationProfileAsync(profileIndex, stream), "Error in set optimization profile async.");
+                return true;
+            },
+            "profile_index"_a, "stream_handle"_a, IExecutionContextDoc::set_optimization_profile_async)
         .def_property("error_recorder", &IExecutionContext::getErrorRecorder,
             py::cpp_function(&IExecutionContext::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property("enqueue_emits_profile", &IExecutionContext::getEnqueueEmitsProfile,
@@ -1603,33 +1381,32 @@ void bindCore(py::module& m)
         m, "IGpuAllocator", GpuAllocatorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("allocate",
-            utils::deprecateMember(&IGpuAllocator::allocate, "Deprecated in TensorRT 10.0. Superseded by allocate"),
-            "size"_a, "alignment"_a, "flags"_a, GpuAllocatorDoc::allocate)
+            utils::deprecate(&IGpuAllocator::allocate, "Deprecated in TensorRT 10.0. Superseded by allocate"), "size"_a,
+            "alignment"_a, "flags"_a, GpuAllocatorDoc::allocate)
         .def("deallocate",
-            utils::deprecateMember(
-                &IGpuAllocator::deallocate, "Deprecated in TensorRT 10.0. Superseded by deallocate_async"),
+            utils::deprecate(&IGpuAllocator::deallocate, "Deprecated in TensorRT 10.0. Superseded by deallocate_async"),
             "memory"_a, GpuAllocatorDoc::deallocate)
         .def("reallocate", &IGpuAllocator::reallocate, "address"_a, "alignment"_a, "new_size"_a,
             GpuAllocatorDoc::reallocate)
-        .def("allocate_async", &lambdas::allocate_async, "size"_a, "alignment"_a, "flags"_a, "stream"_a,
-            GpuAllocatorDoc::allocate_async)
-        .def("deallocate_async", &lambdas::deallocate_async, "memory"_a, "stream"_a, GpuAllocatorDoc::deallocate_async);
+        .def(utils::kPYTHON_NAME<&IGpuAllocator::allocateAsync>, &IGpuAllocator::allocateAsync, "size"_a, "alignment"_a,
+            "flags"_a, "stream"_a, GpuAllocatorDoc::allocate_async)
+        .def(utils::kPYTHON_NAME<&IGpuAllocator::deallocateAsync>, &IGpuAllocator::deallocateAsync, "memory"_a,
+            "stream"_a, GpuAllocatorDoc::deallocate_async);
 
     py::class_<IGpuAsyncAllocator, PyGpuAsyncAllocator, IGpuAllocator>(
         m, "IGpuAsyncAllocator", GpuAsyncAllocatorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("allocate",
-            utils::deprecateMember(
-                &IGpuAsyncAllocator::allocate, "Deprecated in TensorRT 10.0. Superseded by allocate"),
+            utils::deprecate(&IGpuAsyncAllocator::allocate, "Deprecated in TensorRT 10.0. Superseded by allocate"),
             "size"_a, "alignment"_a, "flags"_a, GpuAsyncAllocatorDoc::allocate)
         .def("deallocate",
-            utils::deprecateMember(
+            utils::deprecate(
                 &IGpuAsyncAllocator::deallocate, "Deprecated in TensorRT 10.0. Superseded by deallocate_async"),
             "memory"_a, GpuAsyncAllocatorDoc::deallocate)
-        .def("allocate_async", &lambdas::allocate_async, "size"_a, "alignment"_a, "flags"_a, "stream"_a,
-            GpuAsyncAllocatorDoc::allocate_async)
-        .def("deallocate_async", &lambdas::deallocate_async, "memory"_a, "stream"_a,
-            GpuAsyncAllocatorDoc::deallocate_async);
+        .def(utils::kPYTHON_NAME<&IGpuAsyncAllocator::allocateAsync>, &IGpuAsyncAllocator::allocateAsync, "size"_a,
+            "alignment"_a, "flags"_a, "stream"_a, GpuAsyncAllocatorDoc::allocate_async)
+        .def(utils::kPYTHON_NAME<&IGpuAsyncAllocator::deallocateAsync>, &IGpuAsyncAllocator::deallocateAsync,
+            "memory"_a, "stream"_a, GpuAsyncAllocatorDoc::deallocate_async);
 
     py::enum_<SeekPosition>(m, "SeekPosition", py::arithmetic{}, SeekPositionDoc::descr, py::module_local())
         .value("SET", SeekPosition::kSET, SeekPositionDoc::SET)
@@ -1638,12 +1415,15 @@ void bindCore(py::module& m)
 
     py::class_<IStreamReaderV2, PyStreamReaderV2>(m, "IStreamReaderV2", StreamReaderV2Doc::descr, py::module_local())
         .def(py::init<>())
-        .def("read", lambdas::reader_v2_read, "destination"_a, "num_bytes"_a, "stream"_a, StreamReaderV2Doc::seek)
-        .def("seek", &IStreamReaderV2::seek, "offset"_a, "where"_a, StreamReaderV2Doc::read);
+        .def(utils::kPYTHON_NAME<&IStreamReaderV2::read>, &IStreamReaderV2::read, "destination"_a, "num_bytes"_a,
+            "stream"_a, StreamReaderV2Doc::read)
+        .def(utils::kPYTHON_NAME<&IStreamReaderV2::seek>, &IStreamReaderV2::seek, "offset"_a, "where"_a,
+            StreamReaderV2Doc::seek);
 
     py::class_<IStreamWriter, PyStreamWriter>(m, "IStreamWriter", StreamWriterDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("write", &IStreamWriter::write, "data"_a, "size"_a, StreamWriterDoc::write);
+        .def(utils::kPYTHON_NAME<&IStreamWriter::write>, &IStreamWriter::write, "data"_a, "size"_a,
+            StreamWriterDoc::write);
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("DEBUG", BuilderFlag::kDEBUG, BuilderFlagDoc::DEBUG)
@@ -1669,7 +1449,9 @@ void bindCore(py::module& m)
         .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
         .value("DISTRIBUTIVE_INDEPENDENCE", BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE,
             BuilderFlagDoc::DISTRIBUTIVE_INDEPENDENCE)
-        ;
+        .value("INDEPENDENT_WEIGHT_LAYOUTS", BuilderFlag::kINDEPENDENT_WEIGHT_LAYOUTS,
+            BuilderFlagDoc::INDEPENDENT_WEIGHT_LAYOUTS)
+        .value("CPU_ONLY", BuilderFlag::kCPU_ONLY, BuilderFlagDoc::CPU_ONLY);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1733,17 +1515,17 @@ void bindCore(py::module& m)
             utils::deprecateInTrtRtxOnly(&lambdas::setTimingMSec, timing_cache_deprecation_str));
 
     py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr, py::module_local())
-        .def("serialize", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::serialize, timing_cache_deprecation_str),
+        .def("serialize", utils::deprecateInTrtRtxOnly(&ITimingCache::serialize, timing_cache_deprecation_str),
             ITimingCacheDoc::serialize)
-        .def("combine", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::combine, timing_cache_deprecation_str),
+        .def("combine", utils::deprecateInTrtRtxOnly(&ITimingCache::combine, timing_cache_deprecation_str),
             "input_cache"_a, "ignore_mismatch"_a, ITimingCacheDoc::combine)
-        .def("reset", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::reset, timing_cache_deprecation_str),
+        .def("reset", utils::deprecateInTrtRtxOnly(&ITimingCache::reset, timing_cache_deprecation_str),
             ITimingCacheDoc::reset)
         .def("queryKeys", utils::deprecateInTrtRtxOnly(&lambdas::queryTimingCacheKeys, timing_cache_deprecation_str),
             ITimingCacheDoc::queryKeys)
-        .def("query", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::query, timing_cache_deprecation_str), "key"_a,
+        .def("query", utils::deprecateInTrtRtxOnly(&ITimingCache::query, timing_cache_deprecation_str), "key"_a,
             ITimingCacheDoc::query)
-        .def("update", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::update, timing_cache_deprecation_str), "key"_a,
+        .def("update", utils::deprecateInTrtRtxOnly(&ITimingCache::update, timing_cache_deprecation_str), "key"_a,
             "value"_a, ITimingCacheDoc::update);
 
     py::enum_<TilingOptimizationLevel>(
@@ -1771,7 +1553,7 @@ void bindCore(py::module& m)
         .def("set_flag", &IBuilderConfig::setFlag, "flag"_a, IBuilderConfigDoc::set_flag)
         .def("get_flag", &IBuilderConfig::getFlag, "flag"_a, IBuilderConfigDoc::get_flag)
         .def("reset", &IBuilderConfig::reset, IBuilderConfigDoc::reset)
-        .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
+        .def_property("profile_stream", &IBuilderConfig::getProfileStream, &IBuilderConfig::setProfileStream)
         .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
             IBuilderConfigDoc::add_optimization_profile, py::keep_alive<1, 2>{})
         .def_property_readonly("num_optimization_profiles", &IBuilderConfig::getNbOptimizationProfiles)
@@ -1789,10 +1571,10 @@ void bindCore(py::module& m)
         .def("create_timing_cache", lambdas::netconfig_create_timing_cache, "serialized_timing_cache"_a,
             IBuilderConfigDoc::create_timing_cache)
         .def("set_timing_cache",
-            utils::deprecateMemberInTrtRtxOnly(&IBuilderConfig::setTimingCache, timing_cache_deprecation_str),
-            "cache"_a, "ignore_mismatch"_a, IBuilderConfigDoc::set_timing_cache, py::keep_alive<1, 2>{})
+            utils::deprecateInTrtRtxOnly(&IBuilderConfig::setTimingCache, timing_cache_deprecation_str), "cache"_a,
+            "ignore_mismatch"_a, IBuilderConfigDoc::set_timing_cache, py::keep_alive<1, 2>{})
         .def("get_timing_cache",
-            utils::deprecateMemberInTrtRtxOnly(&IBuilderConfig::getTimingCache, timing_cache_deprecation_str),
+            utils::deprecateInTrtRtxOnly(&IBuilderConfig::getTimingCache, timing_cache_deprecation_str),
             IBuilderConfigDoc::get_timing_cache)
         .def("set_preview_feature", &IBuilderConfig::setPreviewFeature, "feature"_a, "enable"_a,
             IBuilderConfigDoc::set_preview_feature)
@@ -1937,7 +1719,7 @@ void bindCore(py::module& m)
             "get_weights_location", &IRefitter::getWeightsLocation, "weights_name"_a, RefitterDoc::get_weights_location)
         .def("unset_named_weights", &IRefitter::unsetNamedWeights, "weights_name"_a, RefitterDoc::unset_named_weights)
         .def_property("weights_validation", &IRefitter::getWeightsValidation, &IRefitter::setWeightsValidation)
-        .def("refit_cuda_engine_async", lambdas::refitter_refit_cuda_engine_async, "stream_handle"_a,
+        .def("refit_cuda_engine_async", &IRefitter::refitCudaEngineAsync, "stream_handle"_a,
             RefitterDoc::refit_cuda_engine_async, py::call_guard<py::gil_scoped_release>{})
         .def("release_refit_resources", &IRefitter::releaseRefitResources, RefitterDoc::release_refit_resources,
             py::call_guard<py::gil_scoped_release>{})

@@ -1,5 +1,7 @@
 Pillow==11.3.0
 cuda-python==12.9.0
-onnx==1.18.0
+onnx==1.18.0; python_version<"3.14"
+onnx==1.22.0; python_version>="3.14"
 onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
-numpy==1.26.4
+numpy==1.26.4; python_version<"3.13"
+numpy==2.5.2; python_version>="3.13"

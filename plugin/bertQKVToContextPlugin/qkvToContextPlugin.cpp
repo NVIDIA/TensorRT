@@ -71,9 +71,9 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, con
     mSM = getSmVersion();
 }
 
-QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const DataType type, const int32_t S,
-    const int32_t B, const int32_t SM, const int32_t hiddenSize, const int32_t numHeads, float const dqProbs,
-    bool hasImask, bool hasUnfusedDispatcher, void const* runnerStateBuffer)
+QKVToContextPluginDynamic::QKVToContextPluginDynamic(std::string const name, DataType const type, int32_t const S,
+    int32_t const B, int32_t const SM, int32_t const hiddenSize, int32_t const numHeads, float const dqProbs,
+    bool hasImask, bool hasUnfusedDispatcher, std::span<std::byte const> runnerStateBuffer)
     : mLayerName(name)
     , mS(S)
     , mB(B)
@@ -94,9 +94,12 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, con
     if (hasUnfusedDispatcher)
     {
         PLUGIN_ASSERT(unfusedDispatcher.get());
-        PLUGIN_ASSERT(runnerStateBuffer != nullptr);
+        PLUGIN_ASSERT(runnerStateBuffer.data() != nullptr);
         auto length = unfusedDispatcher->getSerializationSize();
-        unfusedDispatcher->deserialize(runnerStateBuffer, length);
+        // The buffer comes from a plan-supplied plugin field; deserialize() reads `length` bytes, so
+        // a shorter field would be read out of bounds.
+        PLUGIN_VALIDATE(runnerStateBuffer.size() == length, "runnerStateBuffer length mismatch");
+        unfusedDispatcher->deserialize(runnerStateBuffer);
     }
 
     BERT_DEBUG_MSG("MHA Runner Deser Done");
@@ -150,18 +153,18 @@ IPluginV3* QKVToContextPluginDynamic::clone() noexcept
     BERT_DEBUG_MSG("QKV Clone");
 
     mHasUnfusedDispatcher = 0;
-    void const* bufferData = nullptr;
+    std::span<std::byte const> runnerState{};
     // the workspacesize is 0 if we have not call setup the dispatcher yet.
     if (unfusedDispatcher.get() && unfusedDispatcher->getWorkspaceSize())
     {
         mHasUnfusedDispatcher = 1;
         mRunnerStateBuffer.resize(unfusedDispatcher->getSerializationSize());
         unfusedDispatcher->serialize(mRunnerStateBuffer.data());
-        bufferData = mRunnerStateBuffer.data();
+        runnerState = std::as_bytes(std::span{mRunnerStateBuffer});
     }
 
     auto ret = std::make_unique<QKVToContextPluginDynamic>(mLayerName, mType, mS, mB, mSM, mHiddenSize, mNumHeads,
-        mDqProbs, static_cast<bool>(mHasImask), mHasUnfusedDispatcher, bufferData);
+        mDqProbs, static_cast<bool>(mHasImask), mHasUnfusedDispatcher, runnerState);
     ret->setPluginNamespace(mNamespace.c_str());
     BERT_DEBUG_MSG("QKV Clone done");
     return ret.release();
@@ -623,7 +626,7 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
         int32_t b = -1;
         int32_t sm = -1;
         bool hasUnfusedDispatcher = false;
-        void const* runnerStateBuffer = nullptr;
+        std::span<std::byte const> runnerStateBuffer{};
         float dqProbs = -1.0F;
 
         PLUGIN_VALIDATE(fc->fields != nullptr);
@@ -706,7 +709,9 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
             else if (field_name == "runnerStateBuffer"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
-                runnerStateBuffer = static_cast<void const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(fc->fields[i].length >= 0, "negative runnerStateBuffer length");
+                runnerStateBuffer
+                    = {static_cast<std::byte const*>(fc->fields[i].data), static_cast<size_t>(fc->fields[i].length)};
             }
         }
 
@@ -728,11 +733,13 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
         PLUGIN_VALIDATE(sm != -1, "invalid SM during runtime plugin creation");
         if (hasUnfusedDispatcher == 1)
         {
-            PLUGIN_VALIDATE(runnerStateBuffer != nullptr, "invalid runnerStateBuffer during runtime plugin creation");
+            PLUGIN_VALIDATE(
+                runnerStateBuffer.data() != nullptr, "invalid runnerStateBuffer during runtime plugin creation");
         }
         else
         {
-            PLUGIN_VALIDATE(runnerStateBuffer == nullptr, "invalid runnerStateBuffer during runtime plugin creation");
+            PLUGIN_VALIDATE(
+                runnerStateBuffer.data() == nullptr, "invalid runnerStateBuffer during runtime plugin creation");
         }
 
         return new QKVToContextPluginDynamic(
@@ -793,7 +800,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
 
 QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name, int32_t const S, int32_t const B,
     DataType const type, int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask,
-    bool varSeqlen, bool useInt8ScaleMax, void const* runnerStateBuffer)
+    bool varSeqlen, bool useInt8ScaleMax, std::span<std::byte const> runnerStateBuffer)
     : mLayerName(name)
     , mS(S)
     , mB(B)
@@ -822,9 +829,12 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
 
     createMHARunner();
 
-    PLUGIN_ASSERT(runnerStateBuffer != nullptr);
+    PLUGIN_ASSERT(runnerStateBuffer.data() != nullptr);
     auto length = mDispatcher->getSerializationSize();
-    mDispatcher->deserialize(runnerStateBuffer, length);
+    // The buffer comes from a plan-supplied plugin field; deserialize() reads `length` bytes, so a
+    // shorter field would be read out of bounds.
+    PLUGIN_VALIDATE(runnerStateBuffer.size() == length, "runnerStateBuffer length mismatch");
+    mDispatcher->deserialize(runnerStateBuffer);
 }
 
 IPluginCapability* QKVToContextVarSeqlenPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
@@ -892,11 +902,10 @@ IPluginV3* QKVToContextVarSeqlenPlugin::clone() noexcept
     if (mDispatcher.get())
     {
         mRunnerStateBuffer.resize(mDispatcher->getSerializationSize());
-        void* const bufferData = mRunnerStateBuffer.data();
-        mDispatcher->serialize(bufferData);
+        mDispatcher->serialize(mRunnerStateBuffer.data());
 
         ret = std::make_unique<QKVToContextVarSeqlenPlugin>(mLayerName, mS, mB, mType, mHiddenSize, mNumHeads, mDqProbs,
-            mHasImask, mUseVarSeqlen, mUseInt8ScaleMax, bufferData);
+            mHasImask, mUseVarSeqlen, mUseInt8ScaleMax, std::as_bytes(std::span{mRunnerStateBuffer}));
     }
     else
     {
@@ -1398,7 +1407,7 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
         int32_t typeId = -1;
         int32_t s = -1;
         int32_t b = -1;
-        void const* runnerStateBuffer = nullptr;
+        std::span<std::byte const> runnerStateBuffer{};
         int32_t varSeqlen = 0;
         float dqProbs = -1.0F;
         int32_t useInt8ScaleMax = -1;
@@ -1481,7 +1490,9 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
             else if (field_name == "runnerStateBuffer"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
-                runnerStateBuffer = static_cast<void const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(fc->fields[i].length >= 0, "negative runnerStateBuffer length");
+                runnerStateBuffer
+                    = {static_cast<std::byte const*>(fc->fields[i].data), static_cast<size_t>(fc->fields[i].length)};
             }
         }
 
@@ -1509,7 +1520,8 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
 
         PLUGIN_VALIDATE(s != -1, "invalid S during runtime plugin creation");
         PLUGIN_VALIDATE(b != -1, "invalid B during runtime plugin creation");
-        PLUGIN_VALIDATE(runnerStateBuffer != nullptr, "invalid runnerStateBuffer during runtime plugin creation");
+        PLUGIN_VALIDATE(
+            runnerStateBuffer.data() != nullptr, "invalid runnerStateBuffer during runtime plugin creation");
 
         return new QKVToContextVarSeqlenPlugin(name, s, b, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen,
             useInt8ScaleMaxFlag, runnerStateBuffer);

@@ -113,6 +113,18 @@ if(NOT EXISTS ${CUDA_ROOT})
     message(FATAL_ERROR "CUDA_ROOT not defined or path '${CUDA_ROOT}' does not exist. CUDA is required for TensorRT.")
 endif()
 
+# Override CUDA paths only when the caller explicitly selects a target.
+set(_TRT_QNX_CUDA_TARGET aarch64-qnx)
+if(DEFINED TRT_QNX_CUDA_TARGET AND NOT TRT_QNX_CUDA_TARGET STREQUAL "")
+    set(_TRT_QNX_CUDA_TARGET "${TRT_QNX_CUDA_TARGET}")
+    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES TRT_QNX_CUDA_TARGET CUDA_ROOT)
+    string(APPEND CMAKE_CUDA_FLAGS_INIT " --target-directory=${TRT_QNX_CUDA_TARGET}")
+    # Keep FindCUDAToolkit's imported runtimes in the same target as nvcc.
+    set(CUDA_CUDART "${CUDA_ROOT}/targets/${_TRT_QNX_CUDA_TARGET}/lib/libcudart.so")
+    set(CUDA_cudart_LIBRARY "${CUDA_CUDART}")
+    set(CUDA_cudart_static_LIBRARY "${CUDA_ROOT}/targets/${_TRT_QNX_CUDA_TARGET}/lib/libcudart_static.a")
+endif()
+
 if(NOT DEFINED CMAKE_CUDA_COMPILER)
     set(CMAKE_CUDA_COMPILER "${CUDA_ROOT}/bin/nvcc" CACHE FILEPATH "Path to nvcc compiler")
 endif()
@@ -122,15 +134,24 @@ endif()
 set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS_INIT})
 
 # The CUDA setup for TRT-OSS is a bit wonky, so we enable the includes globally.
-include_directories(BEFORE SYSTEM
-    ${CUDA_ROOT}/targets/aarch64-qnx/include
-    /usr/include/aarch64-unknown-nto-qnx # TensorRT Safety Headers are installed here.
-)
+set(_TRT_QNX_INCLUDE_DIRS "${CUDA_ROOT}/targets/${_TRT_QNX_CUDA_TARGET}/include")
+if(QNX_VERSION VERSION_GREATER_EQUAL "8.0.0"
+    AND TRT_BUILD_PRODUCT STREQUAL "automotive"
+    AND DEFINED TensorRT-Automotive_DIR
+    AND DEFINED BUILD_SAFE_SAMPLES AND NOT BUILD_SAFE_SAMPLES)
+    # The explicitly selected standalone package supplies matching TRT headers.
+    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+        TRT_BUILD_PRODUCT BUILD_SAFE_SAMPLES TensorRT-Automotive_DIR)
+else()
+    # Preserve the legacy mixed build's system TensorRT Safety headers.
+    list(APPEND _TRT_QNX_INCLUDE_DIRS /usr/include/aarch64-unknown-nto-qnx)
+endif()
+include_directories(BEFORE SYSTEM ${_TRT_QNX_INCLUDE_DIRS})
 
 # And, well, as another consequence of that weirdness, we need to ensure that the cuda libs are on the link path.
 add_link_options(
-    "-L${CUDA_ROOT}/targets/aarch64-qnx/lib"
-    "-L${CUDA_ROOT}/targets/aarch64-qnx/lib/stubs"
+    "-L${CUDA_ROOT}/targets/${_TRT_QNX_CUDA_TARGET}/lib"
+    "-L${CUDA_ROOT}/targets/${_TRT_QNX_CUDA_TARGET}/lib/stubs"
 )
 
 # TRT-OSS expects this to be defined. Not really sure why.

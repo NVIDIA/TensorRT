@@ -94,7 +94,7 @@ QKVToContextPluginDynamicLegacy::QKVToContextPluginDynamicLegacy(
     if (hasUnfusedRunner)
     {
         PLUGIN_ASSERT(unfusedDispatcher.get());
-        unfusedDispatcher->deserialize(data, length);
+        unfusedDispatcher->deserialize({static_cast<std::byte const*>(data), length});
     }
 
     BERT_DEBUG_MSG("QKV Deser done");
@@ -642,7 +642,7 @@ QKVToContextVarSeqlenPluginLegacy::QKVToContextVarSeqlenPluginLegacy(
     deserialize_value(&data, &length, &mUseInt8ScaleMax);
 
     createMHARunner();
-    mDispatcher->deserialize(data, length);
+    mDispatcher->deserialize({static_cast<std::byte const*>(data), length});
 
     BERT_DEBUG_MSG("QKV Deser done");
 }

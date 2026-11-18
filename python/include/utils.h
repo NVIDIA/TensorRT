@@ -27,10 +27,17 @@
 #include <pybind11/pybind11.h>
 
 #include "NvInfer.h"
+#include "address.h"
+#include "invocableTraits.h"
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
+#include <tuple>
+#include <type_traits>
+#include <variant>
 
 #if defined(__GLIBC__)
 #include <sys/resource.h>
@@ -48,6 +55,77 @@
         std::cerr << "[ERROR] Failed to " << #EXPR << " with error " << retCode << std::endl;                          \
         return RET_ON_FAIL;                                                                                            \
     }
+
+namespace tensorrt::utils
+{
+//! pybind11 caster for an opaque CUDA handle such as cudaStream_t or cudaEvent_t, which the TensorRT Python API
+//! passes as a plain int. Letting pybind11 convert it means a method taking the handle can be bound directly
+//! instead of through a lambda that re-declares its parameters and reinterpret_casts an integer.
+//!
+//! \tparam Handle the pointer type of the handle, e.g. cudaStream_t.
+template <typename Handle>
+struct OpaqueHandleCaster
+{
+    static_assert(std::is_pointer_v<Handle>);
+
+    //! Accepts any object usable as an index (int, numpy integer, a handle type with __index__), as pybind11's
+    //! own integer caster does; rejects None, floats, and negative values.
+    bool load(pybind11::handle src, bool)
+    {
+        if (!src || src.is_none())
+        {
+            return false;
+        }
+        auto index = pybind11::reinterpret_steal<pybind11::object>(PyNumber_Index(src.ptr()));
+        if (!index)
+        {
+            PyErr_Clear();
+            return false;
+        }
+        // Unsigned conversion so a negative value raises instead of wrapping, as PyLong_AsVoidPtr would let it.
+        auto const bits = static_cast<uintptr_t>(PyLong_AsUnsignedLongLong(index.ptr()));
+        if (PyErr_Occurred())
+        {
+            PyErr_Clear();
+            return false;
+        }
+        value = reinterpret_cast<Handle>(bits);
+        return true;
+    }
+
+    static pybind11::handle cast(Handle src, pybind11::return_value_policy, pybind11::handle)
+    {
+        return PyLong_FromVoidPtr(src);
+    }
+
+    template <typename T>
+    using cast_op_type = Handle&;
+    explicit operator Handle&()
+    {
+        return value;
+    }
+    static constexpr auto name = pybind11::detail::const_name("int");
+
+private:
+    Handle value{nullptr};
+};
+} // namespace tensorrt::utils
+
+//! Specializing pybind11::detail::type_caster is pybind11's documented mechanism for custom conversions; see
+//! https://pybind11.readthedocs.io/en/stable/advanced/cast/custom.html. The specializations are on the pointee
+//! types because pybind11 keys casters on the pointee. Every binding translation unit includes this header, so no
+//! TU ever instantiates the default caster for these types.
+template <>
+struct pybind11::detail::type_caster<std::remove_pointer_t<cudaStream_t>>
+    : tensorrt::utils::OpaqueHandleCaster<cudaStream_t>
+{
+};
+
+template <>
+struct pybind11::detail::type_caster<std::remove_pointer_t<cudaEvent_t>>
+    : tensorrt::utils::OpaqueHandleCaster<cudaEvent_t>
+{
+};
 
 namespace tensorrt
 {
@@ -100,13 +178,21 @@ inline int64_t volume(nvinfer1::Dims const& dims)
     return std::accumulate(dims.d, dims.d + dims.nbDims, int64_t{1}, std::multiplies<int64_t>{});
 }
 
-// Method for calling the python function and returning the value (returned from python) used in cpp trampoline
-// classes. Prints an error if no such method is overriden in python.
-// T* must NOT be a trampoline class!
+// https://nvbugs/3479811 Create a wrapper for C++ to python throw
+[[noreturn]] void throwPyError(PyObject* type, std::string const& message = "python error");
+
+//! Find the Python override named \p overloadName of the object \p self is part of, printing an error if there is
+//! none and \p showWarning. The caller passes the py::gil_scoped_acquire it holds as proof that it has the GIL,
+//! which py::get_override requires; it is taken by non-const lvalue reference so a temporary (which would destruct
+//! before use) cannot bind to it. \p T may be the trampoline itself: pybind11 registers a trampoline as the class
+//! it is the alias of, so the lookup resolves to the instance's own class, at any depth of the interface hierarchy.
+//! Casting to the interface that declares the method would not: IGpuAllocator::reallocate on an IGpuAsyncAllocator
+//! finds no instance registered as an IGpuAllocator.
 template <typename T>
-py::function getOverride(const T* self, std::string const& overloadName, bool showWarning = true)
+[[nodiscard]] py::function getOverride(
+    py::gil_scoped_acquire& /*gil*/, T const* self, char const* overloadName, bool showWarning = true)
 {
-    py::function overload = py::get_override(self, overloadName.c_str());
+    py::function overload = py::get_override(self, overloadName);
     if (!overload && showWarning)
     {
         std::cerr << "Method: " << overloadName
@@ -115,80 +201,254 @@ py::function getOverride(const T* self, std::string const& overloadName, bool sh
     return overload;
 }
 
-// Deprecation helpers
-void issueDeprecationWarning(const char* useInstead);
-
-// TODO: Figure out how to de-duplicate these two
-template <typename RetVal, typename... Args>
-struct DeprecatedFunc
+//! Like getOverride, but throws a Python RuntimeError naming \p overloadName instead of returning a falsy
+//! py::function when there is no override. Use where the caller requires the override to exist.
+//!
+//! \post the returned function is truthy.
+template <typename T>
+[[nodiscard]] py::function requireOverride(py::gil_scoped_acquire& gil, T const* self, char const* overloadName)
 {
-    using Func = RetVal (*)(Args...);
+    py::function overload = getOverride(gil, self, overloadName);
+    if (!overload)
+    {
+        throwPyError(PyExc_RuntimeError, std::string("no implementation provided for ") + overloadName + "()");
+    }
+    return overload;
+}
 
+//! Convert one argument of an interface method into the form its Python override expects.
+//!
+//! Everything goes through pybind11's casters, including cudaStream_t and cudaEvent_t via OpaqueHandleCaster,
+//! except void pointers: they are device or host memory addresses, which the API passes as ints, and pybind11's
+//! own void* caster would produce a capsule instead. void* is not a type of our own, so that rule cannot be a caster.
+//! A value that already is a Python object, such as the bytes IStreamWriter::write passes, goes through as is.
+template <typename T>
+[[nodiscard]] py::object toPythonArg(T const& arg)
+{
+    if constexpr (VoidPointer<T>)
+    {
+        return py::int_(addressToPyInt(arg));
+    }
+    else if constexpr (std::derived_from<T, py::object>)
+    {
+        return arg;
+    }
+    else
+    {
+        return py::cast(arg);
+    }
+}
+
+//! What invokeOverride yields for a method returning \p R: monostate stands in for void, so an override that ran is
+//! still told apart from one that did not.
+template <typename R>
+using OverrideResult = std::optional<std::conditional_t<std::is_void_v<R>, std::monostate, R>>;
+
+//! Convert a Python override's return value to the interface method's return type. The counterpart of
+//! toPythonArg: void pointers come back as ints, everything else through pybind11's casters, and a void method's
+//! result is dropped unexamined.
+template <typename R>
+[[nodiscard]] typename OverrideResult<R>::value_type fromPythonResult([[maybe_unused]] py::object const& result)
+{
+    if constexpr (std::is_void_v<R>)
+    {
+        return std::monostate{};
+    }
+    else if constexpr (VoidPointer<R>)
+    {
+        return reinterpret_cast<R>(result.cast<uintptr_t>());
+    }
+    else
+    {
+        return result.cast<R>();
+    }
+}
+
+//! Invoke the Python override named \p pyName on \p self. \p TInvocable is the signature the override has: the
+//! type of a pointer to the interface method when Python receives the method's own parameters, or a function
+//! type R(Interface&, Params...) when the Python parameters differ from the C++ ones.
+//!
+//! Python receives \p args positionally, so they must be exactly the signature's parameters, in order: a wrong
+//! count, a wrong type, or two arguments swapped fails the constraints instead of reaching Python as a
+//! plausible-looking int (https://nvbugs/6157565). \p self is normally the trampoline; see getOverride.
+//!
+//! \return the override's result, monostate for a void signature; nullopt if there is no override (printed as an
+//! error when \p warnIfMissing), or if the call threw or returned a value of the wrong type, which are always
+//! printed.
+template <typename TInvocable, typename TSelf, typename... Args>
+    requires Implements<TSelf, TInvocable> && ArgumentsOf<TInvocable, Args...>
+[[nodiscard]] OverrideResult<typename InvocableTraits<TInvocable>::Return> invokeOverride(
+    TSelf* self, char const* pyName, bool warnIfMissing, Args const&... args) noexcept
+{
+    using Traits = InvocableTraits<TInvocable>;
+    using Return = typename Traits::Return;
+    try
+    {
+        py::gil_scoped_acquire gil{};
+        py::function pyOverride = getOverride(gil, self, pyName, warnIfMissing);
+        if (!pyOverride)
+        {
+            return std::nullopt;
+        }
+        py::object result = pyOverride(toPythonArg(args)...);
+        try
+        {
+            return fromPythonResult<Return>(result);
+        }
+        catch (py::cast_error const&)
+        {
+            std::cerr << "[ERROR] Return value of " << pyName << "() could not be interpreted as "
+                      << (std::is_pointer_v<Return> ? "an int" : "the expected type") << std::endl;
+        }
+    }
+    catch (std::exception const& e)
+    {
+        std::cerr << "[ERROR] Exception caught in " << pyName << "(): " << e.what() << std::endl;
+    }
+    catch (...)
+    {
+        std::cerr << "[ERROR] Exception caught in " << pyName << "()" << std::endl;
+    }
+    return std::nullopt;
+}
+
+//! Invoke the Python override of the interface method \p Method on \p self, passing \p args, which must be
+//! exactly the method's parameters. The override is looked up as kPYTHON_NAME<Method>, the same string the
+//! pybind11 .def uses, so the two cannot drift apart. A missing override is printed as an error.
+//!
+//! \return the override's result, or nullopt if the override is missing or failed, as for the overload above.
+template <auto Method, typename TSelf, typename... Args>
+    requires HasPythonName<Method> && Implements<TSelf, decltype(Method)> && ArgumentsOf<decltype(Method), Args...>
+[[nodiscard]] OverrideResult<typename InvocableTraits<decltype(Method)>::Return> invokeOverride(
+    TSelf* self, Args const&... args) noexcept
+{
+    return invokeOverride<decltype(Method)>(self, kPYTHON_NAME<Method>, true, args...);
+}
+
+//! Whether \p self's Python class overrides the interface method \p Method, for methods a class may omit.
+template <auto Method, typename TSelf>
+    requires HasPythonName<Method> && Implements<TSelf, decltype(Method)>
+[[nodiscard]] bool hasOverride(TSelf const* self) noexcept
+{
+    try
+    {
+        py::gil_scoped_acquire gil{};
+        return static_cast<bool>(getOverride(gil, self, kPYTHON_NAME<Method>, false));
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+// Deprecation helpers
+
+//! Raise a Python DeprecationWarning that directs the caller to \p useInstead. The Deprecated* wrappers below call
+//! it each time a deprecated binding is invoked.
+void issueDeprecationWarning(char const* useInstead);
+
+//! Warn via issueDeprecationWarning, then invoke \p func on \p args, which for a member-pointer \p func starts
+//! with the instance. The Deprecated specializations below are just this behind a call operator whose signature
+//! matches \p func's, since pybind11 needs a concrete, non-template operator() to derive a binding's signature.
+template <typename Func, typename... Args>
+auto invokeDeprecated(char const* useInstead, Func func, Args&&... args)
+{
+    issueDeprecationWarning(useInstead);
+    return std::invoke(func, std::forward<Args>(args)...);
+}
+
+template <typename Func>
+struct Deprecated;
+
+template <typename RetVal, typename... Args>
+struct Deprecated<RetVal (*)(Args...)>
+{
     RetVal operator()(Args... args) const
     {
-        issueDeprecationWarning(useInstead);
-        return (*func)(std::forward<Args>(args)...);
+        return invokeDeprecated(useInstead, func, std::forward<Args>(args)...);
     }
 
-    const Func func;
-    const char* useInstead;
+    RetVal (*const func)(Args...);
+    char const* const useInstead;
 };
 
 template <typename RetVal, typename... Args>
-constexpr auto deprecate(RetVal (*func)(Args...), const char* useInstead) -> DeprecatedFunc<RetVal, Args...>
+struct Deprecated<RetVal (*)(Args...) noexcept>
 {
-    return DeprecatedFunc<RetVal, Args...>{func, useInstead};
-}
-
-template <bool isConst, typename RetVal, typename Cls, typename... Args>
-struct DeprecatedMemberFunc
-{
-    using Func = std::conditional_t<isConst, RetVal (Cls::*)(Args...) const, RetVal (Cls::*)(Args...)>;
-
-    RetVal operator()(Cls& self, Args... args) const
+    RetVal operator()(Args... args) const
     {
-        issueDeprecationWarning(useInstead);
-        return (std::forward<Cls>(self).*func)(std::forward<Args>(args)...);
+        return invokeDeprecated(useInstead, func, std::forward<Args>(args)...);
     }
 
-    const Func func;
-    const char* useInstead;
+    RetVal (*const func)(Args...) noexcept;
+    char const* const useInstead;
 };
 
 template <typename RetVal, typename Cls, typename... Args>
-constexpr auto deprecateMember(RetVal (Cls::*func)(Args...) const, const char* useInstead)
-    -> DeprecatedMemberFunc</*isConst=*/true, RetVal, Cls, Args...>
+struct Deprecated<RetVal (Cls::*)(Args...)>
 {
-    return DeprecatedMemberFunc</*isConst=*/true, RetVal, Cls, Args...>{func, useInstead};
-}
+    RetVal operator()(Cls& self, Args... args) const
+    {
+        return invokeDeprecated(useInstead, func, self, std::forward<Args>(args)...);
+    }
+
+    RetVal (Cls::*const func)(Args...);
+    char const* const useInstead;
+};
 
 template <typename RetVal, typename Cls, typename... Args>
-constexpr auto deprecateMember(RetVal (Cls::*func)(Args...), const char* useInstead)
-    -> DeprecatedMemberFunc</*isConst=*/false, RetVal, Cls, Args...>
+struct Deprecated<RetVal (Cls::*)(Args...) noexcept>
 {
-    return DeprecatedMemberFunc</*isConst=*/false, RetVal, Cls, Args...>{func, useInstead};
+    RetVal operator()(Cls& self, Args... args) const
+    {
+        return invokeDeprecated(useInstead, func, self, std::forward<Args>(args)...);
+    }
+
+    RetVal (Cls::*const func)(Args...) noexcept;
+    char const* const useInstead;
+};
+
+template <typename RetVal, typename Cls, typename... Args>
+struct Deprecated<RetVal (Cls::*)(Args...) const>
+{
+    RetVal operator()(Cls const& self, Args... args) const
+    {
+        return invokeDeprecated(useInstead, func, self, std::forward<Args>(args)...);
+    }
+
+    RetVal (Cls::*const func)(Args...) const;
+    char const* const useInstead;
+};
+
+template <typename RetVal, typename Cls, typename... Args>
+struct Deprecated<RetVal (Cls::*)(Args...) const noexcept>
+{
+    RetVal operator()(Cls const& self, Args... args) const
+    {
+        return invokeDeprecated(useInstead, func, self, std::forward<Args>(args)...);
+    }
+
+    RetVal (Cls::*const func)(Args...) const noexcept;
+    char const* const useInstead;
+};
+
+template <typename Func>
+constexpr auto deprecate(Func func, char const* useInstead) -> Deprecated<Func>
+{
+    return Deprecated<Func>{func, useInstead};
 }
 
 template <typename T>
-constexpr auto deprecateInTrtRtxOnly(T&& func, const char* /*unused*/) -> T&&
+constexpr auto deprecateInTrtRtxOnly(T&& func, char const* /*unused*/) -> T&&
 {
     return std::forward<T>(func);
 }
 
 template <typename T>
-constexpr auto deprecateMemberInTrtRtxOnly(T&& func, const char* /*unused*/) -> T&&
-{
-    return std::forward<T>(func);
-}
-
-template <typename T>
-void doNothingDel(const T& self)
+void doNothingDel(T const& self)
 {
     issueDeprecationWarning("del obj");
 }
-
-// https://nvbugs/3479811 Create a wrapper for C++ to python throw
-[[noreturn]] void throwPyError(PyObject* type, std::string const& message = "python error");
 
 //! \brief Validate a Dims returned by a TensorRT API.
 //!

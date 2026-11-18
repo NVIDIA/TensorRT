@@ -471,9 +471,9 @@ void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
     bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
-    PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     C = inputDims[0].d[0];
     H = inputDims[0].d[1];
     W = inputDims[0].d[2];

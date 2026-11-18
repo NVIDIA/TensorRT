@@ -18,11 +18,15 @@
 #include "sampleTuning.h"
 #include "common.h"
 #include "nlohmann/json.hpp"
+#include "sampleUtils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <set>
 #include <sstream>
+#include <tuple>
 #include <unordered_set>
 
 namespace sample
@@ -147,7 +151,7 @@ std::string BuildRouteKnobDatabase::buildDefaultPath() const
 
 bool BuildRouteKnobDatabase::hasKnob(std::string const& knobName) const
 {
-    return mKnobs.find(knobName) != mKnobs.end();
+    return mKnobs.contains(knobName);
 }
 
 BuildRouteKnobDef const* BuildRouteKnobDatabase::getKnob(std::string const& knobName) const
@@ -443,183 +447,316 @@ std::optional<BuildRouteParsedExpr> BuildRouteExprParser::parseExpr(std::string 
 // TuningContext Implementation
 // ============================================================================
 
-BigInt TuningContext::count() const
+std::optional<BigInt> TuningContext::count() const
 {
-    if (parsedExprs.empty())
-    {
-        return BigInt(0);
-    }
+    return searchStrategy->count(*this);
+}
 
-    switch (searchAlgorithm)
+std::optional<std::string> TuningContext::getBuildRouteAtIndex(BigInt const& index)
+{
+    return searchStrategy->getBuildRouteAtIndex(*this, index);
+}
+
+namespace
+{
+//! \brief Count the Cartesian product without materializing routes.
+//! Each expression contributes its value-list size; fixed arguments contribute one. An empty
+//! expression list represents no routes. BigInt preserves products larger than native integers.
+BigInt countBuildRoutes(std::vector<BuildRouteParsedExpr> const& exprs)
+{
+    BigInt total{exprs.empty() ? 0U : 1U};
+    for (auto const& expr : exprs)
     {
-    case TuningSearchAlgorithm::kEXHAUSTIVE:
-    {
-        // Product of all value list sizes
-        BigInt total(1);
-        for (auto const& expr : parsedExprs)
-        {
-            total = total * BigInt(expr.mValues.size());
-        }
-        return total;
+        total = total * BigInt{expr.mValues.size()};
     }
-    case TuningSearchAlgorithm::kFAST:
-    case TuningSearchAlgorithm::kMIXED:
+    return total;
+}
+
+//! \brief Preserve expression order when formatting one set of selected values.
+//! values must contain one entry per expression. Spaces separate knob=value tokens because each
+//! token is a separate compiler option; no other combinations are generated or stored here.
+std::string formatBuildRoute(std::vector<BuildRouteParsedExpr> const& exprs, std::vector<std::string> const& values)
+{
+    std::string route;
+    for (size_t i = 0; i < exprs.size(); ++i)
     {
-        // 1 (baseline) + sum of non-default values per variable knob.
-        // For mixed mode, this returns the phase 1 (fast scan) count only.
-        // Phase 2 count is determined dynamically after phase 1 completes.
-        ASSERT(parsedExprs.size() == defaultValues.size());
-        BigInt total(1);
-        for (uint64_t i = 0; i < parsedExprs.size(); ++i)
+        if (i != 0)
         {
-            if (parsedExprs[i].mIsFixed)
+            route += " ";
+        }
+        route += exprs[i].mKnobName + "=" + values[i];
+    }
+    return route;
+}
+
+//! \brief Use explicit fixed arguments in preference to knob defaults.
+//! The returned vector parallels parsedExprs. Variable knobs use their database defaults even if
+//! those defaults are absent from their candidate lists; fixed knobs retain the requested value.
+std::vector<std::string> baselineValues(TuningContext const& ctx)
+{
+    auto values = ctx.defaultValues;
+    for (size_t i = 0; i < ctx.parsedExprs.size(); ++i)
+    {
+        if (ctx.parsedExprs[i].mIsFixed)
+        {
+            values[i] = ctx.parsedExprs[i].mValues.front();
+        }
+    }
+    return values;
+}
+
+//! \brief Decode one mixed-radix index, with the rightmost knob changing fastest.
+//! For value lists [on,off] and [0,1,2], index 4 yields off/1: 4 % 3 selects 1 in the last list,
+//! and (4 / 3) % 2 selects off in the first. Both full and mixed searches reuse this arithmetic.
+//! Return nullopt when index is outside the product; working storage holds only one route's values.
+std::optional<std::string> getExhaustiveBuildRoute(std::vector<BuildRouteParsedExpr> const& exprs, BigInt const& index)
+{
+    if (index >= countBuildRoutes(exprs))
+    {
+        return std::nullopt;
+    }
+    std::vector<std::string> values(exprs.size());
+    BigInt remaining = index;
+    for (size_t i = exprs.size(); i > 0; --i)
+    {
+        auto const& candidates = exprs[i - 1].mValues;
+        BigInt const base{candidates.size()};
+        values[i - 1] = candidates[(remaining % base).toUint64()];
+        remaining = remaining / base;
+    }
+    return formatBuildRoute(exprs, values);
+}
+
+//! \brief Keep the fastest value per knob, breaking equal-time ties deterministically.
+//! The caller supplies eligible improvements. Rank by GPU time, expression index, and value text,
+//! then retain at most maxKnobs distinct indices. Taking the vector by value lets streaming callers
+//! move their bounded working selection into this helper instead of copying a complete history.
+std::vector<MixedSearchKnobResult> selectTopPositiveKnobs(
+    std::vector<MixedSearchKnobResult> positiveKnobs, uint32_t maxKnobs)
+{
+    std::sort(positiveKnobs.begin(), positiveKnobs.end(), [](auto const& lhs, auto const& rhs) {
+        return std::tie(lhs.gpuTimeMs, lhs.knobIndex, lhs.value) < std::tie(rhs.gpuTimeMs, rhs.knobIndex, rhs.value);
+    });
+    std::set<int32_t> selectedIndices;
+    std::vector<MixedSearchKnobResult> selected;
+    for (auto const& knob : positiveKnobs)
+    {
+        if (selected.size() == maxKnobs)
+        {
+            break;
+        }
+        if (selectedIndices.insert(knob.knobIndex).second)
+        {
+            selected.push_back(knob);
+        }
+    }
+    return selected;
+}
+} // namespace
+
+std::optional<BigInt> FullSearch::count(TuningContext const& ctx) const
+{
+    return countBuildRoutes(ctx.parsedExprs);
+}
+
+std::optional<std::string> FullSearch::getBuildRouteAtIndex(TuningContext const& ctx, BigInt const& index)
+{
+    return getExhaustiveBuildRoute(ctx.parsedExprs, index);
+}
+
+std::optional<BigInt> FastSearch::count(TuningContext const& ctx) const
+{
+    BigInt total{ctx.parsedExprs.empty() ? 0U : 1U};
+    for (size_t i = 0; i < ctx.parsedExprs.size(); ++i)
+    {
+        auto const& expr = ctx.parsedExprs[i];
+        if (!expr.mIsFixed)
+        {
+            for (auto const& value : expr.mValues)
             {
-                continue;
-            }
-            for (auto const& val : parsedExprs[i].mValues)
-            {
-                if (val != defaultValues[i])
+                if (value != ctx.defaultValues[i])
                 {
                     ++total;
                 }
             }
         }
-        return total;
     }
-    default:
-    {
-        throw std::invalid_argument("Unsupported tuning search algorithm");
-    }
-    }
+    return total;
 }
 
-std::string TuningContext::getPathAtIndex(BigInt const& index) const
+std::optional<std::string> FastSearch::getBuildRouteAtIndex(TuningContext const& ctx, BigInt const& index)
 {
-    // Helper lambda: build a space-separated knob=value string from per-knob value selections.
-    // Spaces are required because the Myelin compiler parses each knob as a separate option.
-    // Used by both exhaustive and fast modes.
-    auto buildString = [this](auto const& getValueAtPosition) -> std::string {
-        std::string result;
-        for (uint64_t j = 0; j < parsedExprs.size(); ++j)
-        {
-            if (j > 0)
-            {
-                result += " ";
-            }
-            result += parsedExprs[j].mKnobName + "=" + getValueAtPosition(j);
-        }
-        return result;
-    };
-
-    switch (searchAlgorithm)
+    if (index >= *count(ctx))
     {
-    case TuningSearchAlgorithm::kEXHAUSTIVE:
+        return std::nullopt;
+    }
+    auto values = baselineValues(ctx);
+    if (auto const knob = identifyVariedKnob(ctx, index))
     {
-        // Reverse mixed-radix decomposition: decompose index into per-knob value indices.
-        // Work from right to left (least significant to most significant).
-        BigInt const total = count();
-        if (index >= total)
-        {
-            throw std::out_of_range("Index " + index.toString() + " is out of range [0, " + total.toString() + ")");
-        }
-
-        std::vector<uint64_t> valueIndices(parsedExprs.size());
-        BigInt current = index;
-        for (int64_t i = static_cast<int64_t>(parsedExprs.size()) - 1; i >= 0; --i)
-        {
-            BigInt const base(parsedExprs[i].mValues.size());
-            valueIndices[i] = (current % base).toUint64();
-            current = current / base;
-        }
-
-        return buildString([&](uint64_t j) -> std::string const& { return parsedExprs[j].mValues[valueIndices[j]]; });
+        values[knob->first] = knob->second;
     }
-    case TuningSearchAlgorithm::kFAST:
-    case TuningSearchAlgorithm::kMIXED:
-    {
-        // Fast/mixed mode: index 0 is the baseline (all defaults), index 1..N are one-off variations
-        // iterating from last knob to first, skipping default values.
-        // For mixed mode, this handles phase 1 only. Phase 2 uses a separate TuningContext.
-        ASSERT(parsedExprs.size() == defaultValues.size());
-
-        auto baselineValue = [this](uint64_t j) -> std::string const& {
-            return parsedExprs[j].mIsFixed ? parsedExprs[j].mValues[0] : defaultValues[j];
-        };
-
-        // Index 0: pure baseline
-        if (index == BigInt(0))
-        {
-            return buildString(baselineValue);
-        }
-
-        // Index > 0: find which knob is varied and to what value
-        auto knob = identifyVariedKnob(*this, index);
-        if (!knob)
-        {
-            throw std::out_of_range("Index " + index.toString() + " is out of range for fast expansion");
-        }
-        return buildString([&](uint64_t j) -> std::string const& {
-            return static_cast<int64_t>(j) == knob->first ? knob->second : baselineValue(j);
-        });
-    }
-    default:
-    {
-        throw std::invalid_argument("Unsupported tuning search algorithm");
-    }
-    }
+    return formatBuildRoute(ctx.parsedExprs, values);
 }
 
-// ============================================================================
-// Mixed Search Phase 2 Context Builder
-// ============================================================================
-
-TuningContext buildMixedPhase2Context(
-    TuningContext const& phase1Context, std::vector<MixedSearchKnobResult> const& positiveKnobs)
+std::vector<MixedSearchKnobResult> readPositiveKnobsFromCache(
+    TuningContext const& ctx, std::string const& cacheFile, uint32_t maxKnobs)
 {
-    // Build a set of knob indices that are "positive" (showed improvement in phase 1).
-    // For these knobs, we keep their full value lists. All other knobs become fixed to baseline.
-    std::set<int32_t> positiveIndices;
-    for (auto const& knob : positiveKnobs)
+    std::ifstream file(cacheFile);
+    std::string header;
+    if (!std::getline(file, header))
     {
-        positiveIndices.insert(knob.knobIndex);
+        throw std::runtime_error("Cannot read individual measurements from tuning cache: " + cacheFile);
     }
-
-    TuningContext phase2;
-    phase2.searchAlgorithm = TuningSearchAlgorithm::kEXHAUSTIVE;
-    phase2.tunerVersion = phase1Context.tunerVersion;
-    phase2.defaultBuildRoute = phase1Context.defaultBuildRoute;
-
-    for (uint64_t i = 0; i < phase1Context.parsedExprs.size(); ++i)
+    std::vector<MixedSearchKnobResult> positiveKnobs;
+    double baselineGpuTimeMs = std::numeric_limits<double>::infinity();
+    BigInt const scanCount = *FastSearch{}.count(ctx);
+    for (BigInt i{0}; i < scanCount; ++i)
     {
-        BuildRouteParsedExpr expr;
-        expr.mKnobName = phase1Context.parsedExprs[i].mKnobName;
-
-        if (positiveIndices.count(static_cast<int32_t>(i)) > 0 && !phase1Context.parsedExprs[i].mIsFixed)
+        auto const row = readCachedIterationResult(file);
+        if (!row)
         {
-            // Positive knob: keep full value list for exhaustive expansion.
-            expr.mValues = phase1Context.parsedExprs[i].mValues;
-            expr.mIsFixed = false;
+            throw std::runtime_error("Incomplete individual measurements in tuning cache: " + cacheFile);
+        }
+        if (i.isZero())
+        {
+            baselineGpuTimeMs = row->succeeded() ? row->gpuTimeMs : std::numeric_limits<double>::infinity();
         }
         else
         {
-            // Non-positive or fixed knob: lock to baseline default value.
-            expr.mValues = {phase1Context.parsedExprs[i].mIsFixed ? phase1Context.parsedExprs[i].mValues[0]
-                                                                  : phase1Context.defaultValues[i]};
-            expr.mIsFixed = true;
+            collectPositiveKnobFromResult(!row->succeeded(), row->gpuTimeMs, baselineGpuTimeMs, i, ctx, positiveKnobs);
+            // The scan can be large too; retain at most maxKnobs candidates after every record.
+            positiveKnobs = selectTopPositiveKnobs(std::move(positiveKnobs), maxKnobs);
         }
-
-        phase2.parsedExprs.push_back(std::move(expr));
-        phase2.defaultValues.push_back(phase1Context.defaultValues[i]);
     }
+    return positiveKnobs;
+}
 
-    phase2.totalCount = phase2.count();
-    return phase2;
+MixedSearch::MixedSearch(std::string cacheFile)
+    : mCacheFile(std::move(cacheFile))
+{
+}
+
+std::optional<BigInt> MixedSearch::count(TuningContext const& ctx) const
+{
+    if (!mSelectedExprs)
+    {
+        // The total depends on the knob selection loaded by the first combination lookup.
+        return std::nullopt;
+    }
+    return *mFastSearch.count(ctx) + countBuildRoutes(*mSelectedExprs);
+}
+
+std::optional<std::string> MixedSearch::getBuildRouteAtIndex(TuningContext const& ctx, BigInt const& index)
+{
+    BigInt const scanCount = *mFastSearch.count(ctx);
+    if (index < scanCount)
+    {
+        return mFastSearch.getBuildRouteAtIndex(ctx, index);
+    }
+    if (!mSelectedExprs)
+    {
+        // Restore the same domains for a direct resume as for a fresh run reaching combinations.
+        // Retain value lists only; their Cartesian product may be too large to expand.
+        auto const positiveKnobs = readPositiveKnobsFromCache(ctx, mCacheFile, kMAX_POSITIVE_KNOBS);
+        std::vector<BuildRouteParsedExpr> exprs;
+        if (positiveKnobs.size() > 1)
+        {
+            exprs = ctx.parsedExprs;
+            auto const defaults = baselineValues(ctx);
+            for (size_t i = 0; i < exprs.size(); ++i)
+            {
+                bool const selected = std::any_of(positiveKnobs.begin(), positiveKnobs.end(),
+                    [i](auto const& knob) { return static_cast<size_t>(knob.knobIndex) == i; });
+                if (!selected)
+                {
+                    exprs[i].mValues = {defaults[i]};
+                    exprs[i].mIsFixed = true;
+                }
+            }
+        }
+        mSelectedExprs = std::move(exprs);
+    }
+    return getExhaustiveBuildRoute(*mSelectedExprs, index - scanCount);
+}
+
+MixedFastSearch::MixedFastSearch(std::string cacheFile)
+    : mCacheFile(std::move(cacheFile))
+{
+}
+
+std::optional<BigInt> MixedFastSearch::count(TuningContext const& ctx) const
+{
+    if (!mPositiveKnobs)
+    {
+        // The total depends on the knob selection loaded by the first combination lookup.
+        return std::nullopt;
+    }
+    auto const selected = mPositiveKnobs->size();
+    return *mFastSearch.count(ctx) + BigInt{(uint64_t{1} << selected) - 1 - selected};
+}
+
+std::optional<std::string> MixedFastSearch::getBuildRouteAtIndex(TuningContext const& ctx, BigInt const& index)
+{
+    BigInt const scanCount = *mFastSearch.count(ctx);
+    if (index < scanCount)
+    {
+        return mFastSearch.getBuildRouteAtIndex(ctx, index);
+    }
+    if (!mPositiveKnobs)
+    {
+        // A direct lookup after continuation may be the first call that needs this selection.
+        // Load it once from the completed individual trials; later combination timings do not alter it.
+        mPositiveKnobs = readPositiveKnobsFromCache(ctx, mCacheFile, kMAX_POSITIVE_KNOBS);
+    }
+    if (index >= *count(ctx))
+    {
+        return std::nullopt;
+    }
+    BigInt remaining = index - scanCount;
+    auto const& selected = *mPositiveKnobs;
+    // selected is fastest first, so its first entry occupies the highest bit. Descending masks
+    // put all knobs first; for ranks C, B, A the multi-knob masks yield ABC, BC, AC, AB.
+    for (uint32_t mask = (uint32_t{1} << selected.size()) - 1; mask != 0; --mask)
+    {
+        if ((mask & (mask - 1)) == 0)
+        {
+            continue; // Individual values have already been measured.
+        }
+        if (!remaining.isZero())
+        {
+            --remaining;
+            continue;
+        }
+        auto values = baselineValues(ctx);
+        for (size_t i = 0; i < selected.size(); ++i)
+        {
+            if ((mask & (uint32_t{1} << (selected.size() - 1 - i))) != 0)
+            {
+                values[selected[i].knobIndex] = selected[i].value;
+            }
+        }
+        return formatBuildRoute(ctx.parsedExprs, values);
+    }
+    return std::nullopt;
+}
+
+std::unique_ptr<ISearchStrategy> createSearchStrategy(TuningSearchAlgorithm algorithm, std::string const& cacheFile)
+{
+    switch (algorithm)
+    {
+    case TuningSearchAlgorithm::kEXHAUSTIVE: return std::make_unique<FullSearch>();
+    case TuningSearchAlgorithm::kFAST: return std::make_unique<FastSearch>();
+    case TuningSearchAlgorithm::kMIXED: return std::make_unique<MixedSearch>(cacheFile);
+    case TuningSearchAlgorithm::kMIXED_FAST: return std::make_unique<MixedFastSearch>(cacheFile);
+    }
+    throw std::invalid_argument("Unsupported tuning search algorithm");
 }
 
 void collectPositiveKnobFromResult(bool crashed, double gpuTimeMs, double baselineGpuTimeMs, BigInt const& index,
     TuningContext const& ctx, std::vector<MixedSearchKnobResult>& positiveKnobs)
 {
-    if (!crashed && gpuTimeMs > 0.0 && gpuTimeMs < baselineGpuTimeMs)
+    if (!crashed && std::isfinite(gpuTimeMs) && std::isfinite(baselineGpuTimeMs) && gpuTimeMs > 0.0
+        && gpuTimeMs < baselineGpuTimeMs)
     {
         auto knob = identifyVariedKnob(ctx, index);
         if (knob)

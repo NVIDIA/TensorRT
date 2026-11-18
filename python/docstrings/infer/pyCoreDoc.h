@@ -413,9 +413,9 @@ constexpr char const* descr = R"trtdoc(
     :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()`. Profile 0 is selected by default. This is a readonly property and active optimization profile can be changed with :func:`set_optimization_profile_async()`. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_input_shape` before calling either :func:`execute_v2()`.
     :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_input_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
-    :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
+    :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :meth:`IExecutionContext.report_to_profiler` needs to be called to obtain the profiling data and report to the profiler attached.
     :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
-    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in enqueueV3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
+    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in :meth:`IExecutionContext.execute_async_v3`. Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
     :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
 )trtdoc";
 
@@ -1211,6 +1211,14 @@ constexpr char const* STRICT_NANS
     = R"trtdoc(Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs.)trtdoc";
 constexpr char const* MONITOR_MEMORY = R"trtdoc(Enable memory monitor during build time.)trtdoc";
 constexpr char const* DISTRIBUTIVE_INDEPENDENCE = R"trtdoc(Enable distributive independence.)trtdoc";
+constexpr char const* INDEPENDENT_WEIGHT_LAYOUTS
+    = R"trtdoc(Build each graph and optimization profile with an independent weight layout. By default, TensorRT may share compatible weight layouts to reduce engine size. This flag applies to both Standard and Safety engines.)trtdoc";
+constexpr char const* CPU_ONLY = R"trtdoc(
+    Build without using local GPU resources.
+    Supported for safety builds, TensorRT-RTX, and platforms with CPU-only builder support.
+    Enabled by default in TensorRT-RTX, and in Windows on Arm with DLA when GPU compute is unsupported.
+    Disabled by default otherwise.
+)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1436,13 +1444,13 @@ constexpr char const* descr = R"trtdoc(
     example of integrating cuDLA APIs with TensorRT APIs.)trtdoc";
 
 constexpr char const* STANDARD
-    = R"trtdoc(Standard: TensorRT flow without targeting the standard runtime. This flow supports both DeviceType::kGPU and DeviceType::kDLA.)trtdoc";
+    = R"trtdoc(Standard: TensorRT flow without targeting the standard runtime. This flow supports both DeviceType.GPU and DeviceType.DLA.)trtdoc";
 
 constexpr char const* SAFETY
-    = R"trtdoc(Safety: TensorRT flow with restrictions targeting the safety runtime. See safety documentation for list of supported layers and formats. This flow supports only DeviceType::kGPU.)trtdoc";
+    = R"trtdoc(Safety: TensorRT flow with restrictions targeting the safety runtime. See safety documentation for list of supported layers and formats. This flow supports only DeviceType.GPU.)trtdoc";
 
 constexpr char const* DLA_STANDALONE
-    = R"trtdoc(DLA Standalone: TensorRT flow with restrictions targeting external, to TensorRT, DLA runtimes. See DLA documentation for list of supported layers and formats. This flow supports only DeviceType::kDLA.)trtdoc";
+    = R"trtdoc(DLA Standalone: TensorRT flow with restrictions targeting external, to TensorRT, DLA runtimes. See DLA documentation for list of supported layers and formats. This flow supports only DeviceType.DLA.)trtdoc";
 
 } // namespace EngineCapabilityDoc
 
@@ -1567,7 +1575,7 @@ constexpr char const* descr = R"trtdoc(
         :ivar max_num_tactics: The maximum number of tactics to time when there is a choice of tactics. Setting a larger number allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a smaller number of tactics. Valid values include integers from -1 to the maximum 32-bit integer. Default value -1 indicates that TensorRT can decide the number of tactics based on its own heuristic.
         :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
         :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
-        :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
+        :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the :meth:`IExecutionContext.execute_async_v3` call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronization overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary streams leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
         :ivar progress_monitor: The :class:`IProgressMonitor` to use.
         :ivar tiling_optimization_level: The optimization level of tiling strategies. A Higher level allows TensorRT to spend more time searching for better optimization strategy.
         :ivar l2_limit_for_tiling: The target L2 cache usage for tiling optimization.
@@ -1912,7 +1920,11 @@ constexpr char const* is_network_supported = R"trtdoc(
 
     NOTE: A ``True`` return value does not guarantee that engine building will succeed, as backends may reject it for
         reasons not detectable with this fast validation. To definitively check whether a network can be built with a given config,
+)trtdoc"
+                                             R"trtdoc(
         use :func:`build_engine_with_config` or :func:`build_serialized_network` (depending on the engine capability).
+)trtdoc"
+                                             R"trtdoc(
 
     NOTE: This function will synchronize the cuda stream returned by ``config.profile_stream`` before returning.
 

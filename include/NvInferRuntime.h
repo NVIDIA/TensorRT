@@ -227,7 +227,7 @@ struct impl::EnumMaxImpl<TensorLocation>
 //! \class IDimensionExpr
 //!
 //! \brief An IDimensionExpr represents an integer expression constructed from constants,
-//! input dimensions, and binary operations.  These expressions are can be used
+//! input dimensions, and binary operations.  These expressions can be used
 //! in overrides of IPluginV2DynamicExt::getOutputDimensions or IPluginV3OneBuild::getOutputShapes() to define output
 //! dimensions in terms of input dimensions.
 //!

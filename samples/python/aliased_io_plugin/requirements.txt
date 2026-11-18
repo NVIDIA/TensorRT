@@ -1,10 +1,12 @@
 cupy-cuda12x
-triton==3.2.0; (platform_system != "Windows")
+triton==3.2.0; (platform_system != "Windows") and python_version<"3.14"
+triton==3.7.0; (platform_system != "Windows") and python_version>="3.14"
 torch
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy
 colored
-numpy==1.26.4
+numpy==1.26.4; python_version<"3.13"
+numpy==2.5.2; python_version>="3.13"
 pyyaml==6.0.3
 requests==2.32.4
 tqdm==4.66.4

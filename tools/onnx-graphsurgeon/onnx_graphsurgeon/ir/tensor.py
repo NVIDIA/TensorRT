@@ -17,9 +17,15 @@
 
 from onnx_graphsurgeon.logger import G_LOGGER
 from onnx_graphsurgeon.util import misc
+from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonResourceError
 
 from typing import Set, Sequence, Union
 import numpy as np
+
+# Upper bound, in bytes, on the dense array that densifying a single sparse
+# tensor is allowed to allocate in SparseValues.load(). Callers that need larger sparse initializers
+# can raise this module-level attribute.
+MAX_DENSE_SPARSE_TENSOR_BYTES = 2 * 1024**3  # 2 GiB
 
 
 class Tensor(object):
@@ -307,9 +313,30 @@ class SparseValues(LazyValues):
             values_data = np.asarray(values, dtype)
         indices_data = np.asarray(self.tensor.indices.int64_data, dtype=np.int64)
 
+        # A negative dimension would make the element count below meaningless
+        # (and could flip its sign, defeating the size cap), so reject it first.
+        if any(dim < 0 for dim in self.tensor.dims):
+            G_LOGGER.critical(
+                f"Sparse tensor {self.tensor.values.name} has a negative dimension "
+                f"in its dense shape {list(self.tensor.dims)}"
+            )
+
+        # Reject densification of a sparse tensor whose declared dense shape and type
+        # would exceed MAX_DENSE_SPARSE_TENSOR_BYTES bytes.
+        dense_size = misc.volume(self.tensor.dims)
+        dense_nbytes = dense_size * np.dtype(np.float64).itemsize
+        if dense_nbytes > MAX_DENSE_SPARSE_TENSOR_BYTES:
+            G_LOGGER.critical(
+                f"Sparse tensor {self.tensor.values.name} declares dense shape "
+                f"{list(self.tensor.dims)} ({dense_size} elements, {dense_nbytes} "
+                f"bytes once densified), which exceeds the maximum of "
+                f"{MAX_DENSE_SPARSE_TENSOR_BYTES} bytes allowed when densifying a "
+                f"sparse tensor. Refusing to allocate.",
+                OnnxGraphSurgeonResourceError,
+            )
+
         if len(self.tensor.indices.dims) == 1:
             nnz = int(self.tensor.indices.dims[0])
-            dense_size = int(np.prod(self.tensor.dims))
             if indices_data.size != nnz:
                 G_LOGGER.critical(
                     f"Sparse tensor {self.tensor.values.name} declares {nnz} indices, "

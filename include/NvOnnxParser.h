@@ -84,8 +84,7 @@ constexpr int32_t EnumMax<ErrorCode>() noexcept
 //!
 //! \see IParser::setFlags() and IParser::getFlags()
 //!
-using OnnxParserFlags
-    = uint32_t;
+using OnnxParserFlags = uint32_t;
 
 enum class OnnxParserFlag : int32_t
 {
@@ -173,7 +172,7 @@ public:
     virtual int32_t localFunctionStackSize() const = 0;
 
 protected:
-    virtual ~IParserError() {}
+    virtual ~IParserError() = default;
 };
 
 class IRefitterObserver;
@@ -206,7 +205,7 @@ public:
     //! \see getNbErrors() getError()
     //!
     virtual bool parse(
-        void const* serialized_onnx_model, size_t serialized_onnx_model_size, const char* model_path = nullptr) noexcept
+        void const* serialized_onnx_model, size_t serialized_onnx_model_size, char const* model_path = nullptr) noexcept
         = 0;
 
     //!
@@ -230,7 +229,7 @@ public:
     //!
     //! \param op_name The name of the ONNX operator to check for support
     //!
-    virtual bool supportsOperator(const char* op_name) const noexcept = 0;
+    virtual bool supportsOperator(char const* op_name) const noexcept = 0;
 
     //!
     //!\brief Get the number of errors that occurred during prior calls to
@@ -350,7 +349,8 @@ public:
     //! \return true if the model is supported
     //!
     virtual bool supportsModelV2(
-        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept = 0;
+        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept
+        = 0;
 
     //!
     //! \brief Get the number of subgraphs. Calling this function before calling \p supportsModelV2 results in undefined
@@ -400,7 +400,8 @@ public:
     //! \see getNbErrors() getError()
     //!
     virtual bool loadModelProto(
-        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept = 0;
+        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept
+        = 0;
 
     //!
     //! \brief Prompt the ONNX parser to load an initializer with user-provided binary data.
@@ -438,7 +439,7 @@ public:
     //!
     //! \return true if the IBuilderConfig was set successfully, false otherwise.
     //!
-    virtual bool setBuilderConfig(const nvinfer1::IBuilderConfig* const builderConfig) noexcept = 0;
+    virtual bool setBuilderConfig(nvinfer1::IBuilderConfig const* const builderConfig) noexcept = 0;
 
     //!
     //! \brief Set or clear an optional observer notified once per refittable weight during parsing.
@@ -680,7 +681,8 @@ public:
     //! \see getNbErrors() getError()
     //!
     virtual bool loadModelProto(
-        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept = 0;
+        void const* serializedOnnxModel, size_t serializedOnnxModelSize, char const* modelPath = nullptr) noexcept
+        = 0;
 
     //!
     //! \brief Prompt the ONNX refitter to load an initializer with user-provided binary data.

@@ -23,7 +23,7 @@ The legacy plugin that will be deprecated, is plugin creator class `ScatterEleme
 The `ScatterElements` plugin consumes the following inputs:
 
 1. `data` - T: Tensor of rank r >= 1.
-2. `indices` - Tind: Tensor of int64 indices, of r >= 1 (same rank as input). All index values are expected to be within bounds [-s, s-1] along axis of size s. It is an error if any of the index values are out of bounds.
+2. `indices` - Tind: Tensor of int64 indices, of r >= 1 (same rank as input). All index values are expected to be within bounds [-s, s-1] along axis of size s. Updates whose indices are out of bounds are skipped, and `enqueue()` does not fail for them, because checking on the host would require synchronizing the stream.
 3. `updates` - T: Tensor of rank r >=1 (same rank and shape as indices)
 
 The `ScatterElements` plugin produces the following output:

@@ -48,14 +48,14 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v11.4.0.106
+- TensorRT v11.5.0.63
   - Available from direct download links listed below
 
 **System Packages**
 
 - [CUDA](https://developer.nvidia.com/cuda-toolkit)
   - Recommended versions:
-  - cuda-13.4.0
+  - cuda-13.5.1
   - cuda-12.9.0
 - [CUDNN (optional)](https://developer.nvidia.com/cudnn)
   - cuDNN 8.9
@@ -103,24 +103,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 11.4.0.106 for CUDA 13.4, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/tars/TensorRT-Enterprise-11.4.0.106-Linux-x86_64-cuda-13.4-Release-external.tar.zst)
-   - [TensorRT 11.4.0.106 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/tars/TensorRT-Enterprise-11.4.0.106-Linux-x86_64-cuda-12.9-Release-external.tar.zst)
-   - [TensorRT 11.4.0.106 for CUDA 13.4, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/zip/TensorRT-Enterprise-11.4.0.106-Windows-amd64-cuda-13.4-Release-external.zip)
-   - [TensorRT 11.4.0.106 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.4.0/zip/TensorRT-Enterprise-11.4.0.106-Windows-amd64-cuda-12.9-Release-external.zip)
+   - [TensorRT 11.5.0.63 for CUDA 13.5, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.5.0/tars/TensorRT-Enterprise-11.5.0.63-Linux-x86_64-cuda-13.5-Release-external.tar.zst)
+   - [TensorRT 11.5.0.63 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.5.0/tars/TensorRT-Enterprise-11.5.0.63-Linux-x86_64-cuda-12.9-Release-external.tar.zst)
+   - [TensorRT 11.5.0.63 for CUDA 13.5, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.5.0/zip/TensorRT-Enterprise-11.5.0.63-Windows-amd64-cuda-13.5-Release-external.zip)
+   - [TensorRT 11.5.0.63 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.5.0/zip/TensorRT-Enterprise-11.5.0.63-Windows-amd64-cuda-12.9-Release-external.zip)
 
-   **Example: Ubuntu 22.04 on x86-64 with cuda-13.4**
+   **Example: Ubuntu 22.04 on x86-64 with cuda-13.5**
 
    ```bash
    cd ~/Downloads
-   tar --zstd -xvf TensorRT-Enterprise-11.4.0.106-Linux-x86_64-cuda-13.4-Release-external.tar.zst
-   export TRT_LIBPATH=`pwd`/TensorRT-11.4.0.106/lib
+   tar --zstd -xvf TensorRT-Enterprise-11.5.0.63-Linux-x86_64-cuda-13.5-Release-external.tar.zst
+   export TRT_LIBPATH=`pwd`/TensorRT-11.5.0.63/lib
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-Enterprise-11.4.0.106-Windows-amd64-cuda-12.9-Release-external.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-11.4.0.106\lib"
+   Expand-Archive -Path TensorRT-Enterprise-11.5.0.63-Windows-amd64-cuda-12.9-Release-external.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-11.5.0.63\lib"
    ```
 
 ## Setting Up The Build Environment
@@ -129,34 +129,34 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 1. #### Generate the TensorRT-OSS build container.
 
-   **Example: Ubuntu 24.04 on x86-64 with cuda-13.4 (default)**
+   **Example: Ubuntu 24.04 on x86-64 with cuda-13.5 (default)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-24.04.Dockerfile --tag tensorrt-ubuntu24.04-cuda13.4
+   ./docker/build.sh --file docker/ubuntu-24.04.Dockerfile --tag tensorrt-ubuntu24.04-cuda13.5
    ```
 
-   **Example: Rockylinux8 on x86-64 with cuda-13.4**
+   **Example: Rockylinux8 on x86-64 with cuda-13.5**
 
    ```bash
-   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda13.4
+   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda13.5
    ```
 
-   **Example: Ubuntu 24.04 cross-compile for Jetson (aarch64) with cuda-13.4 (JetPack SDK)**
+   **Example: Ubuntu 24.04 cross-compile for Jetson (aarch64) with cuda-13.5 (JetPack SDK)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda13.4
+   ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda13.5
    ```
 
-   **Example: Ubuntu 24.04 on aarch64 with cuda-13.4**
+   **Example: Ubuntu 24.04 on aarch64 with cuda-13.5**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-24.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu24.04-cuda13.4
+   ./docker/build.sh --file docker/ubuntu-24.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu24.04-cuda13.5
    ```
 
 2. #### Launch the TensorRT-OSS build container.
    **Example: Ubuntu 24.04 build container**
    ```bash
-   ./docker/launch.sh --tag tensorrt-ubuntu24.04-cuda13.4 --gpus all
+   ./docker/launch.sh --tag tensorrt-ubuntu24.04-cuda13.5 --gpus all
    ```
    > NOTE:
    > <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -169,7 +169,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 - Generate Makefiles and build
 
-  **Example: Linux (x86-64) build with default cuda-13.4**
+  **Example: Linux (x86-64) build with default cuda-13.5**
 
   ```bash
   cd $TRT_OSSPATH
@@ -181,7 +181,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Linux (aarch64) build with default cuda-13.4**
+  **Example: Linux (aarch64) build with default cuda-13.5**
 
   ```bash
   cd $TRT_OSSPATH
@@ -194,7 +194,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Native build on Jetson Thor (aarch64) with cuda-13.4**
+  **Example: Native build on Jetson Thor (aarch64) with cuda-13.5**
 
   ```bash
   cd $TRT_OSSPATH
@@ -208,7 +208,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 
   > NOTE: C compiler must be explicitly specified via CC= for native aarch64 builds of protobuf.
 
-  **Example: Ubuntu 24.04 Cross-Compile for Jetson Thor (aarch64) with cuda-13.4 (JetPack)**
+  **Example: Ubuntu 24.04 Cross-Compile for Jetson Thor (aarch64) with cuda-13.5 (JetPack)**
 
   ```bash
   cd $TRT_OSSPATH
@@ -217,16 +217,17 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Ubuntu 24.04 Cross-Compile for DriveOS (aarch64) with cuda-13.4**
+  **Example: Ubuntu 24.04 Cross-Compile for DriveOS (aarch64) with cuda-13.5**
 
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
-  cmake .. -DCMAKE_PREFIX_PATH=$TRT_ROOT -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_cross.toolchain
+  cmake .. -DTRT_BUILD_PRODUCT=automotive -DCMAKE_PREFIX_PATH=$TRT_ROOT \
+      -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_cross.toolchain
   make -j$(nproc)
   ```
 
-  **Example: Native builds on Windows (x86) with cuda-13.4**
+  **Example: Native builds on Windows (x86) with cuda-13.5**
 
   ```bash
   cd $TRT_OSSPATH
@@ -239,7 +240,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   msbuild TensorRT.sln /property:Configuration=Release -m:$env:NUMBER_OF_PROCESSORS
   ```
 
-  > NOTE: The default CUDA version used by CMake is 13.4. To override this, for example to 12.9, append `-DCUDA_VERSION=12.9` to the cmake command.
+  > NOTE: The default CUDA version used by CMake is 13.5. To override this, for example to 12.9, append `-DCUDA_VERSION=12.9` to the cmake command.
 
 - Required CMake build arguments are:
   - `CMAKE_PREFIX_PATH`: Path to the TensorRT package root containing the product CMake config.
@@ -255,6 +256,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   - `BUILD_SAMPLES`: Specify if the samples should be built, for example [`ON`] | `OFF`.
   - `BUILD_SAFE_SAMPLES`: Specify if safety samples should be built, for example [`ON`] | `OFF`.
   - `TRT_SAFETY_INFERENCE_ONLY`: Specify if only build the safety inference components, for example [`ON`] | `OFF`. If turned ON, all other components will be turned OFF except `BUILD_SAFE_SAMPLES`.
+  - `TRT_BUILD_PRODUCT`: Select the TensorRT product package to import: `enterprise`, `automotive`, or `safe_inference`. If omitted, the build will infer the product based on the values of `BUILD_SAFE_SAMPLES` and `TRT_SAFETY_INFERENCE_ONLY`.
   - `TRT_BUILD_ENABLE_MULTIDEVICE`: Enable the multi-device sample (`sampleDistCollective`). Use `-DTRT_BUILD_ENABLE_MULTIDEVICE=ON` to build it; requires [NCCL](https://developer.nvidia.com/nccl/nccl-download) >= v2.19, < v3.0.
   - `TRT_BUILD_TESTING` : Build gTests for samples. Requires [gtest](https://github.com/google/googletest) if available; otherwise fetches googletest at configure time.
 
@@ -268,6 +270,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   cd $TRT_OSSPATH
   mkdir -p build && cd build
   cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF \
+      -DTRT_BUILD_PRODUCT=automotive \
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
       -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
       -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
@@ -301,7 +304,8 @@ For Linux platforms, we recommend that you generate a docker container for build
       -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=`pwd`/out \
       -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=`pwd`/out \
       -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64-native.toolchain \
-      -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF
+      -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF \
+      -DTRT_BUILD_PRODUCT=automotive
   make -j$(nproc)
   ```
 
@@ -363,14 +367,15 @@ For Linux platforms, we recommend that you generate a docker container for build
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
-  export CUDA_VERSION=13.4
+  export CUDA_VERSION=13.5
   export CUDA=cuda-$CUDA_VERSION
-  export CUDA_ROOT=/usr/local/cuda-safe-$CUDA_VERSION
+  export CUDA_ROOT=/usr/local/cuda-$CUDA_VERSION
   export QNX_BASE=/drive/toolchains/qnx_toolchain  # Set to your QNX toolchain installation path
   export QNX_HOST=$QNX_BASE/host/linux/x86_64/
   export QNX_TARGET=$QNX_BASE/target/qnx/
   export PATH=$PATH:$QNX_HOST/usr/bin
   cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF \
+      -DTRT_BUILD_PRODUCT=automotive \
       -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc \
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
       -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
@@ -383,6 +388,41 @@ For Linux platforms, we recommend that you generate a docker container for build
 
   > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
   > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
+
+  **Example: Cross-Compile for DOS7 QNX Safety (aarch64)**
+
+  DOS7 QNX and QNX Safety use the same QNX 8 SDK through `QNX_HOST` and
+  `QNX_TARGET`. The QNX Safety build additionally uses SafeCUDA, the matching
+  TensorRT SafeInference package, and `cmake_qnx_safe.toolchain`. The standard
+  DriveOS QNX Safety build environment provides `PDK_TOP`; the toolchain uses
+  the libraries under `$PDK_TOP/drive-qnx-safety/lib-target`.
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  export CUDA_VERSION=13.5
+  export CUDA=cuda-$CUDA_VERSION
+  export CUDA_ROOT=/usr/local/cuda-$CUDA_VERSION-safe
+  export QNX_BASE=/drive/toolchains/qnx_toolchain  # Set to your QNX 8 toolchain installation path
+  export QNX_HOST=$QNX_BASE/host/linux/x86_64/
+  export QNX_TARGET=$QNX_BASE/target/qnx/
+  export PATH=$PATH:$QNX_HOST/usr/bin
+  cmake .. -DBUILD_SAMPLES=OFF -DBUILD_SAFE_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF \
+      -DTRT_BUILD_PRODUCT=safe_inference \
+      -DTRT_SAFETY_INFERENCE_ONLY=ON -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
+      -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
+      -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=`pwd`/bin_dynamic_cross \
+      -DCMAKE_PREFIX_PATH=$TRT_ROOT \
+      -DTensorRT-SafeInference_DIR=$TRT_ROOT/cmake \
+      -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx_safe.toolchain \
+      -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc \
+      -DCMAKE_CUDA_ARCHITECTURES=110
+  make -j$(nproc)
+  ```
+
+  > NOTE: Set `QNX_BASE` to the same QNX 8 SDK used for DOS7 QNX builds. The
+  > generated QNX Safety binaries are placed in `build/bin_dynamic_cross`.
 
 # References
 

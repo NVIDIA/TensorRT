@@ -7,3 +7,5 @@ build/
 *.vcxproj
 externals/
 **/.DS_Store
+__pycache__/
+*.onnx
