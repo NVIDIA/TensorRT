@@ -41,8 +41,9 @@ from onnx_models import (
 from onnx_graphsurgeon.exporters.onnx_exporter import (
     OnnxExporter,
     constant_to_onnx_tensor,
+    export_onnx,
 )
-from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
+from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter, import_onnx
 from onnx_graphsurgeon.ir.function import Function
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
@@ -481,6 +482,32 @@ class TestOnnxExporter(object):
         # ONNX exports the initializers in this model differently after importing - ONNX GS can't do much about this.
         if model.path != lstm_model().path:
             assert onnx_graph == exported_onnx_graph
+
+    def test_export_optional_round_trip(self):
+        tensor_type = onnx.helper.make_tensor_type_proto(onnx.TensorProto.FLOAT, [2])
+        graph = onnx.helper.make_graph(
+            [
+                onnx.helper.make_node("Optional", [], ["opt"], type=tensor_type),
+                onnx.helper.make_node("OptionalHasElement", ["opt"], ["has"]),
+            ],
+            "optional",
+            [],
+            [
+                onnx.helper.make_value_info(
+                    "opt", onnx.helper.make_optional_type_proto(tensor_type)
+                ),
+                onnx.helper.make_tensor_value_info("has", onnx.TensorProto.BOOL, []),
+            ],
+        )
+        model = onnx.helper.make_model(
+            graph, opset_imports=[onnx.helper.make_opsetid("", 18)]
+        )
+
+        exported = export_onnx(import_onnx(model))
+
+        onnx.checker.check_model(exported, full_check=True)
+        assert exported.graph.output[0].type == model.graph.output[0].type
+        assert exported.graph.node[0].attribute[0].tp == tensor_type
 
     def test_export_fp4_tensor(self) -> None:
         """Test a tensor can be exported when using fp4."""

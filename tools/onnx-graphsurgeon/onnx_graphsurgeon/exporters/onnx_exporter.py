@@ -227,6 +227,11 @@ class OnnxExporter(BaseExporter):
                 onnx_tensor = onnx.helper.make_sparse_tensor_value_info(
                     tensor.name, dtype_to_onnx(tensor.dtype), tensor.shape
                 )
+            elif tensor.type == "optional_type":
+                # The importer keeps the optional's element TypeProto as the dtype.
+                onnx_tensor = onnx.helper.make_value_info(
+                    tensor.name, onnx.helper.make_optional_type_proto(tensor.dtype)
+                )
         else:
             onnx_tensor = onnx.helper.make_empty_tensor_value_info(tensor.name)
         return onnx_tensor
