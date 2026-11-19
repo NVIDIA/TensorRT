@@ -9,6 +9,7 @@ Dates are in YYYY-MM-DD format.
 - Added `model_doc_string` field to `Graph` to forward the `doc_string` of the ONNX `ModelProto` during export.
 
 ### Fixed
+- Fixed export of NumPy-backed INT4 and UINT4 constants.
 - Fixed a `TypeError` when importing a model containing a local function with a `GRAPH`-typed attribute default value.
 - Fixed a `KeyError` when importing a tensor whose data type is outside the `onnx.TensorProto.DataType` enum.
 - Report an `OnnxGraphSurgeonException` instead of `UnicodeDecodeError` when importing a model with a `STRING` or `STRINGS` attribute whose bytes are not valid UTF-8.

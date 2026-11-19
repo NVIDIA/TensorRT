@@ -62,6 +62,20 @@ class TestOnnxExporter(object):
         """
         return np.frombuffer(b, dtype=dtype).reshape(shape)
 
+    @pytest.mark.parametrize("dtype,values,onnx_dtype", [
+        (ml_dtypes.int4, [-8, -1, 0, 3, 7], onnx.TensorProto.INT4),
+        (ml_dtypes.uint4, [0, 1, 8, 15], onnx.TensorProto.UINT4),
+        (ml_dtypes.uint4, [15], onnx.TensorProto.UINT4),
+        (ml_dtypes.int4, [], onnx.TensorProto.INT4),
+    ])
+    def test_export_packed_int4_constant(self, dtype, values, onnx_dtype):
+        array = np.asarray(values, dtype=dtype)
+        actual = OnnxExporter.export_tensor_proto(Constant("x", array))
+        expected = onnx.numpy_helper.from_array(array, name="x")
+        assert actual.data_type == onnx_dtype
+        assert actual.raw_data == expected.raw_data
+        np.testing.assert_array_equal(onnx.numpy_helper.to_array(actual), array)
+
     def test_should_export_not_load_lazy_values(self):
         """Test that when exporting a gs.Constant with LazyValues, the exporter does not load the lazy values."""
         # Precondition.
