@@ -34,7 +34,7 @@ def cast_up(buffer):
         buffer = util.array.cast(buffer, DataType.FLOAT32)
     elif dtype in [DataType.INT8, DataType.UINT8, DataType.INT16, DataType.UINT16]:
         buffer = util.array.cast(buffer, DataType.INT32)
-    elif dtype == DataType.UINT32:
+    elif dtype in [DataType.INT32, DataType.UINT32]:
         buffer = util.array.cast(buffer, DataType.INT64)
     return buffer
 
