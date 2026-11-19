@@ -24,6 +24,7 @@ import ml_dtypes
 import numpy as np
 import onnx
 import onnx.numpy_helper
+import onnx_graphsurgeon as gs
 import pytest
 from numpy.typing import DTypeLike, NDArray
 from onnx_models import (
@@ -61,6 +62,32 @@ class TestOnnxExporter(object):
         arrays with correct numerical representations as long as the `dtype` argument is given `ml_dtypes.xxx`.
         """
         return np.frombuffer(b, dtype=dtype).reshape(shape)
+
+    def test_renamed_lazy_constant_does_not_mutate_imported_model(self):
+        initializer = onnx.numpy_helper.from_array(
+            np.array([1.0], dtype=np.float32), name="W"
+        )
+        node = onnx.helper.make_node("Identity", ["W"], ["Y"])
+        output = onnx.helper.make_tensor_value_info(
+            "Y", onnx.TensorProto.FLOAT, [1]
+        )
+        model = onnx.helper.make_model(
+            onnx.helper.make_graph([node], "g", [], [output], [initializer]),
+            opset_imports=[onnx.helper.make_opsetid("", 13)],
+        )
+        original = model.SerializeToString()
+        graph = gs.import_onnx(model)
+        constant = graph.tensors()["W"]
+        constant.name = "W2"
+
+        exported = gs.export_onnx(graph)
+
+        assert model.SerializeToString() == original
+        assert isinstance(constant._values, LazyValues)
+        assert constant._values.tensor.name == "W"
+        assert exported.graph.initializer[0].name == "W2"
+        onnx.checker.check_model(model)
+        onnx.checker.check_model(exported)
 
     def test_should_export_not_load_lazy_values(self):
         """Test that when exporting a gs.Constant with LazyValues, the exporter does not load the lazy values."""

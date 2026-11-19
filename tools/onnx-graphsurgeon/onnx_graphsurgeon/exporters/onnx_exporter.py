@@ -191,7 +191,10 @@ class OnnxExporter(BaseExporter):
         # the original onnx.TensorProto directly.
         if isinstance(tensor._values, LazyValues):
             onnx_tensor = tensor._values.tensor
-            onnx_tensor.name = tensor.name
+            if onnx_tensor.name != tensor.name:
+                onnx_tensor = onnx.TensorProto()
+                onnx_tensor.CopyFrom(tensor._values.tensor)
+                onnx_tensor.name = tensor.name
         else:
             onnx_tensor = constant_to_onnx_tensor(tensor)
 
