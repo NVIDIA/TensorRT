@@ -50,7 +50,7 @@ def dtype_to_onnx(dtype: Union[np.dtype, "onnx.TensorProto.DataType"]) -> int:
         ml_dtype_to_onnx_name = {
             np.dtype(ml_dtypes.bfloat16): "BFLOAT16",
             np.dtype(ml_dtypes.float8_e4m3fn): "FLOAT8E4M3FN",
-            np.dtype(ml_dtypes.float8_e4m3fnuz): "FLOAT8E4M3FN",
+            np.dtype(ml_dtypes.float8_e4m3fnuz): "FLOAT8E4M3FNUZ",
             np.dtype(ml_dtypes.float8_e5m2): "FLOAT8E5M2",
             np.dtype(ml_dtypes.float8_e5m2fnuz): "FLOAT8E5M2FNUZ",
             np.dtype(ml_dtypes.uint4): "UINT4",
