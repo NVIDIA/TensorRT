@@ -235,7 +235,10 @@ class OnnxExporter(BaseExporter):
     def export_attributes(attrs: dict) -> List[onnx.AttributeProto]:
         onnx_attrs: List[onnx.AttributeProto] = []
         for key, val in attrs.items():
-            if isinstance(val, Tensor):
+            if isinstance(val, Constant) and isinstance(val._values, SparseValues):
+                # e.g. the `sparse_value` attribute of a `Constant` node.
+                val = OnnxExporter.export_sparse_tensor_proto(val)
+            elif isinstance(val, Tensor):
                 val = OnnxExporter.export_tensor_proto(val)
             elif isinstance(val, Graph):
                 # Subgraphs don't need to have types specified for their tensors.

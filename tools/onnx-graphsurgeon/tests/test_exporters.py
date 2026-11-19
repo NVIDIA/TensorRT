@@ -495,3 +495,28 @@ class TestOnnxExporter(object):
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT4E2M1
         assert onnx_tensor.raw_data == bytes([0x01, 0x02])
         assert tuple(onnx_tensor.dims) == shape
+
+    def test_constant_node_sparse_value_attribute_round_trips(self):
+        values = onnx.helper.make_tensor("v", onnx.TensorProto.FLOAT, [2], [5.0, 7.0])
+        indices = onnx.helper.make_tensor("i", onnx.TensorProto.INT64, [2], [1, 4])
+        sparse = onnx.helper.make_sparse_tensor(values, indices, [6])
+        model = onnx.helper.make_model(
+            onnx.helper.make_graph(
+                [
+                    onnx.helper.make_node("Constant", [], ["c"], sparse_value=sparse),
+                    onnx.helper.make_node("Add", ["x", "c"], ["y"]),
+                ],
+                "g",
+                [onnx.helper.make_tensor_value_info("x", onnx.TensorProto.FLOAT, [6])],
+                [onnx.helper.make_tensor_value_info("y", onnx.TensorProto.FLOAT, [6])],
+            ),
+            opset_imports=[onnx.helper.make_opsetid("", 13)],
+        )
+
+        graph = OnnxImporter.import_graph(model.graph)
+        assert list(graph.nodes[0].attrs) == ["sparse_value"]
+
+        attrs = list(OnnxExporter.export_graph(graph).node[0].attribute)
+        assert [a.name for a in attrs] == ["sparse_value"]
+        assert attrs[0].type == onnx.AttributeProto.SPARSE_TENSOR
+        assert attrs[0].sparse_tensor == sparse
