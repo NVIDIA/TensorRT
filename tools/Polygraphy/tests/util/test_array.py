@@ -96,7 +96,7 @@ def test_is_on_cpu(obj, is_on_cpu):
         (cuda.DeviceArray(shape=(2, 3), dtype=DataType.FLOAT32), True),
     ],
 )
-def test_is_on_cpu(obj, is_on_gpu):
+def test_is_on_gpu(obj, is_on_gpu):
     assert util.array.is_on_gpu(obj) == is_on_gpu
 
 
