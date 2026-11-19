@@ -642,7 +642,7 @@ def autotune(plugin_id: str) -> Callable:
 
     * Input tensors are passed first, each described by a :class:`TensorDesc`.
     * Plugin attributes are declared next. Not all attributes included in `trt.plugin.register` must be specified here -- they could be a subset.
-    * The function should return a list of :class:`AutoTuneCombination`\s.
+    * The function should return a list of :class:`AutoTuneCombination`\\s.
 
     Args:
         plugin_id: The ID for the plugin in the form "{namespace}::{name}", which must match that used during `trt.plugin.register`
