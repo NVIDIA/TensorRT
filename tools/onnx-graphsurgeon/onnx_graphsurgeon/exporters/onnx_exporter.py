@@ -381,16 +381,24 @@ class OnnxExporter(BaseExporter):
             if has_value_info(tensor)
         ]
 
-        return onnx.helper.make_graph(
+        onnx_graph = onnx.helper.make_graph(
             nodes=nodes,
             name=graph.name,
             inputs=inputs,
             outputs=outputs,
-            initializer=initializer,
-            sparse_initializer=sparse_initializer,
+            initializer=[],
             doc_string=graph.doc_string,
             value_info=value_info,
         )
+        # Add initializers with `add().CopyFrom()` rather than passing them to `make_graph`.
+        # `make_graph` uses `RepeatedCompositeFieldContainer.extend()`, which with the upb protobuf
+        # backend serializes each message and fails with `EncodeError` for any tensor >2 GiB,
+        # even though the model could later be saved with external data. See issue #4899.
+        for tensor_proto in initializer:
+            onnx_graph.initializer.add().CopyFrom(tensor_proto)
+        for sparse_tensor_proto in sparse_initializer:
+            onnx_graph.sparse_initializer.add().CopyFrom(sparse_tensor_proto)
+        return onnx_graph
 
 
 def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto":
