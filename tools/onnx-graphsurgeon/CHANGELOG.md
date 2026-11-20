@@ -17,6 +17,10 @@ Dates are in YYYY-MM-DD format.
   attempting to allocate the full dense array.
 - Report an `OnnxGraphSurgeonException` instead of a `ValueError` when importing a sparse `Constant` whose
   `SparseTensorProto` declares a negative dense dimension.
+- Fixed an `EncodeError` when exporting a graph containing an initializer larger than 2 GiB, which previously prevented
+  such models from being saved with external data.
+- Fixed the same error for tensors larger than 2 GiB in node attributes (for example `Constant` nodes), local functions
+  and subgraphs.
 
 
 ## v0.6.2 (2026-05-21)

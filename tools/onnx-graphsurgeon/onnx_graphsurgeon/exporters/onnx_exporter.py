@@ -275,7 +275,10 @@ class OnnxExporter(BaseExporter):
             name=node.name,
             domain=node.domain,
         )
-        onnx_node.attribute.extend(OnnxExporter.export_attributes(node.attrs))
+        # Copy attributes in individually rather than with `extend()`, which serializes each message
+        # and fails for tensor attributes >2 GiB with the upb protobuf backend. See issue #4899.
+        for attr in OnnxExporter.export_attributes(node.attrs):
+            onnx_node.attribute.add().CopyFrom(attr)
         return onnx_node
 
     @staticmethod
@@ -318,17 +321,22 @@ class OnnxExporter(BaseExporter):
                 attribute_protos[attr_name] = default_val
         attribute_protos = OnnxExporter.export_attributes(attribute_protos)
 
-        return onnx.helper.make_function(
+        onnx_function = onnx.helper.make_function(
             func.domain or "",
             func.name,
             onnx_inputs,
             onnx_outputs,
-            nodes,
+            [],
             opset_imports,
             attributes=attributes,
-            attribute_protos=attribute_protos,
             doc_string=func.doc_string,
         )
+        # Copy nodes and attribute defaults in individually; see `export_graph` and issue #4899.
+        for node_proto in nodes:
+            onnx_function.node.add().CopyFrom(node_proto)
+        for attribute_proto in attribute_protos:
+            onnx_function.attribute_proto.add().CopyFrom(attribute_proto)
+        return onnx_function
 
     @staticmethod
     def export_graph(graph: Graph, do_type_check=True) -> onnx.GraphProto:
@@ -381,16 +389,26 @@ class OnnxExporter(BaseExporter):
             if has_value_info(tensor)
         ]
 
-        return onnx.helper.make_graph(
-            nodes=nodes,
+        onnx_graph = onnx.helper.make_graph(
+            nodes=[],
             name=graph.name,
             inputs=inputs,
             outputs=outputs,
-            initializer=initializer,
-            sparse_initializer=sparse_initializer,
+            initializer=[],
             doc_string=graph.doc_string,
             value_info=value_info,
         )
+        # Add nodes and initializers with `add().CopyFrom()` rather than passing them to `make_graph`.
+        # `make_graph` uses `RepeatedCompositeFieldContainer.extend()`, which with the upb protobuf
+        # backend serializes each message and fails with `EncodeError` for any tensor >2 GiB,
+        # even though the model could later be saved with external data. See issue #4899.
+        for node_proto in nodes:
+            onnx_graph.node.add().CopyFrom(node_proto)
+        for tensor_proto in initializer:
+            onnx_graph.initializer.add().CopyFrom(tensor_proto)
+        for sparse_tensor_proto in sparse_initializer:
+            onnx_graph.sparse_initializer.add().CopyFrom(sparse_tensor_proto)
+        return onnx_graph
 
 
 def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto":
@@ -409,12 +427,16 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
     """
     onnx_graph = OnnxExporter.export_graph(graph, do_type_check=do_type_check)
     onnx_functions = [OnnxExporter.export_function(func) for func in graph.functions]
-    kwargs["functions"] = onnx_functions
+    # Functions are copied in after `make_model` (see issue #4899). Any caller-supplied `functions`
+    # are replaced by the graph's functions, as before.
+    kwargs["functions"] = []
 
     if "opset_imports" not in kwargs:
         kwargs["opset_imports"] = update_import_domains(graph)
 
     model = onnx.helper.make_model(onnx_graph, **kwargs)
+    for function_proto in onnx_functions:
+        model.functions.add().CopyFrom(function_proto)
     model.producer_name = graph.producer_name
     model.producer_version = graph.producer_version
     model.doc_string = graph.model_doc_string
